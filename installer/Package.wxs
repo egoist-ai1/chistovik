@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Установщик Чистовика (WiX v5). Параметры передаёт tools/build-release.ps1:
+     -d Version=x.y.z  -d PublishDir=<папка dotnet publish>  -d LicenseRtf=<License.rtf>  -arch x64|arm64 -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="Чистовик" Manufacturer="Egoist" Version="$(Version)"
+           UpgradeCode="6C1B7E52-3A94-4D0F-9B8E-5F2A7D41C0E3"
+           Language="1049" Scope="perMachine" InstallerVersion="500" Compressed="yes">
+
+    <SummaryInformation Description="Чистовик: удаление программ с остатками и управление системой" />
+
+    <!-- Обновление поверх старой версии; откат на более старую запрещён. -->
+    <MajorUpgrade DowngradeErrorMessage="Уже установлена более новая версия Чистовика."
+                  Schedule="afterInstallValidate" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- .NET self-contained, но сама ОС должна быть Windows 10 или новее. -->
+    <Launch Condition="Installed OR VersionNT &gt;= 1000" Message="Чистовику нужна Windows 10 или новее." />
+
+    <Property Id="ARPCOMMENTS" Value="Лицензия GPL-3.0. Данные пользователя в %ProgramData%\Chistovik при удалении сохраняются." />
+
+    <!-- Закрыть работающий App при обновлении и удалении (WM_CLOSE, без принудительного завершения).
+         Agent не трогаем: он сам завершается при простое, а убийство посреди операции недопустимо.
+         Если Agent ещё работает, Windows Installer предложит закрыть его штатно (FilesInUse) или
+         заменит файл после перезагрузки. -->
+    <util:CloseApplication Id="CloseChistovikApp" Target="Chistovik.App.exe"
+                           CloseMessage="yes" RebootPrompt="no" ElevatedCloseMessage="yes" />
+
+    <!-- Каталог фиксирован (Program Files): Agent проверяет образ по SHA-256 и пути, запись туда
+         обычному пользователю закрыта. Выбор каталога в мастере сознательно не даём (WixUI_Minimal). -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Chistovik" />
+    </StandardDirectory>
+
+    <!-- Все файлы publish-папки, кроме отладочных символов. Подпапки (ресурсы) сохраняются. -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(PublishDir)\**">
+        <Exclude Files="$(PublishDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+
+    <!-- Ярлык в меню «Пуск». Ключ компонента — значение в HKLM (установка на весь компьютер). -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="AppShortcut" Name="Чистовик"
+                  Description="Удаление программ с остатками и управление системой"
+                  Target="[INSTALLFOLDER]Chistovik.App.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKLM" Key="Software\Chistovik" Name="StartMenuShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- %ProgramData%\Chistovik (журнал, карантин, настройки) намеренно НЕ описан здесь:
+         установщик его не создаёт и не удаляет, данные переживают удаление и переустановку. -->
+
+    <Feature Id="Main" Title="Чистовик" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
+    <ui:WixUI Id="WixUI_Minimal" />
+  </Package>
+</Wix>
