@@ -16,9 +16,9 @@ static class S4Services
 
     static int? StartType(string service)
     {
-        var (_, o) = Proc.Run("sc.exe", ["qc", service]);
-        var m = Regex.Match(o, @"START_TYPE\s*:\s*(\d+)");
-        return m.Success ? int.Parse(m.Groups[1].Value) : null;
+        // Независимо от агента и от языка системы: sc qc печатает подписи по-русски («ТИП_ЗАПУСКА»), реестр от языка не зависит.
+        using var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + service);
+        return k?.GetValue("Start") is int v ? v : null;
     }
 
     public static async Task Run(LiveContext c)

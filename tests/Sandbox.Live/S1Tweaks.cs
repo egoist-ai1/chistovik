@@ -83,30 +83,41 @@ static class S1Tweaks
     static async Task Symlink(LiveContext c, Session s)
     {
         const string Check = "ссылка HKU->HKLM";
-        const string Target = @"SOFTWARE\ChistovikTest_LinkTarget";
         const int MaxNodes = 200;
 
-        // 1. выбор твика: сначала с отсутствующим ключом, затем с самым маленьким существующим (политики предпочтительнее)
-        TweakEntry? t = null;
-        RegKeySnap? snap = null;
+        // 1. кандидаты: твики с отсутствующим ключом, затем самые маленькие существующие; ключи политик в конце, потому что в Sandbox
+        // запись в HKU\...\Policies закрыта даже для администратора. Если запись в ключ запрещена, берём следующего кандидата.
         var users = TweakCatalog.Shared.Tweaks.Where(Tweaks.IsUser).GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
-        t = users.FirstOrDefault(x => !Reg.KeyExists(true, c.Sid, x.Key));
-        if (t is null)
+        bool IsPolicy(TweakEntry x) => x.Key.Contains("Policies", StringComparison.OrdinalIgnoreCase);
+        var candidates = new List<(TweakEntry Tweak, RegKeySnap? Snap)>();
+        candidates.AddRange(users.Where(x => !Reg.KeyExists(true, c.Sid, x.Key)).OrderBy(IsPolicy).Select(x => (x, (RegKeySnap?)null)));
+        candidates.AddRange(users
+            .Where(x => Reg.KeyExists(true, c.Sid, x.Key))
+            .Select(x => (Tweak: x, Snap: SafeCapture(c.Sid, x.Key, MaxNodes)))
+            .Where(x => x.Snap is not null)
+            .OrderBy(x => IsPolicy(x.Tweak)).ThenBy(x => x.Snap!.Nodes).ThenBy(x => x.Snap!.ValueCount)
+            .Select(x => (x.Tweak, x.Snap)));
+        if (candidates.Count == 0)
         {
-            var best = users
-                .Select(x => (Tweak: x, Snap: SafeCapture(c.Sid, x.Key, MaxNodes)))
-                .Where(x => x.Snap is not null)
-                .OrderBy(x => x.Tweak.Key.Contains("Policies", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
-                .ThenBy(x => x.Snap!.Nodes).ThenBy(x => x.Snap!.ValueCount)
-                .FirstOrDefault();
-            if (best.Tweak is null)
-            {
-                c.Report.Skip(Sc, Check, $"нет пользовательского твика с отсутствующим ключом или ключом не больше {MaxNodes} узлов; ссылку на его место не поставить");
-                return;
-            }
-            t = best.Tweak;
-            snap = best.Snap;
+            c.Report.Skip(Sc, Check, $"нет пользовательского твика с отсутствующим ключом или ключом не больше {MaxNodes} узлов; ссылку на его место не поставить");
+            return;
         }
+
+        string? lastDenied = null;
+        foreach (var (t, snap) in candidates.Take(5))
+        {
+            lastDenied = await SymlinkTry(c, s, t, snap);
+            if (lastDenied is null) return;
+            lastDenied = t.Key + ": " + lastDenied;
+        }
+        c.Report.Skip(Sc, Check, "запись в ключи кандидатов запрещена, проверить нечем. Последний отказ: " + lastDenied);
+    }
+
+    /// <summary>Одна попытка проверки на ключе твика. Возвращает null, если результат (в том числе пропуск) записан, иначе текст отказа в доступе.</summary>
+    static async Task<string?> SymlinkTry(LiveContext c, Session s, TweakEntry t, RegKeySnap? snap)
+    {
+        const string Check = "ссылка HKU->HKLM";
+        const string Target = @"SOFTWARE\ChistovikTest_LinkTarget";
 
         var linkPath = c.Sid + "\\" + t.Key;
         var segments = t.Key.Split('\\');
@@ -130,12 +141,12 @@ static class S1Tweaks
                 catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException or ArgumentException)
                 {
                     c.Report.Skip(Sc, Check, $"ключ {t.Key} нельзя убрать на время сценария ({e.GetType().Name}: {e.Message})");
-                    return;
+                    return null;
                 }
                 if (Reg.KeyExists(true, c.Sid, t.Key))
                 {
                     c.Report.Skip(Sc, Check, $"ключ {t.Key} не удалился (открытые дескрипторы); ссылку на его место не поставить");
-                    return;
+                    return null;
                 }
             }
 
@@ -144,7 +155,7 @@ static class S1Tweaks
             if (rc != 0)
             {
                 c.Report.Skip(Sc, Check, $"система не дала создать ссылку (Win32 {rc}; для REG_OPTION_CREATE_LINK нужны права и свободное место ключа); проверить нечем");
-                return;
+                return null;
             }
             linkCreated = true;
 
@@ -156,7 +167,7 @@ static class S1Tweaks
             if (!control.Exists)
             {
                 c.Report.Skip(Sc, Check, "ссылка создана, но обычная запись через неё в HKLM не доходит: проверка отказа была бы пустой");
-                return;
+                return null;
             }
 
             // 4. сам сценарий
@@ -169,6 +180,11 @@ static class S1Tweaks
                 leaked.Exists ? $"ЗНАЧЕНИЕ ПОПАЛО В HKLM ({leaked}, ожидалось бы {want})"
                 : others.Length > 0 ? $"В ЦЕЛИ HKLM появились значения: {string.Join(",", others)}"
                 : $"запись не попала в HKLM, но агент ответил {r.Code} (ожидался отказ)");
+            return null;
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return e.Message;
         }
         finally
         {
