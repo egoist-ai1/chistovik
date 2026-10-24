@@ -23,6 +23,15 @@ public static class ClientCodes
     public const string LaunchFailed = "agent-launch-failed";
     public const string Timeout = "client-timeout";
     public const string Disconnected = "client-disconnected";
+    /// <summary>На другом конце канала не наш установленный Chistovik.Agent.exe: запрос не отправлялся.</summary>
+    public const string Untrusted = "agent-untrusted";
+}
+
+/// <summary>Транспорт не принял сервер канала: образ процесса не совпал с установленным агентом. Данные по каналу не передавались.</summary>
+public sealed class AgentUntrustedException(string reason) : Exception("Сервер канала не прошёл проверку: " + reason)
+{
+    /// <summary>Код причины из ServerVerifier (pid, image-path, image-hash) или agent-missing.</summary>
+    public string Reason { get; } = reason;
 }
 
 public interface IAgentClient

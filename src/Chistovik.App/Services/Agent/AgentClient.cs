@@ -145,6 +145,12 @@ public sealed class AgentClient : IAgentClient, IDisposable
                 return null;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (AgentUntrustedException e)
+            {
+                // Имя канала занял чужой процесс: запрос не отправляем и нового агента поверх не запускаем.
+                _pipeName = null;
+                return Untrusted(request, e);
+            }
             catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException or UnauthorizedAccessException) { }
         }
 
@@ -172,6 +178,11 @@ public sealed class AgentClient : IAgentClient, IDisposable
             _stream = await _transport.ConnectAsync(pipe, _opt.ConnectTimeout, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (AgentUntrustedException e)
+        {
+            _pipeName = null;
+            return Untrusted(request, e);
+        }
         catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException or UnauthorizedAccessException)
         {
             _pipeName = null;
@@ -180,6 +191,10 @@ public sealed class AgentClient : IAgentClient, IDisposable
         SetConnected();
         return null;
     }
+
+    static AgentResponse Untrusted(AgentRequest request, AgentUntrustedException e)
+        => Fail(request, ClientCodes.Untrusted,
+            "Канал занят процессом, который не является установленным агентом Чистовика (" + e.Reason + "). Запрос не отправлен.");
 
     void SetConnected()
     {

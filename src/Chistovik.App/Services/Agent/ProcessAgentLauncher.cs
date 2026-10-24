@@ -2,6 +2,8 @@ using System.IO;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Pipes;
+using Chistovik.Core.Ipc;
+using Chistovik.Native.Ipc;
 
 namespace Chistovik.App.Services.Agent;
 
@@ -52,14 +54,39 @@ public sealed class ProcessAgentLauncher : IAgentLauncher
     }
 }
 
+/// <summary>
+/// Подключение к каналу агента. После подключения и ДО возврата потока проверяется процесс на сервере канала
+/// (GetNamedPipeServerProcessId → путь образа и SHA-256 должны совпасть с установленным Chistovik.Agent.exe рядом с приложением):
+/// чужой процесс, занявший имя канала, не получит ни одного запроса. Не прошёл — <see cref="AgentUntrustedException"/>.
+/// </summary>
 public sealed class NamedPipeAgentTransport : IAgentTransport
 {
+    readonly IPipeServerProbe _probe;
+    readonly string _agentPath;
+
+    public NamedPipeAgentTransport(IPipeServerProbe? probe = null, string? agentPath = null)
+    {
+        _probe = probe ?? new WindowsPipeServerProbe();
+        _agentPath = agentPath ?? Path.Combine(AppContext.BaseDirectory, "Chistovik.Agent.exe");
+    }
+
+    /// <summary>Ожидаемый образ сервера: путь и SHA-256 установленного агента. Нет файла — null (канал не принимается).</summary>
+    ExpectedServer? ExpectedAgent()
+    {
+        try { return new ExpectedServer(Path.GetFullPath(_agentPath), ClientVerifier.Sha256OfFile(_agentPath)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
+    }
+
     public async Task<Stream> ConnectAsync(string pipeName, TimeSpan timeout, CancellationToken ct)
     {
         var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
         {
             await pipe.ConnectAsync((int)timeout.TotalMilliseconds, ct).ConfigureAwait(false);
+
+            var expected = ExpectedAgent() ?? throw new AgentUntrustedException("agent-missing");
+            var (ok, reason) = ServerVerifier.Verify(expected, _probe.Probe(pipe));
+            if (!ok) throw new AgentUntrustedException(reason);
             return pipe;
         }
         catch

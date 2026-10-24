@@ -50,7 +50,7 @@ public static class ClientProbe
         return new ActualClient((int)pid, image, hash, session, sid);
     }
 
-    static string? ImagePathOf(uint pid)
+    internal static string? ImagePathOf(uint pid)
     {
         var h = OpenProcess(ProcessQueryLimitedInformation, false, pid);
         if (h == IntPtr.Zero) return null;
