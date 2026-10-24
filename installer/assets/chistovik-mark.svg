@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Чистовик">
+  <title>Чистовик</title>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#0E0E0F" stroke="#2E2E32" stroke-width="2"/>
+  <path transform="translate(49.84 192.00) scale(0.16000 -0.16000)" fill="#F2F2EE" d="M373 215Q212 215 126.5 300.0Q41 385 41 547V750H274V567Q274 493 313.0 456.5Q352 420 431 420Q479 420 530.0 431.0Q581 442 633 462L645 277Q588 246 518.0 230.5Q448 215 373 215ZM604 0V750H836V0Z"/>
+  <circle cx="205" cy="51" r="19.5" fill="#D7FF3C"/>
+</svg>
