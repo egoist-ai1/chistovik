@@ -50,6 +50,7 @@ public sealed partial class ServicePolicy
     readonly string _windowsDir;
     readonly string[] _systemOwnedRoots;
     readonly string[] _commonRoots;
+    readonly string[] _programFilesRoots;
 
     public ServicePolicy(PolicyContext ctx)
     {
@@ -58,6 +59,7 @@ public sealed partial class ServicePolicy
         var pf86 = ctx.Norm(ctx.ProgramFilesX86);
         var pd = ctx.Norm(ctx.ProgramData);
         _commonRoots = [pf, pf86, pd, ctx.Norm(ctx.UsersDir)];
+        _programFilesRoots = [pf, pf86];
         _systemOwnedRoots =
         [
             pf + @"\Windows Defender", pf + @"\Windows Defender Advanced Threat Protection", pf + @"\Windows Security",
@@ -66,9 +68,11 @@ public sealed partial class ServicePolicy
         ];
     }
 
-    [GeneratedRegex(@"^[A-Za-z0-9_.\-$@ ]{1,256}$", RegexOptions.CultureInvariant)]
+    // \z, а не $: «$» совпадает и перед хвостовым «\n», и имя «Foo\n» прошло бы проверку.
+    [GeneratedRegex(@"^[A-Za-z0-9_.\-$@ ]{1,256}\z", RegexOptions.CultureInvariant)]
     private static partial Regex ValidName();
 
+    // Здесь «$» оставлен намеренно: регэксп только расширяет попадание в запретный список (ложное срабатывание безопасно).
     [GeneratedRegex(@"_[0-9a-fA-F]{4,8}$", RegexOptions.CultureInvariant)]
     private static partial Regex PerUserSuffix();
 
@@ -185,7 +189,36 @@ public sealed partial class ServicePolicy
         return (ServiceClass.Modifiable, "Служба установленной программы", "service-modifiable");
     }
 
-    public PolicyDecision CheckSetStart(ServiceFacts f, StartMode target)
+    // Ступень запуска: Disabled < Manual < Automatic/AutomaticDelayed < Boot/System. Повышение это переход на ступень выше.
+    static int Rank(StartMode m) => m switch
+    {
+        StartMode.Disabled => 0,
+        StartMode.Manual => 1,
+        StartMode.Automatic or StartMode.AutomaticDelayed => 2,
+        _ => 3,
+    };
+
+    // Нормализованные пути файла службы (сырой ImagePath и путь, раскрытый Native), как их видит Classify.
+    List<string> ImageExes(ServiceFacts f)
+    {
+        var exes = new List<string>(2);
+        var raw = ResolveImagePath(f.ImagePath);
+        if (raw is not null) exes.Add(raw);
+        if (f.NativeImagePath is not null && PathNormalizer.TryNormalize(f.NativeImagePath, out var native, out _)) exes.Add(native);
+        return exes;
+    }
+
+    /// <summary>
+    /// Разрешает смену запуска службы. Сигнатура для StepGate:
+    /// <c>CheckSetStart(ServiceFacts f, StartMode target, bool isRevertOfOwnStep = false)</c>, <c>f</c> собран по свежему
+    /// Query того же хэндла. Deny, если служба не Modifiable (<see cref="Classify"/>) или target это Boot/System.
+    /// Понижение и сохранение ступени (Auto→Manual/Disabled, Manual→Disabled, Auto↔Delayed) разрешены по тем же правилам.
+    /// ПОВЫШЕНИЕ (Disabled→Manual/Auto/Delayed, Manual→Auto/Delayed) разрешено напрямую, только если все известные пути файла
+    /// службы (ImagePath и NativeImagePath) лежат в Program Files или Program Files (x86); иначе Deny, и повышение возможно
+    /// только откатом собственного шага (<paramref name="isRevertOfOwnStep"/>=true, флаг выставляет только StepGate;
+    /// классификация при этом не ослабляется). Target = «service:&lt;имя&gt;».
+    /// </summary>
+    public PolicyDecision CheckSetStart(ServiceFacts f, StartMode target, bool isRevertOfOwnStep = false)
     {
         var obj = "service:" + f.Name;
         var (cls, reason, rule) = Classify(f);
@@ -193,6 +226,14 @@ public sealed partial class ServicePolicy
             return PolicyDecision.Deny(reason, rule).WithTarget(obj);
         if (target is StartMode.Boot or StartMode.System)
             return PolicyDecision.Deny("Загрузочные режимы запуска не назначаем", "service-boot-start").WithTarget(obj);
+
+        if (Rank(target) > Rank(f.CurrentStart) && !isRevertOfOwnStep)
+        {
+            var exes = ImageExes(f);
+            var inProgramFiles = exes.Count > 0 && exes.All(e => _programFilesRoots.Any(r => PathNormalizer.IsEqualOrUnder(e, r) && !e.Equals(r, StringComparison.OrdinalIgnoreCase)));
+            if (!inProgramFiles)
+                return PolicyDecision.Deny("Повысить запуск службы вне Program Files можно только откатом собственного шага", "service-elevate-outside-program-files").WithTarget(obj);
+        }
         return PolicyDecision.Allow(rule).WithTarget(obj);
     }
 }

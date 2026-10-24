@@ -308,6 +308,6 @@ public sealed partial class PathPolicy
         return PolicyDecision.Allow("purge-in-quarantine").WithTarget(p);
     }
 
-    [GeneratedRegex(@"^[0-9A-Za-z][0-9A-Za-z\-]{0,63}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^[0-9A-Za-z][0-9A-Za-z\-]{0,63}\z", RegexOptions.CultureInvariant)]
     private static partial Regex OpId();
 }

@@ -18,7 +18,7 @@ public static partial class RegistryPolicy
 {
     static readonly StringComparer Cmp = StringComparer.OrdinalIgnoreCase;
 
-    [GeneratedRegex(@"^ControlSet\d{3}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^ControlSet[0-9]{3}\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ControlSetN();
 
     // ---------- разбор ----------
@@ -165,7 +165,7 @@ public static partial class RegistryPolicy
 
     // Профиль обычного пользователя: доменный/локальный S-1-5-21-..., учётная запись Майкрософт S-1-12-1-...,
     // с суффиксом _Classes для куста классов. .DEFAULT и сервисные SID (S-1-5-18/19/20) обычными не считаются.
-    [GeneratedRegex(@"^(S-1-5-21(-\d+)+|S-1-12-1(-\d+)+)(_Classes)?$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(S-1-5-21(-[0-9]+)+|S-1-12-1(-[0-9]+)+)(_Classes)?\z", RegexOptions.CultureInvariant)]
     private static partial Regex OrdinaryUserSid();
 
     static bool IsOrdinaryUser(string sidSegment, out bool classesHive)
@@ -424,6 +424,129 @@ public static partial class RegistryPolicy
     public static PolicyDecision CheckSetValue(RegKey k, string valueName)
         => SetCore(k, valueName).WithTarget(k + "::" + valueName);
 
+    /// <summary>
+    /// Запись значения от имени агента для проверенного клиента. Сигнатура для StepGate:
+    /// <c>CheckSetValue(string? keyInput, string? valueName, string clientSid)</c>. Все правила <see cref="CheckSetValue(string?, string?)"/>
+    /// плюс правило HKU: ключ в <c>HKU\&lt;sid&gt;</c> или <c>HKU\&lt;sid&gt;_Classes</c> разрешён только при sid == <paramref name="clientSid"/>
+    /// (без учёта регистра); <c>HKU\S-1-5-18</c>, <c>.DEFAULT</c>, чужие SID, а также HKCU и HKCR (агент их не открывает) это Deny.
+    /// Если сам <paramref name="clientSid"/> не SID обычного пользователя (S-1-5-21-… или S-1-12-1-…, без суффикса _Classes), это Deny.
+    /// </summary>
+    public static PolicyDecision CheckSetValue(string? keyInput, string? valueName, string clientSid)
+    {
+        if (!TryParse(keyInput, out var k, out var err))
+            return PolicyDecision.Deny("Ключ реестра не разобран: " + err, "reg-bad-key");
+        if (valueName is null) return PolicyDecision.Deny("Имя значения не задано", "reg-bad-value");
+        if (valueName.Length > 16383 || valueName.Any(c => c < 0x20))
+            return PolicyDecision.Deny("Недопустимое имя значения", "reg-bad-value");
+        return CheckSetValue(k, valueName, clientSid);
+    }
+
+    /// <summary>Версия <see cref="CheckSetValue(string?, string?, string)"/> для уже разобранного ключа.</summary>
+    public static PolicyDecision CheckSetValue(RegKey k, string valueName, string clientSid)
+    {
+        var gate = ClientGate(k, clientSid);
+        if (!gate.IsAllowed) return gate.WithTarget(k + "::" + valueName);
+        return CheckSetValue(k, valueName);
+    }
+
+    /// <summary>
+    /// Удаление значения не мягче записи: результат совпадает с <see cref="CheckSetValue(string?, string?)"/> для того же ключа и имени
+    /// (включая Target). Сигнатура: <c>CheckDeleteValue(string? keyInput, string? valueName)</c>.
+    /// </summary>
+    public static PolicyDecision CheckDeleteValue(string? keyInput, string? valueName)
+        => CheckSetValue(keyInput, valueName);
+
+    /// <summary>Версия для разобранного ключа.</summary>
+    public static PolicyDecision CheckDeleteValue(RegKey k, string valueName)
+        => CheckSetValue(k, valueName);
+
+    /// <summary>
+    /// Удаление значения от имени агента: как <see cref="CheckSetValue(string?, string?, string)"/> (правило HKU и SID клиента).
+    /// Сигнатура для StepGate: <c>CheckDeleteValue(string? keyInput, string? valueName, string clientSid)</c>.
+    /// </summary>
+    public static PolicyDecision CheckDeleteValue(string? keyInput, string? valueName, string clientSid)
+        => CheckSetValue(keyInput, valueName, clientSid);
+
+    /// <summary>Версия для разобранного ключа.</summary>
+    public static PolicyDecision CheckDeleteValue(RegKey k, string valueName, string clientSid)
+        => CheckSetValue(k, valueName, clientSid);
+
+    /// <summary>
+    /// Удаление ключа от имени агента: правила <see cref="CheckDeleteKey(string?)"/> плюс правило HKU/HKCU/HKCR как у
+    /// <see cref="CheckSetValue(string?, string?, string)"/>.
+    /// </summary>
+    public static PolicyDecision CheckDeleteKey(string? input, string clientSid)
+    {
+        if (!TryParse(input, out var k, out var err))
+            return PolicyDecision.Deny("Ключ реестра не разобран: " + err, "reg-bad-key");
+        return CheckDeleteKey(k, clientSid);
+    }
+
+    /// <summary>Версия для разобранного ключа.</summary>
+    public static PolicyDecision CheckDeleteKey(RegKey k, string clientSid)
+    {
+        var gate = ClientGate(k, clientSid);
+        return gate.IsAllowed ? CheckDeleteKey(k) : gate.WithTarget(k.ToString());
+    }
+
+    // Правило клиента: пишем только в куст проверенного клиента; HKCU и HKCR агент не открывает (HKCU это HKU\<sid>).
+    static PolicyDecision ClientGate(RegKey k, string? clientSid)
+    {
+        if (string.IsNullOrEmpty(clientSid) || !OrdinaryUserSid().IsMatch(clientSid)
+            || clientSid.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase))
+            return PolicyDecision.Deny("SID клиента не SID обычного пользователя", "reg-bad-client-sid");
+        switch (k.Hive)
+        {
+            case RegHive.CurrentUser:
+                return PolicyDecision.Deny("Агент не открывает HKCU: пользовательский куст это HKU\\<SID клиента>", "reg-agent-no-hkcu");
+            case RegHive.ClassesRoot:
+                return PolicyDecision.Deny("Агент не открывает HKCR", "reg-hkcr");
+            case RegHive.Users:
+                if (k.Segments.Length == 0) return PolicyDecision.Deny("Корень куста", "reg-hive-root");
+                var sid = k.Segments[0];
+                if (sid.Equals(clientSid, StringComparison.OrdinalIgnoreCase)
+                    || sid.Equals(clientSid + "_Classes", StringComparison.OrdinalIgnoreCase))
+                    return PolicyDecision.Allow("reg-client-hive");
+                return PolicyDecision.Deny("Куст не принадлежит проверенному клиенту (.DEFAULT, служебные и чужие SID)", "reg-foreign-user");
+        }
+        return PolicyDecision.Allow("reg-client-hive");
+    }
+
+    // ---------- закрытые для записи места: запуск кода, подмена команд, автозапуск ----------
+
+    // Сегменты внутри Classes, через которые подменяют запускаемый код (команды оболочки, COM-серверы, обработчики).
+    static readonly HashSet<string> ClassesCodeSegments = new(Cmp)
+    {
+        "shell", "shellex", "command", "InprocServer32", "InprocServer", "LocalServer32", "LocalServer", "InprocHandler32",
+        "InprocHandler", "TreatAs", "ScriptletHandler", "DelegateExecute", "AutoConvertTo", "ProxyStubClsid32", "ProxyStubClsid",
+        "Local Settings", "ActivatableClasses", "PackagedCom",
+    };
+
+    // Узлы Software, не связанные с Classes, которые тоже запускают код при входе или старте проводника.
+    static readonly string[][] PersistenceDenyUnder =
+    [
+        ["Microsoft", "Command Processor"],                                       // AutoRun
+        ["Microsoft", "Active Setup"],                                            // StubPath
+        ["Microsoft", "Windows", "CurrentVersion", "ShellServiceObjectDelayLoad"],
+        ["Microsoft", "Windows", "CurrentVersion", "Explorer", "ShellExecuteHooks"],
+        ["Microsoft", "Windows", "CurrentVersion", "Explorer", "Browser Helper Objects"],
+        ["Microsoft", "Windows", "CurrentVersion", "Explorer", "ShellIconOverlayIdentifiers"],
+        ["Microsoft", "Windows", "CurrentVersion", "Explorer", "Run"],
+    ];
+
+    static PolicyDecision CheckClassesWrite(string[] rest)
+    {
+        if (rest.Length > 0 && rest[0].Equals("Wow6432Node", StringComparison.OrdinalIgnoreCase)) rest = rest[1..];
+        if (rest.Length == 0) return PolicyDecision.Deny("Значения в корне классов не записываются", "reg-classes-write");
+        var top = rest[0];
+        if (ClassesProtectedExtensions.Contains(top) || ClassesProtectedProgIds.Contains(top) || top.StartsWith("AppX", StringComparison.OrdinalIgnoreCase))
+            return PolicyDecision.Deny("Системное сопоставление расширения, ProgID или протокол", "reg-classes-system");
+        foreach (var seg in rest)
+            if (ClassesCodeSegments.Contains(seg))
+                return PolicyDecision.Deny("Запись команды или COM-сервера в Classes подменяет запускаемый код", "reg-classes-code");
+        return PolicyDecision.Deny("Запись значений в Classes не входит в разрешённые для записи", "reg-classes-default-deny");
+    }
+
     static PolicyDecision SetCore(RegKey k, string valueName)
     {
         var s = k.Segments;
@@ -436,11 +559,19 @@ public static partial class RegistryPolicy
             return PolicyDecision.Deny("Параметр SmartScreen", "reg-smartscreen");
         if (DefenderPolicyValues.Contains(valueName))
             return PolicyDecision.Deny("Параметр защитника Windows", "reg-defender");
+        if (valueName.Equals("UserInitMprLogonScript", StringComparison.OrdinalIgnoreCase))
+            return PolicyDecision.Deny("Скрипт входа в систему запускает код при каждом входе", "reg-logon-script");
 
         switch (k.Hive)
         {
             case RegHive.CurrentConfig:
                 return PolicyDecision.Deny("Текущая конфигурация оборудования не изменяется", "reg-hkcc");
+            case RegHive.ClassesRoot:
+                return PolicyDecision.Deny("Запись значений в HKCR закрыта: там живут команды и COM-серверы", "reg-hkcr");
+            case RegHive.CurrentUser:
+                if (s[0].Equals("Environment", StringComparison.OrdinalIgnoreCase) || s[0].Equals("Volatile Environment", StringComparison.OrdinalIgnoreCase))
+                    return PolicyDecision.Deny("Переменные среды пользователя и скрипт входа не изменяются", "reg-environment");
+                break;
             case RegHive.LocalMachine:
                 if (!s[0].Equals("SOFTWARE", StringComparison.OrdinalIgnoreCase)
                     && !s[0].Equals("SYSTEM", StringComparison.OrdinalIgnoreCase))
@@ -457,14 +588,24 @@ public static partial class RegistryPolicy
                 }
                 break;
             case RegHive.Users:
-                if (s.Length == 1 || !IsOrdinaryUser(s[0], out _))
+                if (s.Length == 1 || !IsOrdinaryUser(s[0], out var classesHive))
                     return PolicyDecision.Deny("Профиль не обычного пользователя (.DEFAULT, служебные учётные записи)", "reg-system-user");
+                if (classesHive) return CheckClassesWrite(s[1..]);   // HKU\<sid>_Classes это HKCU\Software\Classes
+                if (s[1].Equals("Environment", StringComparison.OrdinalIgnoreCase) || s[1].Equals("Volatile Environment", StringComparison.OrdinalIgnoreCase))
+                    return PolicyDecision.Deny("Переменные среды пользователя и скрипт входа не изменяются", "reg-environment");
                 break;
         }
 
         var rel = SoftwareRel(k);
         if (rel is not null)
         {
+            if (StartsWith(rel, 0, "Classes")) return CheckClassesWrite(rel[1..]);
+            // Автозапуск: CurrentVersion\Run, RunOnce, RunOnceEx, RunServices, RunServicesOnce (и Wow6432Node).
+            if (StartsWith(rel, 0, "Microsoft", "Windows", "CurrentVersion") && rel.Length > 3
+                && rel[3].StartsWith("Run", StringComparison.OrdinalIgnoreCase))
+                return PolicyDecision.Deny("Ключи автозапуска Run* не изменяются как значения реестра (автозагрузка идёт через StartupApproved)", "reg-run-keys");
+            foreach (var d in PersistenceDenyUnder)
+                if (StartsWith(rel, 0, d)) return PolicyDecision.Deny("Узел, запускающий код при входе или старте проводника", "reg-persistence");
             if (IsPoliciesMicrosoft(rel))
             {
                 foreach (var (hives, relKey, value) in PoliciesMicrosoftWriteAllow)
