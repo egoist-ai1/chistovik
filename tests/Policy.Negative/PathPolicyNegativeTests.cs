@@ -172,14 +172,135 @@ public class PathPolicyNegativeTests
         var d = Policy.CheckQuarantineMove(path);
         Assert.Equal(Verdict.ExpertOnly, d.Verdict);
         Assert.Throws<PolicyViolationException>(() => PolicyViolationException.Enforce(d));
-        PolicyViolationException.Enforce(d, expertConfirmed: true);
+        PolicyViolationException.Enforce(d, new ExpertConfirmation(d.Target));
     }
 
     [Fact]
-    public void Deny_cannot_be_overridden_by_expert_flag()
+    public void Deny_cannot_be_overridden_by_expert_confirmation()
     {
         var d = Policy.CheckQuarantineMove(@"C:\Windows\WinSxS\x");
-        Assert.Throws<PolicyViolationException>(() => PolicyViolationException.Enforce(d, expertConfirmed: true));
+        Assert.Throws<PolicyViolationException>(() => PolicyViolationException.Enforce(d, new ExpertConfirmation(d.Target)));
+    }
+
+    [Fact]
+    public void Default_decision_is_denied()
+    {
+        Assert.True(default(PolicyDecision).IsDenied);
+        Assert.Equal(Verdict.Deny, default(Verdict));
+        Assert.Throws<PolicyViolationException>(() => PolicyViolationException.Enforce(default));
+    }
+
+    [Fact]
+    public void Expert_confirmation_is_bound_to_the_object()
+    {
+        var d = Policy.CheckQuarantineMove(@"C:\Users\Egoist\Documents\file.txt");
+        Assert.Equal(Verdict.ExpertOnly, d.Verdict);
+        Assert.Equal(@"C:\Users\Egoist\Documents\file.txt", d.Target);
+        // подтверждение другого объекта не годится
+        Assert.Throws<PolicyViolationException>(() =>
+            PolicyViolationException.Enforce(d, new ExpertConfirmation(@"C:\Users\Egoist\Documents\other.txt")));
+        Assert.Throws<PolicyViolationException>(() =>
+            PolicyViolationException.Enforce(d, new ExpertConfirmation("")));
+        // тот же объект в другом регистре подходит
+        PolicyViolationException.Enforce(d, new ExpertConfirmation(@"c:\users\egoist\documents\FILE.txt"));
+        // решение без цели подтвердить нельзя
+        var noTarget = PolicyDecision.Expert("x", "y");
+        Assert.Throws<PolicyViolationException>(() =>
+            PolicyViolationException.Enforce(noTarget, new ExpertConfirmation("")));
+    }
+
+    // ---------- пункты ревью: любой том, точки соединения, меню «Пуск» ----------
+
+    [Theory]
+    [InlineData(@"D:\Users\X\NTUSER.DAT")]
+    [InlineData(@"D:\Users\X\ntuser.ini")]
+    [InlineData(@"D:\Users\X\Documents")]
+    [InlineData(@"D:\Users\X\AppData\Roaming\Microsoft\Credentials")]
+    [InlineData(@"D:\ProgramData\Microsoft\Crypto\RSA\MachineKeys")]
+    [InlineData(@"D:\ProgramData\Microsoft\Windows\Start Menu\Programs")]
+    [InlineData(@"D:\ProgramData\Microsoft")]
+    [InlineData(@"D:\WindowsApps\Foo")]
+    [InlineData(@"D:\WpSystem\x")]
+    [InlineData(@"C:\Documents and Settings")]
+    [InlineData(@"C:\Documents and Settings\Egoist\NTUSER.DAT")]
+    [InlineData(@"D:\Documents and Settings\All Users")]
+    [InlineData(@"C:\Program Files (x86)\Microsoft")]
+    [InlineData(@"C:\Program Files (x86)\Microsoft\Edge")]
+    [InlineData(@"C:\Program Files (x86)\Microsoft\EdgeWebView")]
+    [InlineData(@"C:\Program Files (x86)\Microsoft\EdgeUpdate\1.3")]
+    [InlineData(@"C:\Program Files\Microsoft\EdgeCore")]
+    [InlineData(@"D:\Program Files (x86)\Microsoft\Edge\Application")]
+    [InlineData(@"C:\Program Files\Hyper-V")]
+    [InlineData(@"C:\Program Files\RUXIM")]
+    [InlineData(@"C:\Program Files\PackageManagement")]
+    public void Any_volume_and_two_level_system_paths_are_denied(string path)
+    {
+        var d = Policy.CheckQuarantineMove(path);
+        Assert.True(d.IsDenied, $"{path} -> {d.Verdict} ({d.Rule})");
+    }
+
+    [Theory]
+    [InlineData("Application Data")]
+    [InlineData("Local Settings")]
+    [InlineData("My Documents")]
+    [InlineData("Start Menu")]
+    [InlineData("Templates")]
+    [InlineData("NetHood")]
+    [InlineData("PrintHood")]
+    [InlineData("SendTo")]
+    [InlineData("Recent")]
+    [InlineData("Cookies")]
+    public void User_profile_junctions_are_denied_with_everything_under_them(string name)
+    {
+        Assert.True(Policy.CheckQuarantineMove($@"C:\Users\Egoist\{name}").IsDenied);
+        Assert.True(Policy.CheckQuarantineMove($@"C:\Users\Egoist\{name}\Foo\bar").IsDenied);
+        Assert.True(Policy.CheckQuarantineMove($@"D:\Users\Egoist\{name}\Foo").IsDenied);
+    }
+
+    [Theory]
+    [InlineData("Application Data")]
+    [InlineData("Desktop")]
+    [InlineData("Documents")]
+    [InlineData("Start Menu")]
+    [InlineData("Templates")]
+    [InlineData("Favorites")]
+    public void ProgramData_junctions_are_denied(string name)
+    {
+        Assert.True(Policy.CheckQuarantineMove($@"C:\ProgramData\{name}").IsDenied);
+        Assert.True(Policy.CheckQuarantineMove($@"C:\ProgramData\{name}\Foo").IsDenied);
+        Assert.True(Policy.CheckQuarantineMove($@"D:\ProgramData\{name}\Foo").IsDenied);
+    }
+
+    [Theory]
+    [InlineData(@"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Foo")]
+    [InlineData(@"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Foo\Foo.lnk")]
+    [InlineData(@"C:\Users\Egoist\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Foo")]
+    [InlineData(@"C:\Users\Egoist\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Foo.lnk")]
+    [InlineData(@"D:\ProgramData\Microsoft\Windows\Start Menu\Programs\Foo")]
+    public void Start_menu_shortcuts_of_leftovers_are_allowed(string path)
+    {
+        var d = Policy.CheckQuarantineMove(path);
+        Assert.True(d.IsAllowed, $"{path} -> {d.Verdict} ({d.Rule})");
+    }
+
+    [Theory]
+    [InlineData(@"C:\ProgramData\Microsoft\Windows\Start Menu\Programs")]
+    [InlineData(@"C:\ProgramData\Microsoft\Windows\Start Menu")]
+    [InlineData(@"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup")]
+    [InlineData(@"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\evil.lnk")]
+    [InlineData(@"C:\Users\Egoist\AppData\Roaming\Microsoft\Windows\Start Menu\Programs")]
+    [InlineData(@"C:\Users\Egoist\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup")]
+    [InlineData(@"C:\Users\Egoist\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\x.lnk")]
+    [InlineData(@"C:\Users\Egoist\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Windows PowerShell")]
+    [InlineData(@"C:\Users\Egoist\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Foo\..\Startup")]
+    [InlineData(@"C:\Users\Egoist\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\..\Foo")]
+    [InlineData(@"C:\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Foo")]
+    [InlineData(@"C:\Users\Egoist\AppData\Local\Microsoft\Windows\Start Menu\Programs\Foo")]
+    [InlineData(@"C:\Windows\Start Menu\Programs\Foo")]
+    public void Start_menu_exception_does_not_open_programs_itself_or_startup(string path)
+    {
+        var d = Policy.CheckQuarantineMove(path);
+        Assert.True(d.IsDenied, $"{path} -> {d.Verdict} ({d.Rule})");
     }
 
     // ---------- стирание ----------
@@ -206,4 +327,58 @@ public class PathPolicyNegativeTests
     [InlineData("")]
     public void Purge_outside_quarantine_is_denied(string? path)
         => Assert.True(Policy.CheckPurgeTarget(path).IsDenied);
+
+    [Theory]
+    [InlineData("COM\u00B9")]
+    [InlineData("COM\u00B2")]
+    [InlineData("COM\u00B3")]
+    [InlineData("LPT\u00B9")]
+    [InlineData("LPT\u00B2")]
+    [InlineData("LPT\u00B3")]
+    [InlineData("com\u00B2.txt")]
+    public void Superscript_device_names_are_rejected(string name)
+        => Assert.True(Policy.CheckQuarantineMove(@"D:\Games\" + name).IsDenied);
+}
+
+public class PolicyContextTests
+{
+    [Fact]
+    public void Fixed_context_is_valid()
+        => PolicyContext.Fixed.Validate();
+
+    [Fact]
+    public void FromEnvironment_gives_a_consistent_context()
+    {
+        var ctx = PolicyContext.FromEnvironment();
+        ctx.Validate();
+        Assert.True(PathNormalizer.TryNormalize(ctx.UsersDir, out var users, out _));
+        Assert.True(PathNormalizer.TryNormalize(ctx.WindowsDir, out var win, out _));
+        Assert.False(PathNormalizer.IsEqualOrUnder(users, win));
+        Assert.NotEqual(ctx.ProgramFiles, ctx.ProgramFilesX86, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Users_dir_under_windows_is_rejected()
+        => Assert.Throws<PolicyContextException>(() => PolicyContext.CreateValidated(
+            @"C:\Windows", @"C:\Program Files", @"C:\Program Files (x86)", @"C:\ProgramData", @"C:\Windows\System32\config"));
+
+    [Fact]
+    public void Same_program_files_dirs_are_rejected()
+        => Assert.Throws<PolicyContextException>(() => PolicyContext.CreateValidated(
+            @"C:\Windows", @"C:\Program Files (x86)", @"C:\Program Files (x86)", @"C:\ProgramData", @"C:\Users"));
+
+    [Fact]
+    public void Program_data_under_windows_is_rejected()
+        => Assert.Throws<PolicyContextException>(() => PolicyContext.CreateValidated(
+            @"C:\Windows", @"C:\Program Files", @"C:\Program Files (x86)", @"C:\Windows\PD", @"C:\Users"));
+
+    [Fact]
+    public void Garbage_directory_is_rejected_and_is_an_invalid_operation()
+        => Assert.ThrowsAny<InvalidOperationException>(() => PolicyContext.CreateValidated(
+            @"C:\Windows", @"relative", @"C:\Program Files (x86)", @"C:\ProgramData", @"C:\Users"));
+
+    [Fact]
+    public void Policy_constructors_validate_through_context_norm()
+        => Assert.Throws<PolicyContextException>(() =>
+            new PathPolicy(new PolicyContext(@"C:\Windows", @"C:\Program Files", @"C:\Program Files (x86)", @"C:\ProgramData", "bad")));
 }

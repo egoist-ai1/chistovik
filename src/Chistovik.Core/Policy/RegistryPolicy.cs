@@ -121,9 +121,58 @@ public static partial class RegistryPolicy
         ["CurrentControlSet", "Control", "Winlogon"],
         ["CurrentControlSet", "Control", "SafeBoot"],
         ["CurrentControlSet", "Control", "StorageDevicePolicies"],
+        ["CurrentControlSet", "Control", "MiniNT"],
+        ["CurrentControlSet", "Control", "Terminal Server"],
+        ["CurrentControlSet", "Control", "EarlyLaunch"],
+        ["CurrentControlSet", "Control", "WMI"],
+        ["CurrentControlSet", "Control", "Srp"],
+        ["CurrentControlSet", "Control", "ProductOptions"],
         ["CurrentControlSet", "Hardware Profiles"],
         ["Select"], ["Setup"], ["MountedDevices"], ["DriverDatabase"], ["HardwareConfig"], ["RNG"], ["WPA"],
     ];
+
+    // Явный allow-список записи значений в HKLM\SYSTEM (путь относительно SYSTEM). Всё, чего здесь нет, запрещено.
+    // Subtree: правило действует на ключ и всё под ним; Values: допустимые имена значений (null: любые).
+    // Session Manager целиком закрыт (PendingFileRenameOperations, BootExecute, KnownDLLs...), кроме ветки Power.
+    static readonly (string[] Path, bool Subtree, string[]? Values)[] SystemWriteAllow =
+    [
+        (["CurrentControlSet", "Control"], false, ["WaitToKillServiceTimeout"]),
+        (["CurrentControlSet", "Control", "GraphicsDrivers"], false, ["HwSchMode"]),
+        (["CurrentControlSet", "Control", "Power"], true, null),
+        (["CurrentControlSet", "Control", "Session Manager", "Power"], true, null),
+    ];
+
+    static bool SystemWriteAllowed(string[] rest, string valueName)
+    {
+        foreach (var (path, subtree, values) in SystemWriteAllow)
+        {
+            if (subtree ? !StartsWith(rest, 0, path) : !Equal(rest, 0, path)) continue;
+            if (values is null || values.Contains(valueName, Cmp)) return true;
+        }
+        return false;
+    }
+
+    // Узкие исключения из запрета HKLM/HKCU\Software\Policies\Microsoft\*: точный ключ и точное имя значения.
+    static readonly (RegHive[] Hives, string[] RelKey, string Value)[] PoliciesMicrosoftWriteAllow =
+    [
+        ([RegHive.CurrentUser, RegHive.Users], ["Policies", "Microsoft", "Windows", "Explorer"], "DisableSearchBoxSuggestions"),
+        ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "DataCollection"], "AllowTelemetry"),
+    ];
+
+    static bool IsPoliciesMicrosoft(string[] rel)
+        => rel.Length >= 2 && rel[0].Equals("Policies", StringComparison.OrdinalIgnoreCase)
+           && rel[1].Equals("Microsoft", StringComparison.OrdinalIgnoreCase);
+
+    // Профиль обычного пользователя: доменный/локальный S-1-5-21-..., учётная запись Майкрософт S-1-12-1-...,
+    // с суффиксом _Classes для куста классов. .DEFAULT и сервисные SID (S-1-5-18/19/20) обычными не считаются.
+    [GeneratedRegex(@"^(S-1-5-21(-\d+)+|S-1-12-1(-\d+)+)(_Classes)?$", RegexOptions.CultureInvariant)]
+    private static partial Regex OrdinaryUserSid();
+
+    static bool IsOrdinaryUser(string sidSegment, out bool classesHive)
+    {
+        classesHive = sidSegment.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase);
+        return OrdinaryUserSid().IsMatch(sidSegment);
+    }
 
     // В HKLM\SOFTWARE (относительно): узел и всё под ним.
     static readonly string[][] SoftwareDenyUnder =
@@ -150,6 +199,11 @@ public static partial class RegistryPolicy
         ["Microsoft", "Windows", "CurrentVersion", "SideBySide"],
         ["Microsoft", "Windows", "CurrentVersion", "Appx"],
         ["Microsoft", "Windows", "CurrentVersion", "AppModel"],
+        ["Microsoft", "Windows NT", "CurrentVersion", "Windows"],                 // AppInit_DLLs
+        ["Microsoft", "Windows NT", "CurrentVersion", "Schedule", "TaskCache"],
+        ["Microsoft", "Windows", "CurrentVersion", "Internet Settings"],          // прокси, в том числе Connections\WinHttpSettings
+        ["Microsoft", "WindowsUpdate", "UX", "Settings"],
+        ["Microsoft", "Windows", "CurrentVersion", "Group Policy", "Scripts"],
         ["Microsoft", "Rpc"], ["Microsoft", "Ole"], ["Microsoft", "COM3"], ["Microsoft", "WBEM"],
         ["Microsoft", "Driver Signing"], ["Microsoft", "Non-Driver Signing"], ["Microsoft", "PolicyManager"],
         ["Chistovik"],
@@ -191,6 +245,9 @@ public static partial class RegistryPolicy
     }
 
     public static PolicyDecision CheckDeleteKey(RegKey k)
+        => DeleteCore(k).WithTarget(k.ToString());
+
+    static PolicyDecision DeleteCore(RegKey k)
     {
         var s = k.Segments;
         if (s.Length == 0) return PolicyDecision.Deny("Корень куста", "reg-hive-root");
@@ -202,11 +259,14 @@ public static partial class RegistryPolicy
 
             case RegHive.Users:
                 if (s.Length == 1) return PolicyDecision.Deny("Корень профиля пользователя в реестре", "reg-hive-root");
+                if (!IsOrdinaryUser(s[0], out var classesHive))
+                    return PolicyDecision.Deny("Профиль не обычного пользователя (.DEFAULT, служебные учётные записи)", "reg-system-user");
+                if (classesHive) return CheckClassesDelete(s[1..], k.Hive);   // HKU\<sid>_Classes это HKCU\Software\Classes
                 if (s.Length == 2) return PolicyDecision.Deny("Структурный узел профиля", "reg-structure");
                 break;
 
             case RegHive.ClassesRoot:
-                return CheckClassesDelete(s);
+                return CheckClassesDelete(s, k.Hive);
 
             case RegHive.LocalMachine:
                 if (s.Length == 1) return PolicyDecision.Deny("Корневой раздел куста", "reg-hive-root");
@@ -240,6 +300,8 @@ public static partial class RegistryPolicy
 
         if (hive == RegHive.LocalMachine || hive == RegHive.CurrentUser || hive == RegHive.Users)
         {
+            if (IsPoliciesMicrosoft(rel))
+                return PolicyDecision.Deny("Политики Microsoft (Windows, Defender, Edge, обновления) не удаляются", "reg-policies-microsoft");
             foreach (var d in SoftwareDenyUnder)
                 if (StartsWith(rel, 0, d)) return PolicyDecision.Deny("Системный узел реестра", "reg-protected-node");
             if (StartsWith(rel, 0, SoftwareDenyPolicies))
@@ -249,7 +311,7 @@ public static partial class RegistryPolicy
 
             // Classes внутри Software: тот же смысл, что и HKCR.
             if (StartsWith(rel, 0, "Classes"))
-                return CheckClassesDelete(rel.Skip(1).ToArray());
+                return CheckClassesDelete(rel.Skip(1).ToArray(), hive);
 
             // Записи программ: Uninstall\<x>, App Paths\<x>.
             foreach (var parent in SoftwareDeleteChildAllowed)
@@ -275,17 +337,55 @@ public static partial class RegistryPolicy
         "Applications", "Record",
     };
 
-    static PolicyDecision CheckClassesDelete(string[] s)
+    // Системные расширения: ключ и всё под ним закрыты.
+    static readonly HashSet<string> ClassesProtectedExtensions = new(Cmp)
+    {
+        ".exe", ".lnk", ".dll", ".sys", ".bat", ".cmd", ".com", ".msi", ".cpl", ".scr", ".inf", ".reg", ".url",
+        ".library-ms", ".settingcontent-ms",
+    };
+
+    // Системные ProgID и протоколы: ключ и всё под ним закрыты.
+    static readonly HashSet<string> ClassesProtectedProgIds = new(Cmp)
+    {
+        "exefile", "lnkfile", "batfile", "cmdfile", "dllfile", "regfile", "inffile", "scrfile", "Unknown",
+        "ms-settings", "http", "https", "file", "mailto", "ActivatableClasses", "PackagedCom",
+    };
+
+    // Оболочечные корни: сам узел закрыт (ClassesStructural), записи под ним только эксперту.
+    static readonly HashSet<string> ClassesShellRoots = new(Cmp) { "Folder", "Directory", "Drive" };
+
+    static PolicyDecision CheckClassesDelete(string[] s, RegHive hive)
     {
         if (s.Length == 0) return PolicyDecision.Deny("Корень классов", "reg-hive-root");
-        if (s.Length == 1 && ClassesStructural.Contains(s[0]))
+        if (s[0].Equals("Wow6432Node", StringComparison.OrdinalIgnoreCase))
+        {
+            if (s.Length == 1) return PolicyDecision.Deny("Структурный узел классов", "reg-structure");
+            s = s[1..];
+        }
+        var top = s[0];
+        if (s.Length == 1 && ClassesStructural.Contains(top))
             return PolicyDecision.Deny("Структурный узел классов", "reg-structure");
-        if (s.Length == 1 && s[0].StartsWith('.'))
-            return PolicyDecision.Allow("reg-assoc");
-        if (s.Length >= 1 && s[0].Equals("Wow6432Node", StringComparison.OrdinalIgnoreCase))
-            return s.Length == 2 && ClassesStructural.Contains(s[1])
-                ? PolicyDecision.Deny("Структурный узел классов", "reg-structure")
-                : PolicyDecision.Allow("reg-classes-entry");
+
+        if (top.StartsWith('.'))
+            return ClassesProtectedExtensions.Contains(top)
+                ? PolicyDecision.Deny("Системное сопоставление расширения", "reg-classes-system")
+                : PolicyDecision.Expert("Сопоставление расширения: только по подтверждению эксперта", "reg-assoc");
+
+        if (ClassesProtectedProgIds.Contains(top) || top.StartsWith("AppX", StringComparison.OrdinalIgnoreCase))
+            return PolicyDecision.Deny("Системный ProgID или протокол", "reg-classes-system");
+
+        if (top.Equals("Local Settings", StringComparison.OrdinalIgnoreCase))
+        {
+            // Local Settings\Software это снимок Software (в нём AppModel\Repository с пакетами Store).
+            if (s[1].Equals("Software", StringComparison.OrdinalIgnoreCase)) return CheckSoftwareDelete(s[2..], hive == RegHive.ClassesRoot ? RegHive.CurrentUser : hive);
+            if (s[1].Equals("AppModel", StringComparison.OrdinalIgnoreCase))
+                return PolicyDecision.Deny("Данные пакетов Store", "reg-protected-node");
+            return PolicyDecision.Expert("Local Settings: только по подтверждению эксперта", "reg-classes-local-settings");
+        }
+
+        if (ClassesShellRoots.Contains(top))
+            return PolicyDecision.Expert("Запись оболочки для папок и дисков: только по подтверждению эксперта", "reg-classes-shell");
+
         return PolicyDecision.Allow("reg-classes-entry");
     }
 
@@ -296,6 +396,7 @@ public static partial class RegistryPolicy
         "EnableLUA", "ConsentPromptBehaviorAdmin", "ConsentPromptBehaviorUser", "PromptOnSecureDesktop",
         "FilterAdministratorToken", "LocalAccountTokenFilterPolicy", "EnableInstallerDetection",
         "EnableSecureUIAPaths", "EnableUIADesktopToggle", "ValidateAdminCodeSignatures", "EnableVirtualization",
+        "TypeOfAdminApprovalMode",
     };
 
     static readonly HashSet<string> SmartScreenValues = new(Cmp)
@@ -321,6 +422,9 @@ public static partial class RegistryPolicy
     }
 
     public static PolicyDecision CheckSetValue(RegKey k, string valueName)
+        => SetCore(k, valueName).WithTarget(k + "::" + valueName);
+
+    static PolicyDecision SetCore(RegKey k, string valueName)
     {
         var s = k.Segments;
         if (s.Length == 0) return PolicyDecision.Deny("Корень куста", "reg-hive-root");
@@ -346,13 +450,28 @@ public static partial class RegistryPolicy
                     var rest = s.Skip(1).ToArray();
                     foreach (var d in SystemDenyUnder)
                         if (StartsWith(rest, 0, d)) return PolicyDecision.Deny("Защищённая ветка SYSTEM", "reg-protected-node");
+                    // Остальное в SYSTEM запрещено, если ключ не назван в явном allow-списке.
+                    return SystemWriteAllowed(rest, valueName)
+                        ? PolicyDecision.Allow("reg-system-allowlist")
+                        : PolicyDecision.Deny("Ветка SYSTEM не входит в список разрешённых для записи", "reg-system-default-deny");
                 }
+                break;
+            case RegHive.Users:
+                if (s.Length == 1 || !IsOrdinaryUser(s[0], out _))
+                    return PolicyDecision.Deny("Профиль не обычного пользователя (.DEFAULT, служебные учётные записи)", "reg-system-user");
                 break;
         }
 
         var rel = SoftwareRel(k);
         if (rel is not null)
         {
+            if (IsPoliciesMicrosoft(rel))
+            {
+                foreach (var (hives, relKey, value) in PoliciesMicrosoftWriteAllow)
+                    if (hives.Contains(k.Hive) && Equal(rel, 0, relKey) && valueName.Equals(value, StringComparison.OrdinalIgnoreCase))
+                        return PolicyDecision.Allow("reg-policies-microsoft-exception");
+                return PolicyDecision.Deny("Политики Microsoft (Windows, Defender, Edge, обновления) не изменяются", "reg-policies-microsoft");
+            }
             foreach (var d in SoftwareDenyUnder)
                 if (StartsWith(rel, 0, d)) return PolicyDecision.Deny("Системный узел реестра", "reg-protected-node");
             if (StartsWith(rel, 0, SoftwareDenyPolicies))

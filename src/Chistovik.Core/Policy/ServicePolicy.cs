@@ -9,17 +9,27 @@ public enum StartMode { Boot, System, Automatic, AutomaticDelayed, Manual, Disab
 /// <summary>Класс службы: Forbidden и ReadOnly не меняются никогда, Modifiable можно менять с откатом.</summary>
 public enum ServiceClass { Forbidden, ReadOnly, Modifiable }
 
-/// <summary>Признаки службы, собранные слоем Native. Классификатор не доверяет имени: решают признаки.</summary>
+/// <summary>
+/// Признаки службы, собранные слоем Native. Классификатор не доверяет имени: решают признаки.
+/// ImagePath — сырая строка из реестра; NativeImagePath — путь бинарника, уже раскрытый слоем Native
+/// (по конечному пути хэндла); если он задан, проверяется наравне с сырым и ничего не ослабляет.
+/// LaunchProtected — ServiceLaunchProtected из QueryServiceConfig2 (PPL); RegisteredSecurityProduct — служба
+/// зарегистрирована как антивирус, брандмауэр или антишпион в Центре безопасности.
+/// InstallLocation — каталог установки из записи Uninstall; без него владельцем-программой служба не считается.
+/// </summary>
 public sealed record ServiceFacts(
     string Name,
     ServiceType Type,
     string? ImagePath,
     bool SignatureValid,
     bool MicrosoftSigned,
-    bool ProtectedProcess,
+    bool LaunchProtected,
     int DependentCount,
     bool OwnedByInstalledProgram,
-    StartMode CurrentStart);
+    StartMode CurrentStart,
+    bool RegisteredSecurityProduct = false,
+    string? InstallLocation = null,
+    string? NativeImagePath = null);
 
 /// <summary>
 /// Классификатор служб (раздел 2.1 плана). Единственное правило: «неизвестное» никогда не получает класс Modifiable.
@@ -39,6 +49,7 @@ public sealed partial class ServicePolicy
 
     readonly string _windowsDir;
     readonly string[] _systemOwnedRoots;
+    readonly string[] _commonRoots;
 
     public ServicePolicy(PolicyContext ctx)
     {
@@ -46,6 +57,7 @@ public sealed partial class ServicePolicy
         var pf = ctx.Norm(ctx.ProgramFiles);
         var pf86 = ctx.Norm(ctx.ProgramFilesX86);
         var pd = ctx.Norm(ctx.ProgramData);
+        _commonRoots = [pf, pf86, pd, ctx.Norm(ctx.UsersDir)];
         _systemOwnedRoots =
         [
             pf + @"\Windows Defender", pf + @"\Windows Defender Advanced Threat Protection", pf + @"\Windows Security",
@@ -100,14 +112,36 @@ public sealed partial class ServicePolicy
         return PathNormalizer.TryNormalize(exe, out var n, out _) ? n : null;
     }
 
+    static bool IsEdgeService(string name)
+        => name.StartsWith("edgeupdate", StringComparison.OrdinalIgnoreCase)
+           || name.Equals("MicrosoftEdgeElevationService", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Каталог установки подтверждает владельца-программу, только если он лежит как минимум на втором уровне тома
+    /// (не корень тома и не «C:\Программа»), не внутри Windows и не является самим корнем Program Files, ProgramData или профилей.
+    /// </summary>
+    public bool IsTrustedInstallLocation(string? installLocation)
+    {
+        if (!PathNormalizer.TryNormalize(installLocation, out var p, out _)) return false;
+        if (PathNormalizer.Components(p).Length < 2) return false;
+        if (PathNormalizer.IsEqualOrUnder(p, _windowsDir)) return false;
+        foreach (var root in _commonRoots)
+            if (p.Equals(root, StringComparison.OrdinalIgnoreCase) || PathNormalizer.IsEqualOrAncestor(p, root)) return false;
+        foreach (var root in _systemOwnedRoots)
+            if (PathNormalizer.IsEqualOrUnder(p, root)) return false;
+        return true;
+    }
+
     public (ServiceClass Class, string Reason, string Rule) Classify(ServiceFacts f)
     {
         if (!ValidName().IsMatch(f.Name) || f.Name != f.Name.Trim())
             return (ServiceClass.Forbidden, "Недопустимое имя службы", "bad-name");
         if (IsHardListed(f.Name))
             return (ServiceClass.Forbidden, "Защищённая служба Windows", "service-hardlist");
-        if (f.ProtectedProcess)
+        if (f.LaunchProtected)
             return (ServiceClass.Forbidden, "Защищённый процесс (PPL)", "service-ppl");
+        if (f.RegisteredSecurityProduct)
+            return (ServiceClass.Forbidden, "Служба зарегистрирована как продукт безопасности (антивирус, брандмауэр)", "service-security-product");
         if (f.Type is ServiceType.KernelDriver or ServiceType.FileSystemDriver)
             return (ServiceClass.Forbidden, "Драйвер ядра", "service-driver");
         if (f.Type == ServiceType.ShareProcess)
@@ -115,21 +149,37 @@ public sealed partial class ServicePolicy
         if (f.Type != ServiceType.OwnProcess)
             return (ServiceClass.ReadOnly, "Неизвестный тип службы", "service-unknown-type");
 
-        var exe = ResolveImagePath(f.ImagePath);
-        if (exe is null)
+        if (IsEdgeService(f.Name))
+            return (ServiceClass.ReadOnly, "Служба Microsoft Edge: обновляется и чинится самим Edge", "service-edge");
+
+        // Сырой ImagePath и путь, раскрытый Native, проверяются оба; нужен хотя бы один, непустой путь не должен не разбираться.
+        var exes = new List<string>(2);
+        var raw = ResolveImagePath(f.ImagePath);
+        if (raw is not null) exes.Add(raw);
+        if (f.NativeImagePath is not null)
+        {
+            if (!PathNormalizer.TryNormalize(f.NativeImagePath, out var nativePath, out _))
+                return (ServiceClass.ReadOnly, "Не удалось определить файл службы", "service-no-image");
+            exes.Add(nativePath);
+        }
+        if (exes.Count == 0)
             return (ServiceClass.ReadOnly, "Не удалось определить файл службы", "service-no-image");
 
-        if (PathNormalizer.IsEqualOrUnder(exe, _windowsDir))
-            return (ServiceClass.Forbidden, "Файл службы лежит в каталоге Windows", "service-in-windows");
-        foreach (var root in _systemOwnedRoots)
-            if (PathNormalizer.IsEqualOrUnder(exe, root))
-                return (ServiceClass.Forbidden, "Файл службы в системной зоне", "service-system-zone");
+        foreach (var exe in exes)
+        {
+            if (PathNormalizer.IsEqualOrUnder(exe, _windowsDir))
+                return (ServiceClass.Forbidden, "Файл службы лежит в каталоге Windows", "service-in-windows");
+            foreach (var root in _systemOwnedRoots)
+                if (PathNormalizer.IsEqualOrUnder(exe, root))
+                    return (ServiceClass.Forbidden, "Файл службы в системной зоне", "service-system-zone");
+        }
 
+        var owned = f.OwnedByInstalledProgram && IsTrustedInstallLocation(f.InstallLocation);
         if (f.DependentCount > 0)
             return (ServiceClass.ReadOnly, "От службы зависят другие службы", "service-has-dependents");
-        if (f.MicrosoftSigned && !f.OwnedByInstalledProgram)
+        if (f.MicrosoftSigned && !owned)
             return (ServiceClass.ReadOnly, "Служба Microsoft без установленной программы", "service-microsoft-unowned");
-        if (!f.SignatureValid && !f.OwnedByInstalledProgram)
+        if (!f.SignatureValid && !owned)
             return (ServiceClass.ReadOnly, "Нет действительной подписи и владельца-программы", "service-unknown");
 
         return (ServiceClass.Modifiable, "Служба установленной программы", "service-modifiable");
@@ -137,11 +187,12 @@ public sealed partial class ServicePolicy
 
     public PolicyDecision CheckSetStart(ServiceFacts f, StartMode target)
     {
+        var obj = "service:" + f.Name;
         var (cls, reason, rule) = Classify(f);
         if (cls != ServiceClass.Modifiable)
-            return PolicyDecision.Deny(reason, rule);
+            return PolicyDecision.Deny(reason, rule).WithTarget(obj);
         if (target is StartMode.Boot or StartMode.System)
-            return PolicyDecision.Deny("Загрузочные режимы запуска не назначаем", "service-boot-start");
-        return PolicyDecision.Allow(rule);
+            return PolicyDecision.Deny("Загрузочные режимы запуска не назначаем", "service-boot-start").WithTarget(obj);
+        return PolicyDecision.Allow(rule).WithTarget(obj);
     }
 }
