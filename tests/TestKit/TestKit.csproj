@@ -6,4 +6,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chistovik.Core\Chistovik.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Core.Tests" />
+    <InternalsVisibleTo Include="Policy.Negative" />
+    <InternalsVisibleTo Include="Integration.Tests" />
+  </ItemGroup>
 </Project>

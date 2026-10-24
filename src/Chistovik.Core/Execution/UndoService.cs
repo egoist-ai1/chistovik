@@ -45,9 +45,13 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
         var items = new List<Item>();
         foreach (var s in view.Steps.Where(x => x.State == StepState.Done).OrderByDescending(x => x.Ord))
         {
-            var planned = StepFactory.Rebuild(env, sid, s.Kind, s.TargetKey, s.TargetJson, s.BeforeJson, true);
+            PlannedStep planned;
             OpenOutcome o;
-            try { o = planned.Open(env, sim, false); }
+            try
+            {
+                planned = StepFactory.Rebuild(env, sid, s.Kind, s.TargetKey, s.TargetJson, s.BeforeJson, true);
+                o = planned.Open(env, sim, false);
+            }
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 return Reject(req.Id, ResponseCodes.Internal, "Не удалось прочитать состояние цели: " + ErrorCodes.From(e));

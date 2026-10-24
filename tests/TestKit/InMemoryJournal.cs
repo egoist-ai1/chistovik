@@ -3,7 +3,7 @@ using Chistovik.Core.Ports;
 namespace Chistovik.TestKit;
 
 /// <summary>Имитация обрыва процесса: бросается из Probe журнала и из подставных портов, не перехватывается кодом исполнения.</summary>
-public sealed class SimulatedCrash(string where) : ProcessAbortException("Имитация обрыва: " + where)
+internal sealed class SimulatedCrash(string where) : ProcessAbortException("Имитация обрыва: " + where)
 {
     public string Where { get; } = where;
 }
@@ -206,7 +206,9 @@ public sealed class InMemoryJournal(IClock clock) : IJournalWriter
 
     /// <summary>Операция с действующим (done) шагом создания нашей схемы питания не очищается; шаг удаления схемы и undone не считаются.</summary>
     bool HoldsOwnScheme(Guid op)
-        => _steps.Any(s => s.OpId == op && s.Kind == StepKind.PowerSchemeCreate && s.State == StepState.Done && s.AfterJson.Contains("\"exists\":true"));
+        => _steps.Any(s => s.OpId == op && s.Kind == StepKind.PowerSchemeCreate && s.State == StepState.Done
+            && System.Text.Json.JsonDocument.Parse(s.AfterJson).RootElement.TryGetProperty("exists", out var ex) && ex.ValueKind == System.Text.Json.JsonValueKind.True
+            && s.Id == _steps.Where(x => x.TargetKey == s.TargetKey && x.State == StepState.Done).Max(x => x.Id));
 
     public int Purge(DateTimeOffset cutoff)
     {

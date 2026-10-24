@@ -32,13 +32,13 @@ public sealed class RecoveryService(ExecEnv env)
             var view = View(p.OpId);
             var sid = view?.UserSid ?? string.Empty;
             var isUndo = p.OpKind == OperationKind.Undo;
-            var step = StepFactory.Rebuild(env, sid, p.Kind, p.TargetKey, p.TargetJson, p.AfterJson, isUndo);
 
             string? cur = null;
             string? failCode = null;
             string? failRule = null;
             try
             {
+                var step = StepFactory.Rebuild(env, sid, p.Kind, p.TargetKey, p.TargetJson, p.AfterJson, isUndo);
                 var o = step.Open(env, null, false);
                 if (o.Refusal is { } r)
                 {

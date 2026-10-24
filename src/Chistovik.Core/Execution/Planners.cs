@@ -61,7 +61,7 @@ internal static class PowerPlanner
         IReadOnlyList<Guid> installed;
         try { installed = env.Power.ListSchemes(); }
         catch (Exception e) when (e is not OperationCanceledException) { throw new PlanException(ErrorCodes.From(e), ErrorCodes.Text(e)); }
-        if ((OwnSchemes.Find(env, template, installed) ?? OwnSchemes.FindByName(env, entry, installed)) is { } own) return [new PowerActiveStep(entry, own)];
+        if (OwnSchemes.Find(env, template, installed) is { } own) return [new PowerActiveStep(entry, own)];
         var fresh = env.Ids.NewGuid();
         return [new PowerCreateStep(entry, fresh, true), new PowerActiveStep(entry, fresh)];
     }

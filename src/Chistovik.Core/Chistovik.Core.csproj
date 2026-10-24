@@ -12,5 +12,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Core.Tests" />
     <InternalsVisibleTo Include="Policy.Negative" />
+    <InternalsVisibleTo Include="TestKit" />
   </ItemGroup>
 </Project>

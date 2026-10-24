@@ -175,21 +175,8 @@ internal static class OwnSchemes
     public static bool IsOurs(ExecEnv env, Guid scheme, IReadOnlyCollection<Guid> installed)
     {
         foreach (var s in env.PowerCatalog.Schemes)
-            if (s.CreateFromTemplate is { } t && (Find(env, t, installed) == scheme || FindByName(env, s, installed) == scheme)) return true;
+            if (s.CreateFromTemplate is { } t && Find(env, t, installed) == scheme) return true;
         return false;
-    }
-
-    /// <summary>
-    /// Установленная схема, чьё имя точно равно нашему (<see cref="StepGate.OwnSchemeName"/>): для планирования её принимают за нашу,
-    /// чтобы не создавать вторую копию, когда журнал о ней забыл. Для удаления этого мало: нужна запись журнала.
-    /// </summary>
-    public static Guid? FindByName(ExecEnv env, PowerSchemeEntry entry, IReadOnlyCollection<Guid> installed)
-    {
-        if (entry.CreateFromTemplate is null) return null;
-        var want = StepGate.OwnSchemeName(entry);
-        foreach (var g in installed)
-            if (string.Equals(env.Power.GetName(g), want, StringComparison.Ordinal)) return g;
-        return null;
     }
 
     /// <summary>Журнал считает схему созданной нами независимо от того, установлена ли она (для отката шага создания).</summary>

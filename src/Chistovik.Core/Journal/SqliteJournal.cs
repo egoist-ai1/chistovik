@@ -193,7 +193,8 @@ public sealed class SqliteJournal : IJournalWriter, IDisposable
             // (повторное создание и откат). Откатанная схема (шаг undone) очищается как обычно; шаг удаления схемы не считается.
             var n = ExecCount("DELETE FROM operation WHERE state <> 'running' AND finished_utc IS NOT NULL AND finished_utc < @c " +
                 "AND NOT EXISTS (SELECT 1 FROM step s WHERE s.op_id = operation.id AND s.kind = 'PowerSchemeCreate' AND s.state = 'done' " +
-                "AND s.after_json LIKE '%\"exists\":true%')", null,
+                "AND json_extract(s.after_json, '$.exists') = 1 " +
+                "AND s.id = (SELECT MAX(x.id) FROM step x WHERE x.target_key = s.target_key AND x.state = 'done'))", null,
                 ("@c", cutoff.ToUnixTimeMilliseconds()));
             Exec(_conn, "PRAGMA incremental_vacuum");
             return n;

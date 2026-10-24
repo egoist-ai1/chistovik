@@ -62,7 +62,7 @@ public class ReviewFixTests
     // ---------- 2. схема по имени ----------
 
     [Fact]
-    public void Scheme_with_exactly_our_name_is_accepted_for_planning_but_not_for_deletion()
+    public void Scheme_with_exactly_our_name_but_no_journal_record_is_not_ours()
     {
         var t = new TestEnv();
         var named = Guid.Parse("11111111-2222-3333-4444-555555555555");
@@ -71,12 +71,72 @@ public class ReviewFixTests
         var r = t.Plan(PowerPlan.Ult);
 
         Assert.True(r.Ok, r.Code + r.Message);
-        Assert.Equal(0, t.Power.DuplicateCount);
-        Assert.Equal(named, t.Power.Active);
-        Assert.Equal([StepKind.PowerActiveScheme], t.Journal.Get(r.OperationId!.Value)!.Steps.Select(s => s.Kind));
-        Assert.True(t.Undo(r.OperationId!.Value).Ok);
-        Assert.Equal(0, t.Power.DeleteCount);
+        Assert.Equal(1, t.Power.DuplicateCount);
+        Assert.NotEqual(named, t.Power.Active);
         Assert.Contains(named, t.Power.ListSchemes());
+        Assert.Equal(0, t.Power.DeleteCount);
+    }
+
+    [Fact]
+    public void Setting_in_active_scheme_with_our_name_but_no_journal_record_is_denied()
+    {
+        var t = new TestEnv();
+        var named = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        t.Power.AddScheme(named, "Chistovik Ultimate Performance");
+        t.Power.Active = named;
+        var writes = t.Power.WriteCount;
+
+        var r = t.PowerSetting("min", 50, null);
+
+        Assert.False(r.Ok);
+        Assert.Equal(ResponseCodes.PolicyDenied, r.Code);
+        Assert.Equal(writes, t.Power.WriteCount);
+    }
+
+    [Fact]
+    public void Purge_keeps_only_the_latest_live_creation_of_the_same_scheme()
+    {
+        var t = new TestEnv();
+        var op1 = t.Plan(PowerPlan.Ult).OperationId!.Value;
+        t.Power.RemoveScheme(Created(t)); // схему удалили снаружи, журнал о ней помнит
+        var op2 = t.Plan(PowerPlan.Ult).OperationId!.Value;
+        t.Clock.Advance(TimeSpan.FromDays(91));
+
+        var removed = t.Journal.Purge(t.Clock.UtcNow.AddDays(-90));
+
+        Assert.Equal(1, removed);
+        Assert.Null(t.Journal.Get(op1));
+        Assert.NotNull(t.Journal.Get(op2));
+    }
+
+    [Fact]
+    public void Recovery_does_not_throw_when_rebuilding_a_step_hits_a_port_error()
+    {
+        var t = new TestEnv();
+        t.Registry.SetString(FakeRegistry.HkuPath(TestEnv.Sid, RunKey), "FooTray", OldCmd);
+        t.Journal.Probe = l => { if (l == "AddPending:after") throw new SimulatedCrash(l); };
+        Assert.Throws<SimulatedCrash>(() => t.Startup("run:hku:FooTray", false));
+        t.Journal.Probe = null;
+        t.Restart();
+        t.Registry.OnOpen = _ => throw new IOException("port unavailable");
+
+        var rep = new RecoveryService(t.Env).Run();
+
+        Assert.Equal(1, rep.Failed);
+        Assert.Equal(StepState.Failed, t.Journal.AllSteps.Single().State);
+        Assert.Empty(t.Journal.GetPending());
+    }
+
+    [Fact]
+    public void Undo_rejects_with_internal_when_rebuilding_a_step_hits_a_port_error()
+    {
+        var (t, op, _) = StartupOff();
+        t.Registry.OnOpen = _ => throw new IOException("port unavailable");
+
+        var u = t.Undo(op);
+
+        Assert.False(u.Ok);
+        Assert.Equal(ResponseCodes.Internal, u.Code);
     }
 
     [Fact]
@@ -184,8 +244,9 @@ public class ReviewFixTests
     public void Unexpected_port_exception_in_planner_fails_the_operation_and_repeat_returns_it_not_busy()
     {
         var t = new TestEnv();
-        t.Power.GetNameFailure = new InvalidOperationException("порт сломан");
-        var req = new SetPowerSchemeRequest { Id = t.NextRequestId(), Plan = PowerPlan.Ult };
+        t.Registry.SetString(FakeRegistry.HkuPath(TestEnv.Sid, RunKey), "FooTray", OldCmd);
+        t.Registry.OnOpen = _ => throw new InvalidOperationException("порт сломан");
+        var req = new SetStartupEntryRequest { Id = t.NextRequestId(), EntryId = "run:hku:FooTray", Enabled = false };
 
         var first = t.Run(req);
         var second = t.Run(req);
