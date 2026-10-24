@@ -15,8 +15,10 @@
                   Schedule="afterInstallValidate" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
-    <!-- .NET self-contained, но сама ОС должна быть Windows 10 или новее. -->
-    <Launch Condition="Installed OR VersionNT &gt;= 1000" Message="Чистовику нужна Windows 10 или новее." />
+    <!-- Нижняя граница .NET 10 (Windows 10 1607) проверяет сам запускаемый exe. Здесь только отсечка совсем старых систем:
+         Windows Installer в некоторых контекстах (проверено в Windows Sandbox) сообщает VersionNT = 603 даже на Windows 11,
+         поэтому условие «VersionNT >= 1000» блокировало установку на современной системе (код 1603). -->
+    <Launch Condition="Installed OR VersionNT &gt;= 603" Message="Чистовику нужна Windows 10 или новее." />
 
     <Property Id="ARPCOMMENTS" Value="Лицензия GPL-3.0. Данные пользователя в %ProgramData%\Chistovik при удалении сохраняются." />
 
