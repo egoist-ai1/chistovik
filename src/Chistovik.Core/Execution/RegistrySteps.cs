@@ -92,6 +92,9 @@ internal sealed class StartupStep : PlannedStep
         _sid = clientSid;
     }
 
+    /// <summary>Команда записи изменилась после операции, которую откатываем (шаг построен по текущей команде). UndoService трактует это как конфликт.</summary>
+    public bool CommandChanged { get; init; }
+
     protected override OpenOutcome OpenCore(ExecEnv env, SimState? sim, bool forWrite)
     {
         // 1) цель выводится из перечисления агента (свежего); команда не должна измениться с момента планирования

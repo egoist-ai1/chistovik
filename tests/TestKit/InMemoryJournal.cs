@@ -3,7 +3,7 @@ using Chistovik.Core.Ports;
 namespace Chistovik.TestKit;
 
 /// <summary>Имитация обрыва процесса: бросается из Probe журнала и из подставных портов, не перехватывается кодом исполнения.</summary>
-public sealed class SimulatedCrash(string where) : Exception("Имитация обрыва: " + where)
+public sealed class SimulatedCrash(string where) : ProcessAbortException("Имитация обрыва: " + where)
 {
     public string Where { get; } = where;
 }
@@ -204,9 +204,13 @@ public sealed class InMemoryJournal(IClock clock) : IJournalWriter
         => _steps.Where(s => s.State == StepState.Pending).OrderBy(s => s.Id).Select(s =>
             new PendingStep(s.Id, s.OpId, _ops[s.OpId].Kind, s.Ord, s.Kind, s.TargetKey, s.TargetJson, s.BeforeJson, s.AfterJson, s.RevertsStepId)).ToList();
 
+    /// <summary>Операция с действующим (done) шагом создания нашей схемы питания не очищается; шаг удаления схемы и undone не считаются.</summary>
+    bool HoldsOwnScheme(Guid op)
+        => _steps.Any(s => s.OpId == op && s.Kind == StepKind.PowerSchemeCreate && s.State == StepState.Done && s.AfterJson.Contains("\"exists\":true"));
+
     public int Purge(DateTimeOffset cutoff)
     {
-        var gone = _ops.Values.Where(o => o.State != OperationState.Running && o.Finished is { } f && f < cutoff).Select(o => o.Id).ToList();
+        var gone = _ops.Values.Where(o => o.State != OperationState.Running && o.Finished is { } f && f < cutoff && !HoldsOwnScheme(o.Id)).Select(o => o.Id).ToList();
         foreach (var id in gone)
         {
             _ops.Remove(id);

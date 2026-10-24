@@ -63,7 +63,7 @@ public class UserServiceAndTaskSidTests
         // Локализованное имя («СИСТЕМА») не распознаётся по имени, но SID выдаёт служебную запись.
         var raw = Raw(@"PC\Egoist", sid);
         Assert.Equal(ChangeClass.RevertOnly, Policy.Classify(raw).Class);
-        Assert.True(Policy.CheckSetEnabled(raw, false).IsDenied);
+        Assert.True(Policy.CheckSetEnabled(raw, false).IsAllowed); // выключение разрешено, включение только откатом
         Assert.True(Policy.CheckSetEnabled(raw, true).IsDenied);
         Assert.False(Policy.CheckSetEnabled(raw, true, isRevertOfOwnStep: true).IsDenied);
     }

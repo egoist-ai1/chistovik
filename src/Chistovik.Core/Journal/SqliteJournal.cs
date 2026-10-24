@@ -189,7 +189,11 @@ public sealed class SqliteJournal : IJournalWriter, IDisposable
     {
         lock (_gate)
         {
-            var n = ExecCount("DELETE FROM operation WHERE state <> 'running' AND finished_utc IS NOT NULL AND finished_utc < @c", null,
+            // Операции с действующим шагом создания нашей схемы питания не стираем: без них журнал забыл бы, что схема наша
+            // (повторное создание и откат). Откатанная схема (шаг undone) очищается как обычно; шаг удаления схемы не считается.
+            var n = ExecCount("DELETE FROM operation WHERE state <> 'running' AND finished_utc IS NOT NULL AND finished_utc < @c " +
+                "AND NOT EXISTS (SELECT 1 FROM step s WHERE s.op_id = operation.id AND s.kind = 'PowerSchemeCreate' AND s.state = 'done' " +
+                "AND s.after_json LIKE '%\"exists\":true%')", null,
                 ("@c", cutoff.ToUnixTimeMilliseconds()));
             Exec(_conn, "PRAGMA incremental_vacuum");
             return n;

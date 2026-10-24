@@ -81,7 +81,7 @@ public sealed class OperationHandler : IOperationHandler
     AgentResponse Apply(AgentRequest request, string sid, OperationKind kind, string subject, Func<OperationPlan> plan)
     {
         var rec = _env.Journal.BeginOrGet(new NewOperation(_env.Ids.NewGuid(), request.Id, kind, subject, null, sid, _env.AgentVersion, _env.CatalogSha256));
-        if (rec.AlreadyExisted) return Stored(request.Id, rec.Id);
+        if (rec.AlreadyExisted) return Stored(request.Id, rec.Id, sid);
 
         OperationPlan p;
         try
@@ -94,18 +94,37 @@ public sealed class OperationHandler : IOperationHandler
                 _env.Journal.Finish(rec.Id, OperationState.Denied, e.Code == StepCodes.NotFound ? ResponseCodes.NotFound : ResponseCodes.PolicyDenied);
             else
                 _env.Journal.Finish(rec.Id, OperationState.Failed, e.Code);
-            return Stored(request.Id, rec.Id);
+            return Stored(request.Id, rec.Id, sid);
+        }
+        catch (Exception e) when (IsUnexpected(e))
+        {
+            // Порт или планировщик бросил непредвиденное: операция закрывается failed/internal, повтор с тем же Id отдаст её же, а не busy.
+            _env.Journal.Finish(rec.Id, OperationState.Failed, ResponseCodes.Internal);
+            return Stored(request.Id, rec.Id, sid);
         }
 
-        _runner.RunPlan(rec.Id, p);
-        return Stored(request.Id, rec.Id);
+        try
+        {
+            _runner.RunPlan(rec.Id, p);
+        }
+        catch (Exception e) when (IsUnexpected(e))
+        {
+            // Незавершённые (pending) шаги остаются: их закроет RecoveryService при старте агента.
+            _env.Journal.Finish(rec.Id, OperationState.Failed, ResponseCodes.Internal);
+        }
+        return Stored(request.Id, rec.Id, sid);
     }
 
-    AgentResponse Stored(Guid requestId, Guid opId)
+    /// <summary>Исключения, которые не превращаются в ответ internal: отмена, недоступный журнал (обрабатывается выше) и имитация гибели процесса в тестах.</summary>
+    static bool IsUnexpected(Exception e) => e is not (OperationCanceledException or JournalException or SqliteException or ProcessAbortException);
+
+    AgentResponse Stored(Guid requestId, Guid opId, string sid)
     {
         var view = _env.Journal.Get(opId);
-        return view is null
-            ? new AgentResponse(requestId, false, ResponseCodes.Internal, "Запись операции не найдена")
-            : Responses.FromOperation(requestId, view);
+        if (view is null) return new AgentResponse(requestId, false, ResponseCodes.Internal, "Запись операции не найдена");
+        // Чужой SID: Id запроса совпал с операцией другого пользователя; её содержимое не раскрываем.
+        if (!string.Equals(view.UserSid, sid, StringComparison.OrdinalIgnoreCase))
+            return new AgentResponse(requestId, false, ResponseCodes.UnknownOperation, "Операция не найдена");
+        return Responses.FromOperation(requestId, view);
     }
 }

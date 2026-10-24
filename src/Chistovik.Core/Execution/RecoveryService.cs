@@ -76,8 +76,17 @@ public sealed class RecoveryService(ExecEnv env)
                     }
                     else if (FindOriginal(view, p, View) is { } orig)
                     {
-                        env.Journal.CompleteRevert(p.StepId, orig, StepCodes.RecoveredDone);
-                        done++;
+                        try
+                        {
+                            env.Journal.CompleteRevert(p.StepId, orig, StepCodes.RecoveredDone);
+                            done++;
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // Исходный шаг уже не done (его закрыл другой шаг отмены или он изменён): одна плохая запись не должна останавливать агент.
+                            env.Journal.Complete(p.StepId, StepState.Failed, StepCodes.ExternalChange, "recovery: original step is not done");
+                            failed++;
+                        }
                     }
                     else
                     {

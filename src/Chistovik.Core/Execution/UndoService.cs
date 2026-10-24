@@ -88,8 +88,13 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
                 return Reject(req.Id, ResponseCodes.PolicyDenied, "Откат отклонён: journal-bad-payload");
             }
 
-            // Для последующих шагов предпрохода считаем, что этот будет возвращён (питание: активная схема и удаление копии).
-            if (plan != Plan.Already) planned.Simulate(sim);
+            // Программа переписала команду автозагрузки: возвращать флаг можно только по явному решению пользователя.
+            if (plan == Plan.Revert && planned is StartupStep { CommandChanged: true }) plan = Plan.Conflict;
+
+            // Для последующих шагов предпрохода считаем, что этот будет возвращён: Revert и Conflict с решением Overwrite (не Skip).
+            // Питание: активная схема и удаление копии.
+            if (plan == Plan.Revert || (plan == Plan.Conflict && resolutions.TryGetValue(s.Id, out var act) && act == ConflictAction.Overwrite))
+                planned.Simulate(sim);
             items.Add(new Item(s, planned, plan, cur));
         }
 

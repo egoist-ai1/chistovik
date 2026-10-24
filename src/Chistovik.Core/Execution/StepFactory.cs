@@ -101,7 +101,9 @@ internal static class StepFactory
         if (!StartupEntryId.TryParse(id.ToString(), out var parsed, out _) || parsed != id) return Bad("startup-bad-id");
         var entry = StartupEnumerator.Find(env, sid, id);
         if (entry is null) return Bad("startup-entry-missing", StepCodes.NotFound);
-        if (!KeyEq(entry.CommandSha256, t.CommandSha256)) return Bad("startup-command-changed");
+        // Команда могла измениться с момента записи (программа обновилась и переписала Run): это конфликт отката, а не отказ.
+        // Политика всё равно проверяет ТЕКУЩУЮ команду при открытии цели (StartupStep.OpenCore).
+        var commandChanged = !KeyEq(entry.CommandSha256, t.CommandSha256);
         var et = entry.Target;
         if (!KeyEq(StateJson.StartupKey(et.Root, et.Sid, et.Approved, et.Name), key)) return Bad("journal-target-key-mismatch");
         var (exists, bytes) = StateJson.ParseStartup(desired);
@@ -109,7 +111,7 @@ internal static class StepFactory
         if (!exists) state = new RegValueState(false, RegType.None, null);
         else if (bytes is { Length: 12 }) state = new RegValueState(true, RegType.Binary, bytes);
         else return Bad("journal-bad-value-type");
-        return new StartupStep(id, et, entry.CommandSha256, entry.ApprovedLocation, state, sid) { IsRevert = isRevert };
+        return new StartupStep(id, et, entry.CommandSha256, entry.ApprovedLocation, state, sid) { IsRevert = isRevert, CommandChanged = commandChanged };
     }
 
     // ---------- службы и задачи ----------

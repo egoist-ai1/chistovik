@@ -1,5 +1,11 @@
 namespace Chistovik.Core.Ports;
 
+/// <summary>
+/// Исключение, имитирующее гибель процесса (только тесты): обработчик операций его не перехватывает и не превращает в ответ internal.
+/// В рабочем коде не бросается.
+/// </summary>
+public abstract class ProcessAbortException(string message) : Exception(message);
+
 public interface IClock { DateTimeOffset UtcNow { get; } }
 
 public interface IIdGenerator { Guid NewGuid(); }

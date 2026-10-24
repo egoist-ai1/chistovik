@@ -216,7 +216,10 @@ public sealed class FakePowerControl : IPowerControl
 
     public Guid GetActive() => Active;
 
-    public string? GetName(Guid scheme) => Names.GetValueOrDefault(scheme);
+    /// <summary>Если задано, GetName бросает это исключение (проверка непредвиденных отказов порта).</summary>
+    public Exception? GetNameFailure { get; set; }
+
+    public string? GetName(Guid scheme) => GetNameFailure is { } f ? throw f : Names.GetValueOrDefault(scheme);
 
     public IReadOnlyList<Guid> ListSchemes() => _schemes.ToList();
 

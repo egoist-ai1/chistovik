@@ -150,8 +150,8 @@ public sealed class TaskPolicy
     /// <summary>
     /// Разрешает включение (<paramref name="enable"/>=true) или выключение задачи по свежему <paramref name="t"/>.
     /// Сигнатура для StepGate: <c>CheckSetEnabled(TaskRaw t, bool enable, bool isRevertOfOwnStep = false)</c>.
-    /// Allow: класс Modifiable, либо RevertOnly при <paramref name="isRevertOfOwnStep"/>=true (откат собственного шага журнала;
-    /// флаг выставляет только StepGate). Forbidden и ReadOnly это Deny всегда, откатом тоже. Target = «task:&lt;путь&gt;».
+    /// Allow: класс Modifiable, либо RevertOnly при <paramref name="enable"/>=false (выключение) или <paramref name="isRevertOfOwnStep"/>=true (откат
+    /// собственного шага журнала; флаг выставляет только StepGate). Forbidden и ReadOnly это Deny всегда, откатом тоже. Target = «task:&lt;путь&gt;».
     /// </summary>
     public PolicyDecision CheckSetEnabled(TaskRaw t, bool enable, bool isRevertOfOwnStep = false)
     {
@@ -160,7 +160,8 @@ public sealed class TaskPolicy
         return cls switch
         {
             ChangeClass.Modifiable => PolicyDecision.Allow("task-modifiable").WithTarget(target),
-            ChangeClass.RevertOnly when isRevertOfOwnStep => PolicyDecision.Allow("task-revert-own-step").WithTarget(target),
+            // Выключение задачи с повышенными правами безопасно и разрешено; включение такой задачи — только откатом собственного шага.
+            ChangeClass.RevertOnly when !enable || isRevertOfOwnStep => PolicyDecision.Allow("task-disable-or-revert").WithTarget(target),
             ChangeClass.RevertOnly => PolicyDecision.Deny(reason, rule).WithTarget(target),
             ChangeClass.ReadOnly => PolicyDecision.Deny("Только просмотр: " + reason, rule).WithTarget(target),
             _ => PolicyDecision.Deny(reason, rule).WithTarget(target),

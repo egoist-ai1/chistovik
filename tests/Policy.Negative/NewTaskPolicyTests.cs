@@ -162,7 +162,7 @@ public class NewTaskPolicyTests
         var raw = Raw(user: user);
         Assert.Equal(ChangeClass.RevertOnly, Policy.Classify(raw).Class);
         Assert.True(Policy.CheckSetEnabled(raw, true).IsDenied);
-        Assert.True(Policy.CheckSetEnabled(raw, false).IsDenied);
+        Assert.True(Policy.CheckSetEnabled(raw, false).IsAllowed); // выключение разрешено (DESIGN-0.1 §7), включение только откатом
         Assert.True(Policy.CheckSetEnabled(raw, true, isRevertOfOwnStep: true).IsAllowed);
         Assert.True(Policy.CheckSetEnabled(raw, false, isRevertOfOwnStep: true).IsAllowed);
     }
@@ -176,8 +176,35 @@ public class NewTaskPolicyTests
         var raw = Raw(runLevel: level);
         Assert.Equal(ChangeClass.RevertOnly, Policy.Classify(raw).Class);
         Assert.True(Policy.CheckSetEnabled(raw, true).IsDenied);
-        Assert.True(Policy.CheckSetEnabled(raw, false).IsDenied);
+        Assert.True(Policy.CheckSetEnabled(raw, false).IsAllowed); // выключение разрешено (DESIGN-0.1 §7), включение только откатом
         Assert.True(Policy.CheckSetEnabled(raw, true, isRevertOfOwnStep: true).IsAllowed);
+    }
+
+    [Theory]
+    [InlineData("SYSTEM")]
+    [InlineData(@"NT AUTHORITY\SYSTEM")]
+    [InlineData(@"NT AUTHORITY\LOCAL SERVICE")]
+    public void Elevated_task_direct_matrix_disable_allowed_enable_denied_revert_allowed(string user)
+    {
+        var raw = Raw(user: user);
+        Assert.Equal(ChangeClass.RevertOnly, Policy.Classify(raw).Class);
+        Assert.True(Policy.CheckSetEnabled(raw, false).IsAllowed);
+        Assert.True(Policy.CheckSetEnabled(raw, true).IsDenied);
+        Assert.True(Policy.CheckSetEnabled(raw, true, isRevertOfOwnStep: true).IsAllowed);
+        var hi = Raw(runLevel: "HighestAvailable");
+        Assert.True(Policy.CheckSetEnabled(hi, false).IsAllowed);
+        Assert.True(Policy.CheckSetEnabled(hi, true).IsDenied);
+    }
+
+    [Theory]
+    [InlineData(@"\Microsoft\Windows\Foo")]
+    [InlineData(@"\Chistovik\Foo")]
+    public void Forbidden_subtrees_stay_denied_in_both_directions_even_for_system(string path)
+    {
+        var raw = Raw(path: path, user: "SYSTEM");
+        foreach (var enable in new[] { true, false })
+        foreach (var revert in new[] { true, false })
+            Assert.True(Policy.CheckSetEnabled(raw, enable, revert).IsDenied);
     }
 
     [Fact]

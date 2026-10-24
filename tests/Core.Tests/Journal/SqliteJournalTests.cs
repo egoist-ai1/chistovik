@@ -325,6 +325,41 @@ public class SqliteJournalTests
     }
 
     [Fact]
+    public void Purge_keeps_operation_with_live_scheme_creation_and_removes_it_after_undone()
+    {
+        using var t = new TempJournalDir();
+        var clock = new JournalFakeClock();
+        using var j = new SqliteJournal(t.Db, clock);
+
+        var op = NewOp(subject: "ult");
+        j.BeginOrGet(op);
+        var s = j.AddPending(op.Id, 0, StepKind.PowerSchemeCreate, "power-create:x", "{\"v\":1}", "{\"v\":1,\"exists\":false}", "{\"v\":1,\"exists\":true}");
+        j.Complete(s, StepState.Done, null, null);
+        j.Finish(op.Id, OperationState.Done, null);
+
+        var plain = NewOp(subject: "plain");
+        j.BeginOrGet(plain);
+        AddStep(j, plain.Id, 0, "k", "{}", "{}");
+        j.Finish(plain.Id, OperationState.Done, null);
+
+        clock.UtcNow = clock.UtcNow.AddDays(100);
+        Assert.Equal(1, j.Purge(clock.UtcNow.AddDays(-90)));
+        Assert.NotNull(j.Get(op.Id));
+        Assert.Null(j.Get(plain.Id));
+
+        var undo = NewOp(kind: OperationKind.Undo, subject: "ult", reverts: op.Id);
+        j.BeginOrGet(undo);
+        var d = j.AddPending(undo.Id, 0, StepKind.PowerSchemeCreate, "power-create:x", "{\"v\":1}", "{\"v\":1,\"exists\":true}", "{\"v\":1,\"exists\":false}");
+        j.CompleteRevert(d, s, "reverted");
+        j.Finish(undo.Id, OperationState.Done, null);
+
+        clock.UtcNow = clock.UtcNow.AddDays(100);
+        Assert.Equal(2, j.Purge(clock.UtcNow.AddDays(-90)));
+        Assert.Null(j.Get(op.Id));
+        Assert.Null(j.Get(undo.Id));
+    }
+
+    [Fact]
     public void Writer_refuses_newer_schema_but_reader_can_read()
     {
         using var t = new TempJournalDir();
