@@ -7,7 +7,28 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Chistovik.Core\Chistovik.Core.csproj" />
+    <ProjectReference Include="..\Chistovik.Native\Chistovik.Native.csproj" />
+    <!-- Агент собирается раньше приложения, но его сборка не подключается: нужен только Chistovik.Agent.exe рядом с App.exe. -->
+    <ProjectReference Include="..\Chistovik.Agent\Chistovik.Agent.csproj" ReferenceOutputAssembly="false" OutputItemType="AgentBuildOutput" />
   </ItemGroup>
+  <!-- Файлы агента (общие Core, Native и SQLite уже лежат рядом с приложением, дубликатов нет). -->
+  <Target Name="_ResolveAgentFiles">
+    <PropertyGroup>
+      <_AgentDirPath>@(AgentBuildOutput->'%(RootDir)%(Directory)')</_AgentDirPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <_AgentFile Include="$(_AgentDirPath)Chistovik.Agent.exe;$(_AgentDirPath)Chistovik.Agent.dll;$(_AgentDirPath)Chistovik.Agent.deps.json;$(_AgentDirPath)Chistovik.Agent.runtimeconfig.json" />
+    </ItemGroup>
+  </Target>
+  <Target Name="CopyAgentNextToApp" AfterTargets="Build" DependsOnTargets="_ResolveAgentFiles">
+    <Copy SourceFiles="@(_AgentFile)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <!-- При публикации SDK сам кладёт Agent.exe, deps и runtimeconfig, но не Chistovik.Agent.dll (ReferenceOutputAssembly=false). -->
+  <Target Name="AddAgentDllToPublish" AfterTargets="ComputeResolvedFilesToPublishList" DependsOnTargets="_ResolveAgentFiles">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(_AgentDirPath)Chistovik.Agent.dll" RelativePath="Chistovik.Agent.dll" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <InternalsVisibleTo Include="App.Tests" />
   </ItemGroup>

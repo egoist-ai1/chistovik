@@ -1,5 +1,6 @@
 using System.Security.Principal;
 using Chistovik.Core.Ipc;
+using Chistovik.Core.Policy;
 using Chistovik.Native.Ipc;
 
 namespace Chistovik.Agent;
@@ -7,11 +8,12 @@ namespace Chistovik.Agent;
 /// <summary>
 /// Агент с правами администратора. Запускается приложением через ShellExecute runas:
 /// Chistovik.Agent.exe --pipe NAME --parent-pid PID --user-sid SID --app-path PATH
-/// Сейчас умеет только Ping: привилегированных операций нет (они добавляются по одной с политикой и тестами).
+/// Порядок старта: мьютекс → граф (<see cref="AgentComposition"/>: каталог журнала и ACL, журнал, восстановление, очистка)
+/// → только затем канал. Если журналом пользоваться нельзя, канал открывается, но кроме Ping отвечает кодом ошибки.
 /// </summary>
 public static class Program
 {
-    const int ExitOk = 0, ExitBadArgs = 2, ExitAlreadyRunning = 3, ExitIdle = 4;
+    const int ExitOk = 0, ExitBadArgs = 2, ExitAlreadyRunning = 3, ExitIdle = 4, ExitBadEnvironment = 5;
 
     public static async Task<int> Main(string[] args)
     {
@@ -24,6 +26,19 @@ public static class Program
         using var mutex = new Mutex(true, @"Global\Chistovik.Agent." + userSid.Value, out var created);
         if (!created) return ExitAlreadyRunning;
 
+        // Весь граф строится до открытия канала: восстановление после обрыва выполняется раньше, чем придёт первый запрос.
+        PolicyContext policy;
+        try { policy = PolicyContext.FromEnvironment(); }
+        catch (PolicyContextException e)
+        {
+            // Политику на неверных системных каталогах строить нельзя: безопаснее не стартовать.
+            Console.Error.WriteLine("Системные каталоги заданы неверно: " + e.Message);
+            return ExitBadEnvironment;
+        }
+
+        using var composition = AgentComposition.Build(AgentPorts.Windows(), AgentComposition.DefaultJournalDirectory(),
+            policy, msg => Console.Error.WriteLine("[agent] " + msg));
+
         string hash;
         try { hash = ClientVerifier.Sha256OfFile(appPath); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -33,7 +48,7 @@ public static class Program
         }
 
         var expected = new ExpectedClient(parentPid, appPath, hash, ClientProbe.CurrentSession(), userSid.Value);
-        var server = new AgentPipeServer(pipe, userSid, expected, new RequestDispatcher(), TimeSpan.FromMinutes(5));
+        var server = new AgentPipeServer(pipe, userSid, expected, new RequestDispatcher(composition.Handler), TimeSpan.FromMinutes(5));
         var served = await server.RunAsync(CancellationToken.None);
         return served ? ExitOk : ExitIdle;
     }
