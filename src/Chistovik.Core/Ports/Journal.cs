@@ -36,9 +36,10 @@ public interface IJournalWriter : IJournalReader
 {
     /// <summary>Дубликат request_id → существующая операция (AlreadyExisted=true).</summary>
     OperationRecord BeginOrGet(NewOperation op);
-    long AddPending(Guid op, int ord, StepKind k, string targetKey, string target, string before, string after);
+    long AddPending(Guid op, int ord, StepKind k, string targetKey, string target, string before, string after,
+        string restart = "none");
     void AddTerminal(Guid op, int ord, StepKind k, string targetKey, string target, string? before, string after,
-        StepState s, string code, string? rule);
+        StepState s, string code, string? rule, string restart = "none");
     void Complete(long stepId, StepState s, string? code, string? error);
     /// <summary>Одна транзакция: шаг отмены → done, исходный шаг → undone.</summary>
     void CompleteRevert(long undoStepId, long originalStepId, string code);
