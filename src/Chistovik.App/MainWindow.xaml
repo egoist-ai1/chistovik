@@ -39,16 +39,26 @@
         <DataTemplate x:Key="NavTemplate">
             <StackPanel>
                 <TextBlock Text="{Binding Group}" Style="{StaticResource GroupHeader}"/>
-                <Border x:Name="Row" Margin="10,1" Padding="12,9" CornerRadius="{DynamicResource RadiusMd}"
-                        Background="Transparent">
-                    <TextBlock x:Name="Label" Text="{Binding Title}" Foreground="{DynamicResource TextBrush}"/>
-                </Border>
+                <Grid>
+                    <Border x:Name="Row" Margin="10,1" Padding="14,7" CornerRadius="{DynamicResource RadiusMd}"
+                            Background="Transparent" BorderBrush="Transparent" BorderThickness="2">
+                        <TextBlock x:Name="Label" Text="{Binding Title}" Foreground="{DynamicResource TextBrush}"/>
+                    </Border>
+                    <!-- Полоска слева: активный раздел виден формой, а не только цветом -->
+                    <Rectangle x:Name="Bar" Width="4" Height="20" RadiusX="2" RadiusY="2" HorizontalAlignment="Left"
+                               Margin="10,0,0,0" Fill="{DynamicResource AccentBrush}" Visibility="Collapsed"/>
+                </Grid>
             </StackPanel>
             <DataTemplate.Triggers>
                 <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
                     <Setter TargetName="Row" Property="Background" Value="{DynamicResource Surface2Brush}"/>
+                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
                 </Trigger>
+                <DataTrigger Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentTintBrush}"/>
                     <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource AccentBrush}"/>
                     <Setter TargetName="Label" Property="FontWeight" Value="SemiBold"/>
