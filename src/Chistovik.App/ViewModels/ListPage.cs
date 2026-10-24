@@ -13,7 +13,11 @@ public interface IListRow
     Changeability Class { get; }
 }
 
-public sealed record SortOption(string Key, string Label);
+public sealed record SortOption(string Key, string Label)
+{
+    /// <summary>Подпись для поля выбора в ComboBox: показывается без DisplayMemberPath.</summary>
+    public override string ToString() => Label;
+}
 
 /// <summary>
 /// Общая основа списков служб, задач и автозагрузки: поиск по тексту, фильтр по классу, сортировка. Короткие списки
