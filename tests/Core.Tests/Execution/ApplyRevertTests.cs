@@ -133,6 +133,21 @@ public class ApplyRevertTests
     }
 
     [Fact]
+    public void Registry_open_access_denied_is_reported_as_access_denied_not_as_missing_key()
+    {
+        var t = new TestEnv();
+        t.SetTweakDword("ext", 1);
+        t.Registry.ThrowAccessDeniedOnOpen(FakeRegistry.Path(t.Loc("ext")));
+        var r = t.Tweaks(("ext", true));
+        Assert.False(r.Ok);
+        var s = Assert.Single(r.Steps!);
+        Assert.Equal(StepCodes.AccessDenied, s.Code);
+        Assert.NotEqual(StepCodes.NotFound, s.Code);
+        Assert.Equal(TestEnv.Dword(1), t.TweakValue("ext")); // ничего не записано
+        Assert.Equal(0, t.Registry.WriteCount);
+    }
+
+    [Fact]
     public void Registry_write_error_without_effect_is_failed_with_the_error_code()
     {
         var t = new TestEnv();

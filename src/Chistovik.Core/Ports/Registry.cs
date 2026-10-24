@@ -10,7 +10,7 @@ public sealed record RegValueState(bool Exists, RegType Type, object? Data);
 
 public interface IRegistry
 {
-    /// <summary>null, если ключа нет (при createKey=false) или он недоступен.</summary>
+    /// <summary>null, если ключа нет (при createKey=false). Отказ в доступе: UnauthorizedAccessException (шаг получает код access-denied).</summary>
     IRegKeyHandle? Open(RegLocation loc, bool write, bool createKey);
 }
 

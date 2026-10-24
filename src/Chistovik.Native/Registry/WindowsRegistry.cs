@@ -29,10 +29,16 @@ public sealed class WindowsRegistry : IRegistry
         else
             rc = Win32.RegOpenKeyEx(root, subKey, Win32.RegOptionOpenLink, sam, out handle);
 
-        if (rc == Win32.ErrorFileNotFound || rc == Win32.ErrorPathNotFound || rc == Win32.ErrorAccessDenied)
+        if (rc == Win32.ErrorFileNotFound || rc == Win32.ErrorPathNotFound)
         {
             handle.Dispose();
-            return null; // порт: «ключа нет или он недоступен»
+            return null; // порт: «ключа нет»
+        }
+        if (rc == Win32.ErrorAccessDenied)
+        {
+            // Отказ в доступе не «ключа нет»: Core превращает UnauthorizedAccessException в код шага access-denied.
+            handle.Dispose();
+            throw new UnauthorizedAccessException($"Отказано в доступе к ключу реестра {Describe(loc)} (ERROR_ACCESS_DENIED)");
         }
         if (rc != Win32.ErrorSuccess)
         {

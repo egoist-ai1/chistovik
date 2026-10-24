@@ -16,6 +16,7 @@ public sealed class FakeRegistry : IRegistry
     readonly Dictionary<string, Dictionary<string, RegValueState>> _keys = new(StringComparer.OrdinalIgnoreCase);
     readonly Dictionary<string, (string Target, bool OpenAsLink)> _links = new(StringComparer.OrdinalIgnoreCase);
     readonly HashSet<string> _denyOpen = new(StringComparer.OrdinalIgnoreCase);
+    readonly HashSet<string> _throwDeniedOpen = new(StringComparer.OrdinalIgnoreCase);
     readonly HashSet<string> _denyWrite = new(StringComparer.OrdinalIgnoreCase);
     int _failAt;
     Exception? _failWith;
@@ -76,6 +77,9 @@ public sealed class FakeRegistry : IRegistry
 
     public void DenyOpen(string path) => _denyOpen.Add(path);
 
+    /// <summary>Открытие ключа бросает UnauthorizedAccessException, как настоящий порт при ERROR_ACCESS_DENIED.</summary>
+    public void ThrowAccessDeniedOnOpen(string path) => _throwDeniedOpen.Add(path);
+
     public void DenyWrite(string path) => _denyWrite.Add(path);
 
     /// <summary>N-я запись (считая с 1, с начала жизни объекта) бросает исключение. applyFirst=true: значение успевает измениться (сбой после записи).</summary>
@@ -123,6 +127,7 @@ public sealed class FakeRegistry : IRegistry
         OpenCount++;
         var path = Resolve(Path(loc), out var isLink);
         OnOpen?.Invoke(path);
+        if (_throwDeniedOpen.Contains(path)) throw new UnauthorizedAccessException("Отказано в доступе к ключу реестра");
         if (_denyOpen.Contains(path)) return null;
         if (!_keys.ContainsKey(path))
         {
