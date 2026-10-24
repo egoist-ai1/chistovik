@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Chistovik.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\Chistovik.Catalog\data\*.json" LogicalName="catalog/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
