@@ -45,7 +45,7 @@
       <Component Id="StartMenuShortcut" Guid="*">
         <Shortcut Id="AppShortcut" Name="Чистовик"
                   Description="Удаление программ с остатками и управление системой"
-                  Target="[INSTALLFOLDER]Chistovik.App.exe" WorkingDirectory="INSTALLFOLDER" />
+                  Target="[INSTALLFOLDER]Chistovik.App.exe" WorkingDirectory="INSTALLFOLDER" Icon="ChistovikIcon" />
         <RegistryValue Root="HKLM" Key="Software\Chistovik" Name="StartMenuShortcut"
                        Type="integer" Value="1" KeyPath="yes" />
       </Component>
@@ -59,6 +59,11 @@
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
 
+    <!-- Значок в «Программы и компоненты» и ярлыке, баннеры мастера в стиле Egoist DS (файлы в installer/assets). -->
+    <Icon Id="ChistovikIcon" SourceFile="$(AssetsDir)\chistovik.ico" />
+    <Property Id="ARPPRODUCTICON" Value="ChistovikIcon" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(AssetsDir)\banner-top-493x58.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(AssetsDir)\dialog-493x312.bmp" />
     <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
     <ui:WixUI Id="WixUI_Minimal" />
   </Package>

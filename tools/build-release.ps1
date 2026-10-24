@@ -83,6 +83,7 @@ foreach ($arch in $Archs) {
     Invoke-Native $Dotnet @('wix', 'build', '-arch', $arch, '-culture', 'ru-RU',
       '-ext', 'WixToolset.UI.wixext', '-ext', 'WixToolset.Util.wixext',
       '-d', "Version=$msiVersion", '-d', "PublishDir=$pub", '-d', "LicenseRtf=$rtf",
+      '-d', "AssetsDir=$(Join-Path $root 'installer\assets')",
       '-pdbtype', 'none', '-o', $msi, 'installer\Package.wxs')
     if ($SignCommand) { & $SignCommand $msi }
   }
