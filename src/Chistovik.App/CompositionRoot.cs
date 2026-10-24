@@ -9,6 +9,9 @@ using Chistovik.Core.Inventory;
 using Chistovik.Core.Journal;
 using Chistovik.Core.Policy;
 using Chistovik.Core.Ports;
+using Chistovik.Native.Services;
+using Chistovik.Native.Tasks;
+using Chistovik.Native.Trust;
 
 namespace Chistovik.App;
 
@@ -51,7 +54,9 @@ public static class CompositionRoot
         var power = PowerCatalog.Shared;
         var effects = new WindowsShellEffects();
         var agent = new AgentClient(new ProcessAgentLauncher(), new NamedPipeAgentTransport());
-        var policy = new ServicePolicy(PolicyContext.FromEnvironment());
+        var ctx = PolicyContext.FromEnvironment();
+        // Подпись проверяет настоящий WinVerifyTrust (только чтение файла); результат запоминается по пути.
+        var trust = new CachingFileTrust(new WindowsFileTrust());
         IReadOnlyList<InstalledProgram>? installed = null;
         IReadOnlyList<InstalledProgram> Installed() => installed ??= InventoryProgramsSource.Read(registry);
 
@@ -60,11 +65,11 @@ public static class CompositionRoot
             Programs = new InventoryProgramsSource(registry),
             Startup = new RegistryStartupSource(registry, new DirectoryFileSystem(),
                 Environment.GetFolderPath(Environment.SpecialFolder.Startup),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup)),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup),
+                new StartupPolicy(ctx), trust),
             Journal = new JournalSource(CreateJournalReader),
-            Services = new RegistryServiceSource(registry, Installed, new UnknownFileTrust(), policy),
-            Tasks = new FolderTaskSource(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "Tasks"),
-                new ConservativeTaskClassifier()),
+            Services = new ScmServiceSource(new WindowsServiceControl(), registry, Installed, trust, new ServicePolicy(ctx)),
+            Tasks = new SchedulerTaskSource(new WindowsTaskScheduler(), new TaskPolicy(ctx)),
             TweakState = new RegistryTweakStateSource(registry),
             Power = new PowrProfPowerSource(power),
             Effects = effects,

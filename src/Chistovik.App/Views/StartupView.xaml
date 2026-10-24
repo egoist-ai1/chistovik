@@ -24,13 +24,41 @@
 
         <views:PageBanner Grid.Row="1"/>
 
-        <TextBlock Grid.Row="2" Text="{Binding SummaryText}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12"
-                   Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}"/>
+        <StackPanel Grid.Row="2" Margin="0,0,0,12" Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="{Binding SummaryText}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="340"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Style="{StaticResource SearchBox}" Tag="Поиск по имени или команде"
+                         Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="Поиск в автозагрузке"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <ComboBox ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SelectedSort, Mode=TwoWay}"
+                              DisplayMemberPath="Label" MinWidth="170" Margin="0,0,8,0" VerticalAlignment="Center"
+                              AutomationProperties.Name="Сортировка автозагрузки"/>
+                    <Button Style="{StaticResource SecondaryButton}" Content="Все" Margin="0,0,8,0"
+                            Command="{Binding FilterCommand}" CommandParameter="all"
+                            AutomationProperties.Name="Показать все записи"/>
+                    <Button Style="{StaticResource SecondaryButton}" Content="Можно менять" Margin="0,0,8,0"
+                            Command="{Binding FilterCommand}" CommandParameter="mod"
+                            AutomationProperties.Name="Показать только те, что можно менять"/>
+                    <Button Style="{StaticResource SecondaryButton}" Content="Только чтение"
+                            Command="{Binding FilterCommand}" CommandParameter="ro"
+                            AutomationProperties.Name="Показать только для чтения"/>
+                </StackPanel>
+            </Grid>
+            <TextBlock Text="{Binding StatusText}" Style="{StaticResource Subtle}" Margin="4,8,0,0"/>
+        </StackPanel>
 
         <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0"
                 Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
             <ListBox Style="{StaticResource PlainList}" ItemsSource="{Binding Items}"
                      ItemContainerStyle="{StaticResource StartupItem}"
+                     PreviewKeyDown="List_PreviewKeyDown"
+                     VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                     ScrollViewer.CanContentScroll="True" KeyboardNavigation.TabNavigation="Once"
                      AutomationProperties.Name="Список автозагрузки">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
@@ -50,7 +78,7 @@
                                        TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/>
                             <CheckBox Grid.Column="2" Style="{StaticResource SwitchToggle}"
                                       IsChecked="{Binding IsEnabled, Mode=TwoWay}"
-                                      IsEnabled="{Binding CanChange}" ToolTip="{Binding ToggleHint}"
+                                      IsEnabled="{Binding CanChange}" ToolTip="{Binding ToggleHint}" ToolTipService.ShowOnDisabled="True"
                                       HorizontalAlignment="Right"
                                       AutomationProperties.Name="{Binding Name, StringFormat=Запускать при входе: {0}}"/>
                         </Grid>

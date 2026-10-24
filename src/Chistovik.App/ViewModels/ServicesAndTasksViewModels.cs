@@ -23,37 +23,48 @@ public static class ChangeabilityText
         StartMode.Disabled => "Отключена",
         _ => "Системный запуск",
     };
+
+    /// <summary>Почему объект нельзя менять, человеческим языком. Пусто для изменяемых.</summary>
+    public static string WhyNot(Changeability c, bool noAccess, string reason) => c == Changeability.Modifiable ? ""
+        : (noAccess ? "Нет доступа: " : c == Changeability.Forbidden ? "Закрыто: " : "Только чтение: ") + reason;
+
+    public const string ViewOnlyTip = "Режим просмотра: изменения отключены. Нажмите «Запросить права».";
+    public const string BusyTip = "Дождитесь окончания предыдущего изменения.";
 }
 
-public sealed class ServiceRowViewModel(ServiceInfo model)
+public sealed class ServiceRowViewModel(ServiceInfo model) : IListRow
 {
     public ServiceInfo Model { get; } = model;
     public string Name => Model.Name;
     public string DisplayName => Model.DisplayName;
-    public string ClassText => ChangeabilityText.Name(Model.Class);
-    public string StartText => ChangeabilityText.StartName(Model.Start);
+    public string ClassText => Model.NoAccess ? "Нет доступа" : ChangeabilityText.Name(Model.Class);
+    public string StartText => Model.NoAccess ? "Нет доступа" : ChangeabilityText.StartName(Model.Start);
     public Changeability Class => Model.Class;
     public string Reason => Model.Reason;
     public string ImagePath => Model.ImagePath;
     public string AutomationName => $"{DisplayName}, {StartText}, {ClassText}";
+    public string SearchText { get; } = $"{model.DisplayName} {model.Name} {model.ImagePath}";
+
+    /// <summary>Почему службу нельзя менять; пусто для изменяемых.</summary>
+    public string NotChangeableText => ChangeabilityText.WhyNot(Class, Model.NoAccess, Reason);
 }
 
-public sealed class ServicesViewModel : StatefulPageViewModel
+public sealed class ServicesViewModel : ListPageViewModel<ServiceRowViewModel>
 {
     private readonly IServiceSource _source;
     private readonly IDialogService _dialogs;
-    private List<ServiceRowViewModel> _all = new();
-    private IReadOnlyList<ServiceRowViewModel> _items = Array.Empty<ServiceRowViewModel>();
     private ServiceRowViewModel? _selected;
-    private string _search = "";
-    private string _filter = "all";
+
+    private static readonly SortOption[] Sorts =
+    {
+        new("name", "По названию"), new("start", "По типу запуска"), new("class", "Сначала те, что можно менять"),
+    };
 
     public ServicesViewModel(IServiceSource source, IChangeService? changes, IDialogService dialogs, INavigator? navigator = null)
-        : base("Службы", "Тип запуска служб программ. Защищённые и системные службы заблокированы, их можно только смотреть.", changes, navigator)
+        : base("Службы", "Тип запуска служб программ. Защищённые и системные службы заблокированы, их можно только смотреть.", Sorts, changes, navigator)
     {
         _source = source;
         _dialogs = dialogs;
-        FilterCommand = new RelayCommand(p => { Filter = p as string ?? "all"; });
         SetStartCommand = new RelayCommand(p => LastAction = SetStartAsync(p as string ?? ""), p => CanChangeSelected);
         Loaded = ReloadAsync();
     }
@@ -61,10 +72,7 @@ public sealed class ServicesViewModel : StatefulPageViewModel
     public Task Loaded { get; }
     public Task LastAction { get; private set; } = Task.CompletedTask;
 
-    public RelayCommand FilterCommand { get; }
     public RelayCommand SetStartCommand { get; }
-
-    public IReadOnlyList<ServiceRowViewModel> Items { get => _items; private set => SetProperty(ref _items, value); }
 
     public ServiceRowViewModel? Selected
     {
@@ -73,64 +81,67 @@ public sealed class ServicesViewModel : StatefulPageViewModel
         {
             if (!SetProperty(ref _selected, value)) return;
             OnPropertyChanged(nameof(HasSelection));
-            OnPropertyChanged(nameof(CanChangeSelected));
-            OnPropertyChanged(nameof(DetailHint));
-            SetStartCommand.RaiseCanExecuteChanged();
+            RefreshSelectionState();
         }
     }
 
     public bool HasSelection => Selected is not null;
 
-    public string Search { get => _search; set { if (SetProperty(ref _search, value)) Apply(); } }
-
-    public string Filter
-    {
-        get => _filter;
-        private set { if (SetProperty(ref _filter, value)) { Apply(); OnPropertyChanged(nameof(FilterAll)); OnPropertyChanged(nameof(FilterModifiable)); OnPropertyChanged(nameof(FilterReadOnly)); } }
-    }
-
-    public bool FilterAll => Filter == "all";
-    public bool FilterModifiable => Filter == "mod";
-    public bool FilterReadOnly => Filter == "ro";
-
-    public string StatusText => $"Показано {Items.Count} из {_all.Count}; можно менять: {_all.Count(x => x.Class == Changeability.Modifiable)}";
-
     public bool CanChangeSelected => CanApply && Selected?.Class == Changeability.Modifiable;
 
     public string DetailHint => Selected is null ? "" :
-        Selected.Class != Changeability.Modifiable ? "Только чтение: " + Selected.Reason :
+        Selected.Class != Changeability.Modifiable ? Selected.NotChangeableText :
         ViewOnly ? "Режим просмотра: изменения отключены" : Selected.Reason;
 
-    public override Task ReloadAsync() => LoadAsync(async () =>
+    /// <summary>Подсказка к отключённым кнопкам применения: почему нельзя. Пусто, если кнопки доступны.</summary>
+    public string ApplyTooltip => Selected is null ? "" :
+        Selected.Class != Changeability.Modifiable ? Selected.NotChangeableText :
+        ViewOnly ? ChangeabilityText.ViewOnlyTip :
+        IsBusy ? ChangeabilityText.BusyTip : "";
+
+    protected override IComparer<ServiceRowViewModel>? Comparer(string key) => key switch
     {
-        var data = await _source.GetServicesAsync();
-        _all = data.Select(x => new ServiceRowViewModel(x)).ToList();
-        Apply();
-        return _all.Count;
+        "start" => Comparer<ServiceRowViewModel>.Create((a, b) =>
+        {
+            var c = StartOrder(a).CompareTo(StartOrder(b));
+            return c != 0 ? c : ByName(a, b);
+        }),
+        "class" => Comparer<ServiceRowViewModel>.Create((a, b) =>
+        {
+            var c = a.Class.CompareTo(b.Class);
+            return c != 0 ? c : ByName(a, b);
+        }),
+        _ => Comparer<ServiceRowViewModel>.Create(ByName),
+    };
+
+    private static int ByName(ServiceRowViewModel a, ServiceRowViewModel b)
+        => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase);
+
+    private static int StartOrder(ServiceRowViewModel r) => r.Model.NoAccess ? 9 : r.Model.Start switch
+    {
+        StartMode.Automatic => 0,
+        StartMode.AutomaticDelayed => 1,
+        StartMode.Manual => 2,
+        StartMode.Disabled => 3,
+        _ => 4,
+    };
+
+    public override Task ReloadAsync() => LoadAsync(async ct =>
+    {
+        var data = await _source.GetServicesAsync(ct);
+        ct.ThrowIfCancellationRequested();
+        SetRows(data.Select(x => new ServiceRowViewModel(x)));
+        return AllRows.Count;
     }, "Службы не найдены.");
 
-    protected override void OnCanApplyChanged()
+    protected override void OnCanApplyChanged() => RefreshSelectionState();
+
+    private void RefreshSelectionState()
     {
         OnPropertyChanged(nameof(CanChangeSelected));
         OnPropertyChanged(nameof(DetailHint));
+        OnPropertyChanged(nameof(ApplyTooltip));
         SetStartCommand.RaiseCanExecuteChanged();
-    }
-
-    private void Apply()
-    {
-        IEnumerable<ServiceRowViewModel> q = _all;
-        q = _filter switch
-        {
-            "mod" => q.Where(x => x.Class == Changeability.Modifiable),
-            "ro" => q.Where(x => x.Class != Changeability.Modifiable),
-            _ => q,
-        };
-        var s = _search.Trim();
-        if (s.Length > 0)
-            q = q.Where(x => x.DisplayName.Contains(s, StringComparison.CurrentCultureIgnoreCase)
-                          || x.Name.Contains(s, StringComparison.CurrentCultureIgnoreCase));
-        Items = q.ToList();
-        OnPropertyChanged(nameof(StatusText));
     }
 
     private static bool TryParseStart(string key, out StartMode mode)
@@ -167,40 +178,45 @@ public sealed class ServicesViewModel : StatefulPageViewModel
     private async Task ReloadKeepSelectionAsync(string name)
     {
         await ReloadAsync();
-        Selected = _all.FirstOrDefault(x => x.Name == name);
+        await FilterPending;
+        Selected = AllRows.FirstOrDefault(x => x.Name == name);
     }
 }
 
-public sealed class TaskRowViewModel(TaskInfo model)
+public sealed class TaskRowViewModel(TaskInfo model) : IListRow
 {
     public TaskInfo Model { get; } = model;
     public string Path => Model.Path;
     public string Name => Model.Name;
     public bool Enabled => Model.Enabled;
-    public string EnabledText => Model.Enabled ? "Включена" : "Выключена";
+    public string EnabledText => Model.NoAccess ? "Нет доступа" : Model.Enabled ? "Включена" : "Выключена";
     public Changeability Class => Model.Class;
-    public string ClassText => ChangeabilityText.Name(Model.Class);
+    public string ClassText => Model.NoAccess ? "Нет доступа" : ChangeabilityText.Name(Model.Class);
     public string Reason => Model.Reason;
     public string Summary => Model.Summary;
     public string AutomationName => $"{Name}, {EnabledText}, {ClassText}";
+    public string SearchText { get; } = $"{model.Path} {model.Summary}";
+
+    /// <summary>Почему задачу нельзя менять; пусто для изменяемых.</summary>
+    public string NotChangeableText => ChangeabilityText.WhyNot(Class, Model.NoAccess, Reason);
 }
 
-public sealed class TasksViewModel : StatefulPageViewModel
+public sealed class TasksViewModel : ListPageViewModel<TaskRowViewModel>
 {
     private readonly ITaskSource _source;
     private readonly IDialogService _dialogs;
-    private List<TaskRowViewModel> _all = new();
-    private IReadOnlyList<TaskRowViewModel> _items = Array.Empty<TaskRowViewModel>();
     private TaskRowViewModel? _selected;
-    private string _search = "";
-    private string _filter = "all";
+
+    private static readonly SortOption[] Sorts =
+    {
+        new("name", "По названию"), new("path", "По пути"), new("state", "Сначала включённые"), new("class", "Сначала те, что можно менять"),
+    };
 
     public TasksViewModel(ITaskSource source, IChangeService? changes, IDialogService dialogs, INavigator? navigator = null)
-        : base("Задачи", "Задачи планировщика Windows. Служебные задачи заблокированы; пока правила для остальных не подключены, они доступны только для чтения.", changes, navigator)
+        : base("Задачи", "Задачи планировщика Windows. Служебные задачи заблокированы; задачи сторонних программ можно включать и выключать, остальные только смотреть.", Sorts, changes, navigator)
     {
         _source = source;
         _dialogs = dialogs;
-        FilterCommand = new RelayCommand(p => { Filter = p as string ?? "all"; });
         SetEnabledCommand = new RelayCommand(p => LastAction = SetEnabledAsync(string.Equals(p as string, "on", StringComparison.Ordinal)), p => CanChangeSelected);
         Loaded = ReloadAsync();
     }
@@ -208,10 +224,7 @@ public sealed class TasksViewModel : StatefulPageViewModel
     public Task Loaded { get; }
     public Task LastAction { get; private set; } = Task.CompletedTask;
 
-    public RelayCommand FilterCommand { get; }
     public RelayCommand SetEnabledCommand { get; }
-
-    public IReadOnlyList<TaskRowViewModel> Items { get => _items; private set => SetProperty(ref _items, value); }
 
     public TaskRowViewModel? Selected
     {
@@ -220,61 +233,59 @@ public sealed class TasksViewModel : StatefulPageViewModel
         {
             if (!SetProperty(ref _selected, value)) return;
             OnPropertyChanged(nameof(HasSelection));
-            OnPropertyChanged(nameof(CanChangeSelected));
-            OnPropertyChanged(nameof(DetailHint));
-            SetEnabledCommand.RaiseCanExecuteChanged();
+            RefreshSelectionState();
         }
     }
 
     public bool HasSelection => Selected is not null;
-    public string Search { get => _search; set { if (SetProperty(ref _search, value)) Apply(); } }
-
-    public string Filter
-    {
-        get => _filter;
-        private set { if (SetProperty(ref _filter, value)) { Apply(); OnPropertyChanged(nameof(FilterAll)); OnPropertyChanged(nameof(FilterModifiable)); OnPropertyChanged(nameof(FilterReadOnly)); } }
-    }
-
-    public bool FilterAll => Filter == "all";
-    public bool FilterModifiable => Filter == "mod";
-    public bool FilterReadOnly => Filter == "ro";
-
-    public string StatusText => $"Показано {Items.Count} из {_all.Count}; можно менять: {_all.Count(x => x.Class == Changeability.Modifiable)}";
 
     public bool CanChangeSelected => CanApply && Selected?.Class == Changeability.Modifiable;
 
     public string DetailHint => Selected is null ? "" :
-        Selected.Class != Changeability.Modifiable ? "Только чтение: " + Selected.Reason :
+        Selected.Class != Changeability.Modifiable ? Selected.NotChangeableText :
         ViewOnly ? "Режим просмотра: изменения отключены" : Selected.Reason;
 
-    public override Task ReloadAsync() => LoadAsync(async () =>
-    {
-        var data = await _source.GetTasksAsync();
-        _all = data.Select(x => new TaskRowViewModel(x)).ToList();
-        Apply();
-        return _all.Count;
-    }, "Задачи не найдены или нет доступа к папке задач.");
+    /// <summary>Подсказка к отключённым кнопкам применения: почему нельзя. Пусто, если кнопки доступны.</summary>
+    public string ApplyTooltip => Selected is null ? "" :
+        Selected.Class != Changeability.Modifiable ? Selected.NotChangeableText :
+        ViewOnly ? ChangeabilityText.ViewOnlyTip :
+        IsBusy ? ChangeabilityText.BusyTip : "";
 
-    protected override void OnCanApplyChanged()
+    protected override IComparer<TaskRowViewModel>? Comparer(string key) => key switch
+    {
+        "path" => Comparer<TaskRowViewModel>.Create((a, b) => string.Compare(a.Path, b.Path, StringComparison.CurrentCultureIgnoreCase)),
+        "state" => Comparer<TaskRowViewModel>.Create((a, b) =>
+        {
+            var c = a.Enabled == b.Enabled ? 0 : a.Enabled ? -1 : 1;
+            return c != 0 ? c : ByName(a, b);
+        }),
+        "class" => Comparer<TaskRowViewModel>.Create((a, b) =>
+        {
+            var c = a.Class.CompareTo(b.Class);
+            return c != 0 ? c : ByName(a, b);
+        }),
+        _ => Comparer<TaskRowViewModel>.Create(ByName),
+    };
+
+    private static int ByName(TaskRowViewModel a, TaskRowViewModel b)
+        => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase);
+
+    public override Task ReloadAsync() => LoadAsync(async ct =>
+    {
+        var data = await _source.GetTasksAsync(ct);
+        ct.ThrowIfCancellationRequested();
+        SetRows(data.Select(x => new TaskRowViewModel(x)));
+        return AllRows.Count;
+    }, "Задачи не найдены или нет доступа к планировщику.");
+
+    protected override void OnCanApplyChanged() => RefreshSelectionState();
+
+    private void RefreshSelectionState()
     {
         OnPropertyChanged(nameof(CanChangeSelected));
         OnPropertyChanged(nameof(DetailHint));
+        OnPropertyChanged(nameof(ApplyTooltip));
         SetEnabledCommand.RaiseCanExecuteChanged();
-    }
-
-    private void Apply()
-    {
-        IEnumerable<TaskRowViewModel> q = _all;
-        q = _filter switch
-        {
-            "mod" => q.Where(x => x.Class == Changeability.Modifiable),
-            "ro" => q.Where(x => x.Class != Changeability.Modifiable),
-            _ => q,
-        };
-        var s = _search.Trim();
-        if (s.Length > 0) q = q.Where(x => x.Path.Contains(s, StringComparison.CurrentCultureIgnoreCase));
-        Items = q.ToList();
-        OnPropertyChanged(nameof(StatusText));
     }
 
     public async Task SetEnabledAsync(bool enabled)
@@ -300,7 +311,8 @@ public sealed class TasksViewModel : StatefulPageViewModel
             if (outcome.Changed)
             {
                 await ReloadAsync();
-                Selected = _all.FirstOrDefault(x => x.Path == task.Path);
+                await FilterPending;
+                Selected = AllRows.FirstOrDefault(x => x.Path == task.Path);
             }
         }
         finally { IsBusy = false; }

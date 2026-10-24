@@ -6,7 +6,7 @@ namespace Chistovik.App.Services;
 
 public interface IProgramsSource { Task<IReadOnlyList<ProgramInfo>> GetProgramsAsync(); }
 
-public interface IStartupSource { Task<IReadOnlyList<StartupInfo>> GetStartupAsync(); }
+public interface IStartupSource { Task<IReadOnlyList<StartupInfo>> GetStartupAsync(CancellationToken ct = default); }
 
 public interface IJournalSource
 {
@@ -16,9 +16,9 @@ public interface IJournalSource
     Task<IReadOnlyList<JournalStep>> GetStepsAsync(Guid operationId);
 }
 
-public interface IServiceSource { Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(); }
+public interface IServiceSource { Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(CancellationToken ct = default); }
 
-public interface ITaskSource { Task<IReadOnlyList<TaskInfo>> GetTasksAsync(); }
+public interface ITaskSource { Task<IReadOnlyList<TaskInfo>> GetTasksAsync(CancellationToken ct = default); }
 
 /// <summary>Текущее значение твиков в реестре (только чтение, без прав).</summary>
 public interface ITweakStateSource { Task<IReadOnlyDictionary<string, TweakState>> ReadAsync(IReadOnlyList<TweakEntry> tweaks); }

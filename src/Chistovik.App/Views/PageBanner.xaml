@@ -82,6 +82,14 @@
                         Command="{Binding ReloadCommand}" Margin="16,0,0,0"
                         Visibility="{Binding IsError, Converter={StaticResource BoolToVis}}"
                         AutomationProperties.Name="Повторить загрузку"/>
+                <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Content="Отменить"
+                        Command="{Binding CancelLoadCommand}" Margin="16,0,0,0"
+                        Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"
+                        AutomationProperties.Name="Отменить загрузку"/>
+                <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Content="Обновить"
+                        Command="{Binding ReloadCommand}" Margin="16,0,0,0"
+                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}"
+                        AutomationProperties.Name="Обновить список"/>
             </Grid>
         </Border>
     </StackPanel>

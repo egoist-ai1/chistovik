@@ -13,5 +13,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chistovik.App\Chistovik.App.csproj" />
     <ProjectReference Include="..\..\src\Chistovik.Core\Chistovik.Core.csproj" />
+    <ProjectReference Include="..\TestKit\TestKit.csproj" />
   </ItemGroup>
 </Project>

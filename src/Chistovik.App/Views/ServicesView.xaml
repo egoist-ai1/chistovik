@@ -52,6 +52,9 @@
                      Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
                      AutomationProperties.Name="Поиск служб"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <ComboBox ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SelectedSort, Mode=TwoWay}"
+                          DisplayMemberPath="Label" MinWidth="170" Margin="0,0,8,0" VerticalAlignment="Center"
+                          AutomationProperties.Name="Сортировка списка служб"/>
                 <Button Style="{StaticResource SecondaryButton}" Content="Все" Margin="0,0,8,0"
                         Command="{Binding FilterCommand}" CommandParameter="all"
                         AutomationProperties.Name="Показать все службы"/>
@@ -69,6 +72,8 @@
             <ListBox Style="{StaticResource PlainList}" ItemsSource="{Binding Items}"
                      SelectedItem="{Binding Selected, Mode=TwoWay}"
                      ItemContainerStyle="{StaticResource SvcItem}"
+                     VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                     ScrollViewer.CanContentScroll="True" KeyboardNavigation.TabNavigation="Once"
                      AutomationProperties.Name="Список служб">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
@@ -112,8 +117,9 @@
                 </StackPanel>
                 <TextBlock Text="{Binding DetailHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap" Margin="0,16,0,0"/>
                 <TextBlock Text="Тип запуска" Style="{StaticResource CardLabel}" Margin="0,20,0,8"
-                           Visibility="{Binding CanChangeSelected, Converter={StaticResource BoolToVis}}"/>
-                <WrapPanel Visibility="{Binding CanChangeSelected, Converter={StaticResource BoolToVis}}">
+                           Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}"/>
+                <WrapPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}"
+                           ToolTip="{Binding ApplyTooltip}" ToolTipService.ShowOnDisabled="True">
                     <Button Style="{StaticResource SecondaryButton}" Content="Автоматически" Margin="0,0,8,8"
                             Command="{Binding SetStartCommand}" CommandParameter="Automatic"
                             AutomationProperties.Name="Запускать автоматически"/>

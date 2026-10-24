@@ -238,7 +238,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBox">
-                    <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}">
+                    <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}"
+                                  CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                  HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                  VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
                         <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
                     </ScrollViewer>
                 </ControlTemplate>

@@ -32,7 +32,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
-            ("Обзор", "", () => new OverviewViewModel(s.Programs, s.Startup, s.Journal, s.Changes.Agent)),
+            ("Обзор", "", () => new OverviewViewModel(s.Programs, s.Startup, s.Journal, s.Changes.Agent, s.Services, s.Tasks)),
             ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),

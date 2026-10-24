@@ -18,17 +18,17 @@ sealed class StateSource(TweakState state = TweakState.Off) : ITweakStateSource
 
 sealed class StartupSrc(params StartupInfo[] items) : IStartupSource
 {
-    public Task<IReadOnlyList<StartupInfo>> GetStartupAsync() => Task.FromResult<IReadOnlyList<StartupInfo>>(items);
+    public Task<IReadOnlyList<StartupInfo>> GetStartupAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<StartupInfo>>(items);
 }
 
 sealed class ServiceSrc(params ServiceInfo[] items) : IServiceSource
 {
-    public Task<IReadOnlyList<ServiceInfo>> GetServicesAsync() => Task.FromResult<IReadOnlyList<ServiceInfo>>(items);
+    public Task<IReadOnlyList<ServiceInfo>> GetServicesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ServiceInfo>>(items);
 }
 
 sealed class TaskSrc(params TaskInfo[] items) : ITaskSource
 {
-    public Task<IReadOnlyList<TaskInfo>> GetTasksAsync() => Task.FromResult<IReadOnlyList<TaskInfo>>(items);
+    public Task<IReadOnlyList<TaskInfo>> GetTasksAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TaskInfo>>(items);
 }
 
 sealed class JournalSrc(IReadOnlyList<JournalOperation> ops, IReadOnlyList<JournalStep>? steps = null) : IJournalSource

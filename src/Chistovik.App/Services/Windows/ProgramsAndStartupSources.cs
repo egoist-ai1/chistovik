@@ -2,6 +2,7 @@ using System.IO;
 using Chistovik.App.Models;
 using Chistovik.Core.Catalog;
 using Chistovik.Core.Inventory;
+using Chistovik.Core.Policy;
 using Chistovik.Core.Ports;
 using System.Text.Json;
 
@@ -36,23 +37,28 @@ public sealed class InventoryProgramsSource(IRegistryReader reader) : IProgramsS
 
 /// <summary>
 /// Автозагрузка: Run и RunOnce (HKLM 64/32, HKCU), папки Startup, состояние из StartupApproved. Только чтение.
-/// EntryId в формате протокола (DESIGN-0.1 §3); агент ищет запись в своём перечислении и сам решает, можно ли менять.
+/// EntryId в формате протокола (DESIGN-0.1 §3); класс «можно менять / только чтение / закрыто» это подсказка по StartupPolicy
+/// (тот же классификатор, что у агента, который всё равно сам перепроверяет запись). Без <paramref name="policy"/> записи
+/// не классифицируются: считаются изменяемыми, если идентификатор допустим.
 /// </summary>
-public sealed class RegistryStartupSource(IRegistryReader reg, IFileSystem fs, string? userStartupDir, string? commonStartupDir)
+public sealed class RegistryStartupSource(IRegistryReader reg, IFileSystem fs, string? userStartupDir, string? commonStartupDir,
+    StartupPolicy? policy = null, IFileTrust? trust = null)
     : IStartupSource
 {
     const string Run = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     const string RunOnce = @"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce";
     const string Approved = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\";
 
-    public Task<IReadOnlyList<StartupInfo>> GetStartupAsync() => Task.Run(Read);
+    public Task<IReadOnlyList<StartupInfo>> GetStartupAsync(CancellationToken ct = default) => Task.Run(() => Read(ct), ct);
 
-    public IReadOnlyList<StartupInfo> Read()
+    public IReadOnlyList<StartupInfo> Read(CancellationToken ct = default)
     {
         var all = new List<StartupInfo>();
         AddRun(all, RegistryHiveKind.LocalMachine, RegistryViewKind.Registry64, "hklm64", "Реестр, все пользователи", "Run");
+        ct.ThrowIfCancellationRequested();
         AddRun(all, RegistryHiveKind.LocalMachine, RegistryViewKind.Registry32, "hklm32", "Реестр, все пользователи, 32-разрядные", "Run32");
         AddRun(all, RegistryHiveKind.CurrentUser, RegistryViewKind.Registry64, "hku", "Реестр, текущий пользователь", "Run");
+        ct.ThrowIfCancellationRequested();
         AddOnce(all, RegistryHiveKind.LocalMachine, "Однократный запуск, все пользователи");
         AddOnce(all, RegistryHiveKind.CurrentUser, "Однократный запуск, текущий пользователь");
         AddFolder(all, userStartupDir, "user", RegistryHiveKind.CurrentUser, "Папка автозагрузки, текущий пользователь");
@@ -68,9 +74,9 @@ public sealed class RegistryStartupSource(IRegistryReader reg, IFileSystem fs, s
         foreach (var (name, raw) in values)
         {
             var id = $"run:{idPart}:{name}";
-            var ok = IsValidId(id);
-            into.Add(new StartupInfo(ok ? id : "", name, raw?.ToString() ?? "", origin, IsEnabled(approved, name), ok,
-                ok ? null : "Имя записи нельзя передать агенту"));
+            var command = raw?.ToString() ?? "";
+            var (cls, rule) = Classify(id, command, readSignature: true);
+            into.Add(Make(id, name, command, origin, IsEnabled(approved, name), cls, rule));
         }
     }
 
@@ -80,7 +86,7 @@ public sealed class RegistryStartupSource(IRegistryReader reg, IFileSystem fs, s
         if (values is null) return;
         foreach (var (name, raw) in values)
             into.Add(new StartupInfo("", name, raw?.ToString() ?? "", origin, true, false,
-                "Запускается один раз и сама пропадает из списка"));
+                ReasonTexts.Explain(ReasonTexts.StartupRunOnce), Changeability.ReadOnly, ReasonTexts.StartupRunOnce));
     }
 
     void AddFolder(List<StartupInfo> into, string? dir, string idPart, RegistryHiveKind hive, string origin)
@@ -92,10 +98,37 @@ public sealed class RegistryStartupSource(IRegistryReader reg, IFileSystem fs, s
             var file = Path.GetFileName(path);
             if (file.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
             var id = $"folder:{idPart}:{file}";
-            var ok = IsValidId(id);
-            into.Add(new StartupInfo(ok ? id : "", file, path, origin, IsEnabled(approved, file), ok,
-                ok ? null : "Имя файла нельзя передать агенту"));
+            // Цель ярлыка App не разбирает (это делает слой Native у агента): подсказка строится по пути самого файла.
+            var (cls, rule) = Classify(id, path, readSignature: false);
+            into.Add(Make(id, file, path, origin, IsEnabled(approved, file), cls, rule));
         }
+    }
+
+    /// <summary>Класс записи по политике; идентификатор, который нельзя передать агенту, это «только чтение».</summary>
+    (Changeability Class, string Rule) Classify(string id, string command, bool readSignature)
+    {
+        if (!IsValidId(id) || !StartupEntryId.TryParse(id, out var entry, out _))
+            return (Changeability.ReadOnly, ReasonTexts.StartupBadId);
+        if (policy is null) return (Changeability.Modifiable, "");
+
+        var sig = new SignatureFacts(false, false);
+        if (readSignature && trust is not null && policy.TryResolveCommand(command, out var exe, out _))
+            sig = trust.GetSignature(exe);
+        var (cls, _, rule) = policy.Classify(entry, command, sig);
+        return (cls switch
+        {
+            ChangeClass.Modifiable => Changeability.Modifiable,
+            ChangeClass.Forbidden => Changeability.Forbidden,
+            _ => Changeability.ReadOnly,
+        }, rule);
+    }
+
+    static StartupInfo Make(string id, string name, string command, string origin, bool enabled, Changeability cls, string rule)
+    {
+        var canToggle = cls == Changeability.Modifiable;
+        // Идентификатор, который агенту не передать, наружу не отдаётся.
+        var entryId = rule == ReasonTexts.StartupBadId ? "" : id;
+        return new StartupInfo(entryId, name, command, origin, enabled, canToggle, canToggle ? null : ReasonTexts.Explain(rule), cls, rule);
     }
 
     static bool IsValidId(string id) => id.Length <= 300 && !id.Any(c => c < ' ' || c == '\u007f');

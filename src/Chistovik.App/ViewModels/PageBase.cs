@@ -59,6 +59,9 @@ public abstract class StatefulPageViewModel : PageViewModel
     private string _resultText = "";
     private string _resultHint = "";
     private bool _busy;
+    private CancellationTokenSource? _loadCts;
+    private int _loadVersion;
+    private int _loadedCount;
 
     protected StatefulPageViewModel(string title, string subtitle, IChangeService? changes = null, INavigator? navigator = null)
         : base(title, subtitle)
@@ -66,6 +69,7 @@ public abstract class StatefulPageViewModel : PageViewModel
         Changes = changes;
         Navigator = navigator;
         ReloadCommand = new RelayCommand(() => _ = ReloadAsync());
+        CancelLoadCommand = new RelayCommand(CancelLoad, () => IsLoading);
         RequestRightsCommand = new RelayCommand(RequestRights, () => ViewOnly);
         OpenJournalCommand = new RelayCommand(() => Navigator?.Open("Журнал и откат"));
         if (changes is not null) changes.Agent.AccessChanged += (_, _) => Post(OnAccessChanged);
@@ -75,6 +79,7 @@ public abstract class StatefulPageViewModel : PageViewModel
     protected INavigator? Navigator { get; }
 
     public RelayCommand ReloadCommand { get; }
+    public RelayCommand CancelLoadCommand { get; }
     public RelayCommand RequestRightsCommand { get; }
     public RelayCommand OpenJournalCommand { get; }
 
@@ -104,22 +109,54 @@ public abstract class StatefulPageViewModel : PageViewModel
     public bool IsError => State == PageState.Error;
     public bool ShowStateLine => State != PageState.Ready;
 
-    protected async Task LoadAsync(Func<Task<int>> load, string emptyMessage)
+    protected Task LoadAsync(Func<Task<int>> load, string emptyMessage) => LoadAsync(_ => load(), emptyMessage);
+
+    /// <summary>
+    /// Загрузка в фоне с отменой. Новая загрузка отменяет предыдущую (устаревший результат не применяется);
+    /// кнопка «Отменить» оставляет прежние данные, если они были, иначе показывает пустое состояние с объяснением.
+    /// </summary>
+    protected async Task LoadAsync(Func<CancellationToken, Task<int>> load, string emptyMessage)
     {
+        _loadCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _loadCts = cts;
+        var version = ++_loadVersion;
         State = PageState.Loading;
         StateMessage = "Загружаем…";
+        CancelLoadCommand.RaiseCanExecuteChanged();
         try
         {
-            var count = await load();
+            var count = await load(cts.Token);
+            if (version != _loadVersion) return;
+            cts.Token.ThrowIfCancellationRequested();
+            _loadedCount = count;
             if (count == 0) { StateMessage = emptyMessage; State = PageState.Empty; }
             else State = PageState.Ready;
         }
-        catch (Exception e) when (e is not OperationCanceledException)
+        catch (OperationCanceledException) when (version == _loadVersion)
+        {
+            if (_loadedCount > 0) { StateMessage = ""; State = PageState.Ready; }
+            else { StateMessage = "Загрузка отменена. Нажмите «Обновить», чтобы загрузить снова."; State = PageState.Empty; }
+        }
+        catch (Exception e) when (version == _loadVersion && e is not OperationCanceledException)
         {
             StateMessage = "Не удалось загрузить данные: " + e.Message;
             State = PageState.Error;
         }
+        catch (Exception)
+        {
+            // загрузка уже заменена более новой: её ошибка не важна
+        }
+        finally
+        {
+            if (ReferenceEquals(_loadCts, cts)) _loadCts = null;
+            cts.Dispose();
+            CancelLoadCommand.RaiseCanExecuteChanged();
+        }
     }
+
+    /// <summary>Отменяет идущую загрузку (кнопка «Отменить»).</summary>
+    public void CancelLoad() => _loadCts?.Cancel();
 
     /// <summary>Для экранов без асинхронной загрузки (данные из каталогов в памяти).</summary>
     protected void SetLoaded(int count, string emptyMessage)

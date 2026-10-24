@@ -11,14 +11,6 @@ namespace App.Tests;
 
 public class SourcesTests
 {
-    const string TaskXml = """
-        <Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-          <Principals><Principal id="A"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
-          <Settings><Enabled>false</Enabled></Settings>
-          <Actions><Exec><Command>C:\tools\upd.exe</Command><Arguments>/silent</Arguments></Exec></Actions>
-        </Task>
-        """;
-
     [Fact]
     public void Startup_approved_first_odd_byte_means_disabled()
     {
@@ -54,33 +46,6 @@ public class SourcesTests
         var state = RegistryTweakStateSource.Evaluate(tweak, new Dictionary<string, object?> { [tweak.Value] = unchecked((int)on) });
 
         Assert.Equal(TweakState.On, state);
-    }
-
-    [Fact]
-    public void Task_xml_is_parsed_into_task_info()
-    {
-        var info = FolderTaskSource.Parse(@"\Vendor\Updater", TaskXml, new ConservativeTaskClassifier());
-
-        Assert.NotNull(info);
-        Assert.Equal("Updater", info!.Name);
-        Assert.False(info.Enabled);
-        Assert.Contains("upd.exe", info.Summary);
-        Assert.Contains("/silent", info.Summary);
-    }
-
-    [Fact]
-    public void Broken_task_xml_is_skipped()
-    {
-        Assert.Null(FolderTaskSource.Parse(@"\X", "<не xml", new ConservativeTaskClassifier()));
-    }
-
-    [Fact]
-    public void Microsoft_tasks_are_never_modifiable()
-    {
-        var info = FolderTaskSource.Parse(@"\Microsoft\Windows\Defrag\ScheduledDefrag", TaskXml, new ConservativeTaskClassifier());
-
-        Assert.NotNull(info);
-        Assert.Equal(Changeability.Forbidden, info!.Class);
     }
 
     [Theory]

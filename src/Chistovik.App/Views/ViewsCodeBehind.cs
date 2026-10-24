@@ -9,7 +9,19 @@ namespace Chistovik.App.Views;
 
 public partial class OverviewView : UserControl { public OverviewView() { InitializeComponent(); } }
 public partial class ProgramsView : UserControl { public ProgramsView() { InitializeComponent(); } }
-public partial class StartupView : UserControl { public StartupView() { InitializeComponent(); } }
+public partial class StartupView : UserControl
+{
+    public StartupView() { InitializeComponent(); }
+
+    /// <summary>Enter и пробел на строке списка переключают запись, если её можно менять.</summary>
+    private void List_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key is not (System.Windows.Input.Key.Enter or System.Windows.Input.Key.Space)) return;
+        if (e.OriginalSource is not ListBoxItem { DataContext: Chistovik.App.ViewModels.StartupRowViewModel row }) return;
+        row.Toggle();
+        e.Handled = true;
+    }
+}
 public partial class JournalView : UserControl { public JournalView() { InitializeComponent(); } }
 public partial class PlaceholderView : UserControl { public PlaceholderView() { InitializeComponent(); } }
 public partial class TweaksView : UserControl { public TweaksView() { InitializeComponent(); } }

@@ -67,10 +67,20 @@ public sealed class DirectoryFileSystem : IFileSystem
 }
 
 /// <summary>
-/// Проверка подписи в App недоступна (её делает Native.Trust у агента), поэтому подсказки по службам консервативны:
-/// «подпись не подтверждена». Агент всё равно перепроверяет каждый запрос.
+/// Запоминает результат проверки подписи по пути файла: десятки служб и записей автозагрузки указывают на один и тот же файл
+/// (например svchost.exe), а проверка подписи стоит заметного времени. Сама проверка (WindowsFileTrust) только читает файл.
 /// </summary>
-public sealed class UnknownFileTrust : IFileTrust
+public sealed class CachingFileTrust(IFileTrust inner) : IFileTrust
 {
-    public SignatureFacts GetSignature(string path) => new(false, false);
+    readonly System.Collections.Concurrent.ConcurrentDictionary<string, SignatureFacts> _cache = new(StringComparer.OrdinalIgnoreCase);
+
+    public SignatureFacts GetSignature(string path)
+        => _cache.GetOrAdd(path, p =>
+        {
+            try { return inner.GetSignature(p); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+            {
+                return new SignatureFacts(false, false); // не удалось проверить: считаем неподписанным, подсказка станет строже
+            }
+        });
 }
