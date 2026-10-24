@@ -14,8 +14,19 @@ internal static class SelfTest
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         var failures = 0;
+        // Окна диалогов создаются, но не показываются: проверяем только ресурсы и разметку.
         try { _ = new Views.StubDialog("t", "m"); }
         catch (Exception ex) { failures++; Console.WriteLine($"FAIL StubDialog: {ex.Message}"); }
+        try { _ = new Views.ConfirmDialog(new Services.ConfirmContent("t", "m", "Да", Danger: true)); }
+        catch (Exception ex) { failures++; Console.WriteLine($"FAIL ConfirmDialog: {ex.Message}"); }
+        try
+        {
+            _ = new Views.ConflictsDialog(new[]
+            {
+                new Chistovik.Core.Ipc.ConflictInfo(1, Chistovik.Core.Ports.StepKind.RegistryValue, "значение 1", null),
+            });
+        }
+        catch (Exception ex) { failures++; Console.WriteLine($"FAIL ConflictsDialog: {ex.Message}"); }
         foreach (var nav in vm.NavItems)
         {
             try
@@ -28,6 +39,9 @@ internal static class SelfTest
                 view.Measure(new Size(1000, 700));
                 view.Arrange(new Rect(0, 0, 1000, 700));
                 view.UpdateLayout();
+
+                if (page is StatefulPageViewModel st && (st.IsError || st.IsLoading))
+                    throw new InvalidOperationException($"состояние раздела: {st.State}, {st.StateMessage}");
 
                 var rows = view is DependencyObject d ? CountListItems(d) : 0;
                 Console.WriteLine($"OK   {nav.Title} -> {page.GetType().Name}, строк в списках: {rows}");

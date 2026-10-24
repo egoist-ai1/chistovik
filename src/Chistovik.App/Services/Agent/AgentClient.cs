@@ -1,0 +1,269 @@
+using System.IO;
+using System.Security.Principal;
+using System.Text.Json;
+using Chistovik.Core.Ipc;
+
+namespace Chistovik.App.Services.Agent;
+
+public sealed class AgentClientOptions
+{
+    /// <summary>Сервер агента закрывается через 5 минут тишины; Ping раз в минуту держит связь.</summary>
+    public TimeSpan HeartbeatInterval { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>Сколько ждать ответа на обычный запрос (откат режима и твиков может быть долгим).</summary>
+    public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(90);
+
+    public TimeSpan HeartbeatTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>Ожидание канала после запуска агента (UAC уже пройден).</summary>
+    public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>Быстрая попытка вернуться в тот же канал, прежде чем просить UAC заново.</summary>
+    public TimeSpan ReconnectTimeout { get; init; } = TimeSpan.FromSeconds(2);
+
+    public string UserSid { get; init; } = CurrentSid();
+    public int ParentPid { get; init; } = Environment.ProcessId;
+    public string AppPath { get; init; } = Environment.ProcessPath ?? "";
+
+    static string CurrentSid()
+    {
+        try { return WindowsIdentity.GetCurrent().User?.Value ?? ""; }
+        catch (Exception e) when (e is System.Security.SecurityException or PlatformNotSupportedException) { return ""; }
+    }
+}
+
+/// <summary>
+/// Клиент агента: ленивый запуск через <see cref="IAgentLauncher"/>, кадры по <see cref="IAgentTransport"/>,
+/// последовательные запросы, Ping по таймеру, повтор с тем же Id при обрыве, режим просмотра при отказе UAC.
+/// </summary>
+public sealed class AgentClient : IAgentClient, IDisposable
+{
+    readonly IAgentLauncher _launcher;
+    readonly IAgentTransport _transport;
+    readonly AgentClientOptions _opt;
+    readonly Func<string> _pipeNameFactory;
+    readonly SemaphoreSlim _gate = new(1, 1);
+    readonly CancellationTokenSource _life = new();
+
+    Stream? _stream;
+    string? _pipeName;
+    AgentAccess _access = AgentAccess.NotStarted;
+    Task? _heartbeat;
+    bool _disposed;
+
+    public AgentClient(IAgentLauncher launcher, IAgentTransport transport, AgentClientOptions? options = null,
+        Func<string>? pipeNameFactory = null)
+    {
+        _launcher = launcher;
+        _transport = transport;
+        _opt = options ?? new AgentClientOptions();
+        _pipeNameFactory = pipeNameFactory ?? (() => "Chistovik." + Guid.NewGuid().ToString("N"));
+    }
+
+    public event EventHandler? AccessChanged;
+
+    public AgentAccess Access => _access;
+
+    public bool IsElevated => _access == AgentAccess.Connected;
+
+    public void AllowElevationRetry()
+    {
+        if (_access == AgentAccess.ViewOnly) SetAccess(AgentAccess.NotStarted);
+    }
+
+    void SetAccess(AgentAccess a)
+    {
+        if (_access == a) return;
+        _access = a;
+        AccessChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task<AgentResponse> SendAsync(AgentRequest request, CancellationToken ct = default)
+    {
+        var problem = request.Validate();
+        if (problem is not null || request.Id == Guid.Empty)
+            return Fail(request, ResponseCodes.BadRequest, problem ?? "Пустой Id запроса");
+
+        if (_access == AgentAccess.ViewOnly)
+            return Fail(request, ClientCodes.Declined, "Права администратора не выданы: доступен только просмотр.");
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_disposed) return Fail(request, ClientCodes.NotRunning, "Связь с агентом закрыта.");
+            if (_access == AgentAccess.ViewOnly)
+                return Fail(request, ClientCodes.Declined, "Права администратора не выданы: доступен только просмотр.");
+
+            // Ping без связи ничего не запускает: UAC только по действию пользователя.
+            if (request is PingRequest && _stream is null)
+                return Fail(request, ClientCodes.NotRunning, "Агент не запущен.");
+
+            var prepared = await EnsureConnectedAsync(request, ct).ConfigureAwait(false);
+            if (prepared is not null) return prepared;
+
+            var result = await ExchangeAsync(request, _opt.RequestTimeout, ct).ConfigureAwait(false);
+            if (result.Retry)
+            {
+                // Обрыв до ответа: повтор с тем же Id безопасен, агент вернёт сохранённый результат (DESIGN-0.1 §3).
+                prepared = await EnsureConnectedAsync(request, ct).ConfigureAwait(false);
+                if (prepared is not null) return prepared;
+                result = await ExchangeAsync(request, _opt.RequestTimeout, ct, allowRetry: false).ConfigureAwait(false);
+            }
+            return result.Response!;
+        }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>Один Ping, как по таймеру. Возвращает false, если связь потеряна. Для тестов и таймера.</summary>
+    public async Task<bool> HeartbeatOnceAsync(CancellationToken ct = default)
+    {
+        if (_stream is null || !_gate.Wait(0)) return _stream is not null; // занят настоящим запросом: связь жива
+        try
+        {
+            if (_stream is null) return false;
+            var ping = new PingRequest { Id = Guid.NewGuid() };
+            var r = await ExchangeAsync(ping, _opt.HeartbeatTimeout, ct, allowRetry: false).ConfigureAwait(false);
+            return r.Response is { Ok: true };
+        }
+        finally { _gate.Release(); }
+    }
+
+    sealed record Exchange(AgentResponse? Response, bool Retry);
+
+    /// <summary>Поднимает связь, если её нет. Возвращает готовый отказ-ответ или null, когда можно слать.</summary>
+    async Task<AgentResponse?> EnsureConnectedAsync(AgentRequest request, CancellationToken ct)
+    {
+        if (_stream is not null) return null;
+
+        // Сначала тихо пробуем тот же канал (агент мог пережить обрыв), UAC только если канала уже нет.
+        if (_pipeName is not null)
+        {
+            try
+            {
+                _stream = await _transport.ConnectAsync(_pipeName, _opt.ReconnectTimeout, ct).ConfigureAwait(false);
+                SetConnected();
+                return null;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException or UnauthorizedAccessException) { }
+        }
+
+        var pipe = _pipeNameFactory();
+        AgentLaunchResult launch;
+        try
+        {
+            launch = await _launcher.LaunchAsync(new AgentLaunchArgs(pipe, _opt.ParentPid, _opt.UserSid, _opt.AppPath), ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+
+        switch (launch.Status)
+        {
+            case AgentLaunchStatus.Declined:
+                SetAccess(AgentAccess.ViewOnly);
+                return Fail(request, ClientCodes.Declined, "Права администратора не выданы: доступен только просмотр.");
+            case AgentLaunchStatus.Failed:
+                return Fail(request, ClientCodes.LaunchFailed, launch.Message ?? "Не удалось запустить агент.");
+        }
+
+        _pipeName = pipe;
+        try
+        {
+            _stream = await _transport.ConnectAsync(pipe, _opt.ConnectTimeout, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException or UnauthorizedAccessException)
+        {
+            _pipeName = null;
+            return Fail(request, ClientCodes.LaunchFailed, "Агент запущен, но не отвечает.");
+        }
+        SetConnected();
+        return null;
+    }
+
+    void SetConnected()
+    {
+        SetAccess(AgentAccess.Connected);
+        StartHeartbeat();
+    }
+
+    void StartHeartbeat()
+    {
+        if (_heartbeat is not null) return;
+        _heartbeat = Task.Run(async () =>
+        {
+            var token = _life.Token;
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    await Task.Delay(_opt.HeartbeatInterval, token).ConfigureAwait(false);
+                    if (_stream is not null) await HeartbeatOnceAsync(token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    async Task<Exchange> ExchangeAsync(AgentRequest request, TimeSpan timeout, CancellationToken ct, bool allowRetry = true)
+    {
+        var stream = _stream!;
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        try
+        {
+            await FrameCodec.WriteAsync(stream, AgentJson.Serialize(request), linked.Token).ConfigureAwait(false);
+            var frame = await FrameCodec.ReadAsync(stream, linked.Token).ConfigureAwait(false);
+            if (frame is null) return Dropped(request, allowRetry, "Агент закрыл связь.");
+
+            var response = AgentJson.DeserializeResponse(frame);
+            if (response.Id != request.Id)
+                return Dropped(request, false, "Ответ агента не соответствует запросу.");
+            return new Exchange(response, false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Состояние кадра неизвестно: канал закрываем, чтобы следующий запрос не прочёл чужой ответ.
+            Drop();
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            Drop();
+            return new Exchange(Fail(request, ClientCodes.Timeout,
+                "Агент не ответил вовремя. Результат неизвестен: проверьте журнал."), false);
+        }
+        catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidDataException or JsonException)
+        {
+            return Dropped(request, allowRetry, "Связь с агентом оборвалась.");
+        }
+    }
+
+    Exchange Dropped(AgentRequest request, bool retry, string message)
+    {
+        Drop();
+        return retry
+            ? new Exchange(null, true)
+            : new Exchange(Fail(request, ClientCodes.Disconnected, message), false);
+    }
+
+    void Drop()
+    {
+        var s = _stream;
+        _stream = null;
+        try { s?.Dispose(); } catch (IOException) { }
+        if (_access == AgentAccess.Connected) SetAccess(AgentAccess.Lost);
+    }
+
+    static AgentResponse Fail(AgentRequest r, string code, string message) => new(r.Id, false, code, message);
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _life.Cancel();
+        var s = _stream;
+        _stream = null;
+        try { s?.Dispose(); } catch (IOException) { }
+    }
+}

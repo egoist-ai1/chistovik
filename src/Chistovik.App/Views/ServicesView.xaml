@@ -1,0 +1,135 @@
+<UserControl x:Class="Chistovik.App.Views.ServicesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Chistovik.App.Views">
+    <UserControl.Resources>
+        <Style x:Key="SvcItem" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}"/>
+        </Style>
+        <Style x:Key="ClassPill" TargetType="Border" BasedOn="{StaticResource PillOk}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Class}" Value="ReadOnly">
+                    <Setter Property="Background" Value="{DynamicResource Surface3Brush}"/>
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource TextMutedBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Class}" Value="Forbidden">
+                    <Setter Property="Background" Value="{DynamicResource DangerTintBrush}"/>
+                    <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="{DynamicResource PageMargin}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="380"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.ColumnSpan="3">
+            <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}"
+                       AutomationProperties.HeadingLevel="Level1"/>
+            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Subtle}" Margin="0,6,0,16" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <views:PageBanner Grid.Row="1" Grid.ColumnSpan="3"/>
+
+        <Grid Grid.Row="2" Grid.ColumnSpan="3" Margin="0,0,0,12"
+              Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="340"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBox Style="{StaticResource SearchBox}" Tag="Поиск по имени или описанию"
+                     Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.Name="Поиск служб"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Style="{StaticResource SecondaryButton}" Content="Все" Margin="0,0,8,0"
+                        Command="{Binding FilterCommand}" CommandParameter="all"
+                        AutomationProperties.Name="Показать все службы"/>
+                <Button Style="{StaticResource SecondaryButton}" Content="Можно менять" Margin="0,0,8,0"
+                        Command="{Binding FilterCommand}" CommandParameter="mod"
+                        AutomationProperties.Name="Показать только те, что можно менять"/>
+                <Button Style="{StaticResource SecondaryButton}" Content="Только чтение"
+                        Command="{Binding FilterCommand}" CommandParameter="ro"
+                        AutomationProperties.Name="Показать только для чтения"/>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0"
+                Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
+            <ListBox Style="{StaticResource PlainList}" ItemsSource="{Binding Items}"
+                     SelectedItem="{Binding Selected, Mode=TwoWay}"
+                     ItemContainerStyle="{StaticResource SvcItem}"
+                     AutomationProperties.Name="Список служб">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid MinHeight="56" Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="130"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource TextBrush}"
+                                           FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Name}" Style="{StaticResource MonoText}"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="{DynamicResource FsXs}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding StartText}" Style="{StaticResource Subtle}"
+                                       VerticalAlignment="Center"/>
+                            <Border Grid.Column="2" Style="{StaticResource ClassPill}" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding ClassText}"/>
+                            </Border>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <Border Grid.Row="3" Grid.Column="2" Style="{StaticResource Card}" Padding="24"
+                Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <TextBlock Text="Выберите службу слева" Style="{StaticResource Subtle}"
+                           Visibility="{Binding HasSelection, Converter={StaticResource InvBoolToVis}}"/>
+                <StackPanel DataContext="{Binding Selected}" Visibility="{Binding DataContext.HasSelection, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding DisplayName}" FontFamily="{DynamicResource FontDisplay}" FontWeight="Bold"
+                               FontSize="{DynamicResource FsLg}" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource MonoText}"
+                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,12"/>
+                    <TextBlock Text="{Binding Reason}" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
+                    <TextBlock Text="Файл службы" Style="{StaticResource CardLabel}" Margin="0,16,0,4"/>
+                    <TextBlock Text="{Binding ImagePath}" Style="{StaticResource MonoText}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="{DynamicResource FsXs}"/>
+                </StackPanel>
+                <TextBlock Text="{Binding DetailHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                <TextBlock Text="Тип запуска" Style="{StaticResource CardLabel}" Margin="0,20,0,8"
+                           Visibility="{Binding CanChangeSelected, Converter={StaticResource BoolToVis}}"/>
+                <WrapPanel Visibility="{Binding CanChangeSelected, Converter={StaticResource BoolToVis}}">
+                    <Button Style="{StaticResource SecondaryButton}" Content="Автоматически" Margin="0,0,8,8"
+                            Command="{Binding SetStartCommand}" CommandParameter="Automatic"
+                            AutomationProperties.Name="Запускать автоматически"/>
+                    <Button Style="{StaticResource SecondaryButton}" Content="С задержкой" Margin="0,0,8,8"
+                            Command="{Binding SetStartCommand}" CommandParameter="AutomaticDelayed"
+                            AutomationProperties.Name="Запускать автоматически с задержкой"/>
+                    <Button Style="{StaticResource SecondaryButton}" Content="Вручную" Margin="0,0,8,8"
+                            Command="{Binding SetStartCommand}" CommandParameter="Manual"
+                            AutomationProperties.Name="Запускать вручную"/>
+                    <Button Style="{StaticResource DangerButton}" Content="Отключить" Margin="0,0,8,8"
+                            Command="{Binding SetStartCommand}" CommandParameter="Disabled"
+                            AutomationProperties.Name="Отключить службу"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="4" Grid.ColumnSpan="3" Text="{Binding StatusText}" Style="{StaticResource Subtle}" Margin="4,10,0,0"/>
+    </Grid>
+</UserControl>

@@ -12,6 +12,11 @@
         <DataTemplate DataType="{x:Type vm:ProgramsViewModel}"><views:ProgramsView/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:StartupViewModel}"><views:StartupView/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:JournalViewModel}"><views:JournalView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:TweaksViewModel}"><views:TweaksView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ModesViewModel}"><views:ModesView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PowerViewModel}"><views:PowerView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ServicesViewModel}"><views:ServicesView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:TasksViewModel}"><views:TasksView/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:PlaceholderViewModel}"><views:PlaceholderView/></DataTemplate>
 
         <Style x:Key="GroupHeader" TargetType="TextBlock">
@@ -79,11 +84,23 @@
             </Grid>
         </Border>
 
-        <ContentControl x:Name="ContentHost" Grid.Column="1" Content="{Binding Current}"
-                        IsTabStop="False" RenderTransformOrigin="0.5,0.5">
-            <ContentControl.RenderTransform>
-                <TranslateTransform x:Name="HostShift"/>
-            </ContentControl.RenderTransform>
-        </ContentControl>
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border Background="{DynamicResource WarnTintBrush}" Padding="24,8"
+                    Visibility="{Binding IsDemo, Converter={StaticResource BoolToVis}}"
+                    AutomationProperties.Name="Демонстрационные данные">
+                <TextBlock Foreground="{DynamicResource WarnBrush}" FontWeight="Medium" TextWrapping="Wrap"
+                           Text="Демонстрационные данные: это не ваш компьютер, изменения никуда не применяются."/>
+            </Border>
+            <ContentControl x:Name="ContentHost" Grid.Row="1" Content="{Binding Current}"
+                            IsTabStop="False" RenderTransformOrigin="0.5,0.5">
+                <ContentControl.RenderTransform>
+                    <TranslateTransform x:Name="HostShift"/>
+                </ContentControl.RenderTransform>
+            </ContentControl>
+        </Grid>
     </Grid>
 </Window>

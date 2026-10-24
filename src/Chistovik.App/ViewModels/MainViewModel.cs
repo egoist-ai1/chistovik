@@ -20,35 +20,38 @@ public sealed class NavItem
     internal PageViewModel? Cached { get; set; }
 }
 
-public sealed class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject, INavigator
 {
     private NavItem? _selectedNav;
     private PageViewModel? _current;
 
-    public MainViewModel(IProgramsSource programs, IStartupSource startup, IJournalSource journal, IDialogService dialogs)
+    public MainViewModel(AppServices s)
     {
-        PageViewModel Ph(string t, string s) => new PlaceholderViewModel(t, s);
+        IsDemo = s.IsDemo;
+        PageViewModel Ph(string t, string d) => new PlaceholderViewModel(t, d);
 
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
-            ("Обзор", "", () => new OverviewViewModel(programs, startup, journal)),
-            ("Инвентарь", "Программы", () => new ProgramsViewModel(programs, dialogs)),
+            ("Обзор", "", () => new OverviewViewModel(s.Programs, s.Startup, s.Journal, s.Changes.Agent)),
+            ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),
-            ("Чек операции", "Программы", () => Ph("Чек операции", "Что сделано, что можно вернуть и чем это подтверждено.")),
-            ("Журнал и откат", "Программы", () => new JournalViewModel(journal, dialogs)),
+            ("Журнал и откат", "Программы", () => new JournalViewModel(s.Journal, s.Changes, s.Dialogs, this)),
             ("Карантин", "Программы", () => Ph("Карантин", "Удалённое ждёт здесь. Срок виден на каждой операции.")),
-            ("Защита", "Программы", () => Ph("Защита", "Уровни уверенности и зоны, которые программа не трогает никогда.")),
             ("Очистка диска", "Программы", () => Ph("Очистка диска", "Временные файлы и кэш. Только вручную.")),
-            ("Режимы", "Система", () => Ph("Режимы", "Готовые наборы настроек одним нажатием, всё с откатом.")),
-            ("Питание", "Система", () => Ph("Питание", "Планы электропитания и их настройка для сети и батареи.")),
-            ("Автозагрузка", "Система", () => new StartupViewModel(startup)),
-            ("Службы и задачи", "Система", () => Ph("Службы и задачи", "Тип запуска служб и задачи планировщика. Защищённые службы заблокированы.")),
-            ("Реестр", "Система", () => Ph("Реестр", "Проверенные твики и обозреватель ключей.")),
-            ("Эффекты", "Система", () => Ph("Эффекты", "Плавность, анимации и прозрачность.")),
+            ("Режимы", "Система", () => new ModesViewModel(s.Tweaks, s.PowerCatalog, s.Changes, s.Dialogs, this)),
+            ("Питание", "Система", () => new PowerViewModel(s.PowerCatalog, s.Power, s.Changes, s.Dialogs, this)),
+            ("Автозагрузка", "Система", () => new StartupViewModel(s.Startup, s.Changes, this)),
+            ("Службы", "Система", () => new ServicesViewModel(s.Services, s.Changes, s.Dialogs, this)),
+            ("Задачи", "Система", () => new TasksViewModel(s.Tasks, s.Changes, s.Dialogs, this)),
+            ("Твики", "Система", () => new TweaksViewModel("Твики реестра",
+                "Проверенные настройки Windows. Текущее значение читается из реестра; применение идёт через агента с записью в журнал.",
+                "tw", s.Tweaks, s.TweakState, s.Changes, s.Dialogs, s.Effects, this)),
+            ("Эффекты", "Система", () => new TweaksViewModel("Эффекты",
+                "Анимации, прозрачность и плавность. Применяются сразу, без перезагрузки, где это возможно.",
+                "fx", s.Tweaks, s.TweakState, s.Changes, s.Dialogs, s.Effects, this)),
             ("Окна", "Система", () => Ph("Окна", "Раскладка окон по мониторам и сохранённые расстановки.")),
             ("Мониторинг", "Система", () => Ph("Мониторинг", "Процессор, память, диск и сеть в реальном времени.")),
-            ("Изменения", "Система", () => Ph("Изменения", "Каждая правка системы с командами и откатом.")),
             ("Доверие", "Служебное", () => Ph("Доверие", "Как мы докажем точность. Своих измерений ещё нет.")),
             ("Настройки", "Служебное", () => Ph("Настройки", "Главные настройки, внешний вид и горячие клавиши.")),
         };
@@ -65,6 +68,16 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public IReadOnlyList<NavItem> NavItems { get; }
+
+    /// <summary>Данные демонстрационные (самопроверка, предпросмотр дизайна): на экране показывается пометка.</summary>
+    public bool IsDemo { get; }
+
+    /// <summary>Переход к разделу по заголовку (из экранов: «Открыть журнал»).</summary>
+    public void Open(string title)
+    {
+        var item = NavItems.FirstOrDefault(x => x.Title == title);
+        if (item is not null) SelectedNav = item;
+    }
 
     public NavItem? SelectedNav
     {
