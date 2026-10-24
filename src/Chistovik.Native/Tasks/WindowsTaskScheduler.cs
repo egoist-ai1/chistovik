@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using Chistovik.Core.Execution;
 using Chistovik.Core.Ports;
 
@@ -124,6 +125,7 @@ public sealed class WindowsTaskHandle : ITaskHandle
             string path = task.Path;
 
             string? userId = null;
+            string? userSid = null;
             var runLevel = "Limited";
             var logon = "None";
             var actions = new List<TaskAction>();
@@ -136,6 +138,7 @@ public sealed class WindowsTaskHandle : ITaskHandle
                 {
                     string uid = principal.UserId ?? "";
                     userId = uid.Length == 0 ? null : uid;
+                    userSid = ResolveSid(userId);
                     runLevel = (int)principal.RunLevel == 1 ? "Highest" : "Limited";
                     logon = LogonName((int)principal.LogonType);
                 }
@@ -156,7 +159,7 @@ public sealed class WindowsTaskHandle : ITaskHandle
             }
             finally { WindowsTaskScheduler.ReleaseCom(def); }
 
-            return new TaskRaw(path, enabled, xml, userId, runLevel, logon, actions);
+            return new TaskRaw(path, enabled, xml, userId, runLevel, logon, actions, userSid);
         }
         catch (COMException e)
         {
@@ -200,6 +203,22 @@ public sealed class WindowsTaskHandle : ITaskHandle
                 return new TaskAction("ComHandler", NullIfEmpty(a.ClassId), NullIfEmpty(a.Data));
             default:
                 return new TaskAction("Other", null, null);
+        }
+    }
+
+    /// <summary>SID учётной записи задачи: SID в тексте принимается как есть, имя разрешается через NTAccount; не разрешилось — null.</summary>
+    internal static string? ResolveSid(string? account)
+    {
+        if (string.IsNullOrWhiteSpace(account)) return null;
+        var text = account.Trim();
+        try
+        {
+            if (text.StartsWith("S-1-", StringComparison.OrdinalIgnoreCase)) return new SecurityIdentifier(text).Value;
+            return new NTAccount(text).Translate(typeof(SecurityIdentifier)) is SecurityIdentifier sid ? sid.Value : null;
+        }
+        catch (Exception e) when (e is SystemException) // IdentityNotMappedException, ArgumentException, Win32-сбои поиска
+        {
+            return null;
         }
     }
 

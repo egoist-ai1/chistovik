@@ -137,6 +137,7 @@ internal static class ErrorCodes
     public static string From(Exception e) => e switch
     {
         UnauthorizedAccessException => StepCodes.AccessDenied,
+        PowerSettingNotFoundException => StepCodes.NotFound,
         System.Security.SecurityException => StepCodes.AccessDenied,
         System.ComponentModel.Win32Exception w => w.NativeErrorCode == 5 ? StepCodes.AccessDenied : StepCodes.Win32(Math.Max(0, w.NativeErrorCode)),
         _ => StepCodes.Win32(e.HResult & 0xFFFF),

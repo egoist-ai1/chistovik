@@ -55,7 +55,8 @@ public sealed class AgentPipeServer(
                 var frame = await FrameCodec.ReadAsync(pipe, idle.Token, PreAuthMaxFrame).ConfigureAwait(false);
                 if (frame is null) continue;
 
-                var (ok, reason) = ClientVerifier.Verify(expected, ClientProbe.Probe(pipe));
+                var actual = ClientProbe.Probe(pipe);
+                var (ok, reason) = ClientVerifier.Verify(expected, actual);
                 if (!ok)
                 {
                     RejectedClients++;
@@ -64,9 +65,12 @@ public sealed class AgentPipeServer(
                 }
 
                 log?.Invoke("client-accepted");
+                // Контекст строится только из проверенных сведений о процессе на другом конце канала (SID получен
+                // имперсонацией и сверен с ожидаемым), а не из полей запроса.
+                var client = new ClientContext(actual.UserSid!, actual.Pid, actual.SessionId);
                 while (true)
                 {
-                    var response = await dispatcher.HandleAsync(frame).ConfigureAwait(false);
+                    var response = await dispatcher.HandleAsync(frame, client, ct).ConfigureAwait(false);
                     await FrameCodec.WriteAsync(pipe, AgentJson.Serialize(response), idle.Token).ConfigureAwait(false);
 
                     idle.CancelAfter(idleTimeout);

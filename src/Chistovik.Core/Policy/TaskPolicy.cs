@@ -117,6 +117,11 @@ public sealed class TaskPolicy
         if ((t.LogonType ?? string.Empty).Trim().Equals("ServiceAccount", StringComparison.OrdinalIgnoreCase))
             return (ChangeClass.RevertOnly, "Задача от служебной учётной записи: только откат собственного шага", "task-privileged-principal");
 
+        // SID надёжнее имени (имя зависит от языка и домена): служебные S-1-5-18/19/20 и подобные определяются в первую очередь.
+        var sid = (t.UserSid ?? string.Empty).Trim();
+        if (sid.Length > 0 && IsPrivilegedAccount(sid))
+            return (ChangeClass.RevertOnly, "Задача от SYSTEM или служебной учётной записи (по SID): только откат собственного шага", "task-privileged-principal");
+
         var user = (t.UserId ?? string.Empty).Trim();
         if (user.Length == 0)
             return (ChangeClass.ReadOnly, "Не указана учётная запись задачи", "task-unknown-principal");

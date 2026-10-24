@@ -45,6 +45,10 @@ public sealed partial class ServicePolicy
         "KeyIso", "VaultSvc", "SystemEventsBroker", "TimeBrokerSvc", "BrokerInfrastructure", "StateRepository",
         "Wcmsvc", "WinHttpAutoProxySvc", "wuauserv", "BITS", "UsoSvc", "WaaSMedicSvc", "AppIDSvc", "SgrmBroker",
         "MsSecFlt", "MsSecCore", "ksecdd", "ksecpkg", "CI", "FltMgr", "Ntfs", "Tcpip", "volmgr", "disk", "partmgr",
+        // Шаблоны пользовательских служб (в системе имя вида CDPUserSvc_1a2b3): имя без суффикса и с суффиксом _<4-8 hex> запрещены.
+        "CDPUserSvc", "OneSyncSvc", "PimIndexMaintenanceSvc", "UnistoreSvc", "UserDataSvc", "WpnUserService", "cbdhsvc",
+        "BcastDVRUserService", "CaptureService", "ConsentUxUserSvc", "DevicesFlowUserSvc", "MessagingService",
+        "PrintWorkflowUserSvc", "NPSMSvc", "webthreatdefusersvc",
     };
 
     readonly string _windowsDir;

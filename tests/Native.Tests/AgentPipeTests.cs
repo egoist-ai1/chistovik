@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.Principal;
+using Chistovik.Core.Catalog;
 using Chistovik.Core.Ipc;
 using Chistovik.Native.Ipc;
 using Xunit;
@@ -99,6 +100,52 @@ public class AgentPipeTests
 
         Assert.False(await run.WaitAsync(TimeSpan.FromSeconds(15)));
         Assert.True(server.RejectedClients >= 1);
+    }
+
+    sealed class Recorder : IOperationHandler
+    {
+        public List<(AgentRequest Request, ClientContext Client)> Calls { get; } = [];
+
+        public Task<AgentResponse> HandleAsync(AgentRequest request, ClientContext client, CancellationToken ct)
+        {
+            lock (Calls) Calls.Add((request, client));
+            return Task.FromResult(new AgentResponse(request.Id, true, ResponseCodes.Ok));
+        }
+    }
+
+    [Fact]
+    public async Task Handler_receives_the_verified_client_sid_and_not_a_field_from_the_request()
+    {
+        var recorder = new Recorder();
+        var name = NewPipeName();
+        var server = new AgentPipeServer(name, Me, ExpectSelf(), new RequestDispatcher(recorder), TimeSpan.FromSeconds(20));
+        var run = server.RunAsync(CancellationToken.None);
+        var modeId = TweakCatalog.Shared.Modes[0].Id;
+
+        await using (var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous))
+        {
+            await client.ConnectAsync(5000);
+
+            // Запрос с чужим SID в теле отвергается как лишнее поле: до обработчика он не доходит.
+            var spoofId = Guid.NewGuid();
+            var spoof = $$"""{"type":"ApplyMode","id":"{{spoofId}}","modeId":"{{modeId}}","userSid":"S-1-5-18"}""";
+            await FrameCodec.WriteAsync(client, System.Text.Encoding.UTF8.GetBytes(spoof));
+            var rejected = AgentJson.DeserializeResponse((await FrameCodec.ReadAsync(client))!);
+            Assert.False(rejected.Ok);
+            Assert.Equal("bad-request", rejected.Code);
+            Assert.Empty(recorder.Calls);
+
+            var id = Guid.NewGuid();
+            await FrameCodec.WriteAsync(client, AgentJson.Serialize(new ApplyModeRequest { Id = id, ModeId = modeId }));
+            var ok = AgentJson.DeserializeResponse((await FrameCodec.ReadAsync(client))!);
+            Assert.True(ok.Ok);
+        }
+
+        Assert.True(await run.WaitAsync(TimeSpan.FromSeconds(10)));
+        var call = Assert.Single(recorder.Calls);
+        Assert.Equal(Me.Value, call.Client.UserSid);
+        Assert.Equal(Environment.ProcessId, call.Client.Pid);
+        Assert.Equal(ClientProbe.CurrentSession(), call.Client.SessionId);
     }
 
     [Fact]

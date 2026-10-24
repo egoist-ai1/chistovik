@@ -182,6 +182,9 @@ public sealed class FakePowerControl : IPowerControl
     public Guid Active { get; set; }
     public Dictionary<Guid, string> Names { get; } = [];
 
+    /// <summary>Параметры (подгруппа, параметр), которых «нет в схеме»: Read бросает PowerSettingNotFoundException, как Native при ERROR_FILE_NOT_FOUND.</summary>
+    public HashSet<(Guid Subgroup, Guid Setting)> MissingSettings { get; } = [];
+
     /// <summary>Счётчик любых изменяющих вызовов (SetActive, Write, Duplicate, Delete).</summary>
     public int WriteCount { get; private set; }
     public int DuplicateCount { get; private set; }
@@ -220,6 +223,7 @@ public sealed class FakePowerControl : IPowerControl
     public (uint Ac, uint Dc) Read(Guid scheme, Guid sub, Guid setting)
     {
         if (!_schemes.Contains(scheme)) throw new InvalidOperationException("Схемы нет");
+        if (MissingSettings.Contains((sub, setting))) throw new PowerSettingNotFoundException("Параметра нет в схеме");
         return _values.GetValueOrDefault((scheme, sub, setting));
     }
 

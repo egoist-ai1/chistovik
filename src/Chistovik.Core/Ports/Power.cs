@@ -2,6 +2,11 @@ using Chistovik.Core.Execution;
 
 namespace Chistovik.Core.Ports;
 
+/// <summary>
+/// Параметра питания нет в схеме или схемы нет (ERROR_FILE_NOT_FOUND в Native). Шаги журнала получают код not-found, а не win32:n.
+/// </summary>
+public sealed class PowerSettingNotFoundException(string message, Exception? inner = null) : Exception(message, inner);
+
 public interface IPowerControl
 {
     Guid GetActive();

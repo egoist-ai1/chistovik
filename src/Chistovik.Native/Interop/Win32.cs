@@ -161,6 +161,10 @@ internal static class Win32
     [DllImport("powrprof.dll")]
     public static extern uint PowerWriteFriendlyName(IntPtr root, ref Guid scheme, IntPtr sub, IntPtr setting, byte[] buffer, uint size);
 
+    /// <summary>Имя схемы (UTF-16 с завершающим NUL). buffer = IntPtr.Zero: в size вернётся нужный размер в байтах.</summary>
+    [DllImport("powrprof.dll")]
+    public static extern uint PowerReadFriendlyName(IntPtr root, ref Guid scheme, IntPtr sub, IntPtr setting, IntPtr buffer, ref uint size);
+
     [DllImport("kernel32.dll")]
     public static extern IntPtr LocalFree(IntPtr mem);
 }

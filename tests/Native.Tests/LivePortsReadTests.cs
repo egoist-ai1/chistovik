@@ -159,6 +159,15 @@ public class LivePortsReadTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Power_active_scheme_has_a_name()
+    {
+        var p = new WindowsPowerControl();
+        var name = p.GetName(p.GetActive());
+        output.WriteLine($"name={name}");
+        Assert.False(string.IsNullOrWhiteSpace(name));
+    }
+
+    [Fact]
     public void Power_reads_sleep_timeout_of_active_scheme()
     {
         var p = new WindowsPowerControl();
@@ -169,7 +178,7 @@ public class LivePortsReadTests(ITestOutputHelper output)
             var (ac, dc) = p.Read(p.GetActive(), sleep, standbyIdle);
             output.WriteLine($"standby idle: AC={ac} DC={dc}");
         }
-        catch (FileNotFoundException e) { output.WriteLine("параметр отсутствует: " + e.Message); }
+        catch (PowerSettingNotFoundException e) { output.WriteLine("параметр отсутствует: " + e.Message); }
     }
 
     // ---------- подпись, папки, файлы ----------

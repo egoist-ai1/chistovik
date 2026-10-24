@@ -140,7 +140,7 @@ public sealed class TestEnv
     public TaskRaw AddUserTask(string path, bool enabled = true)
     {
         var t = new TaskRaw(path, enabled, "<Task/>", Sid, "LeastPrivilege", "InteractiveToken",
-            [new TaskAction("Exec", @"C:\Program Files\Foo\foo.exe", null)]);
+            [new TaskAction("Exec", @"C:\Program Files\Foo\foo.exe", null)], Sid);
         Tasks.Add(t);
         return t;
     }
