@@ -168,6 +168,8 @@ public abstract class StatefulPageViewModel : PageViewModel
     // ----- права и применение -----
 
     public bool ViewOnly => Changes?.Agent.Access == AgentAccess.ViewOnly;
+    /// <summary>Общая полоса «режим просмотра» в PageBanner; экран, у которого своя полоса прав, отключает её.</summary>
+    public virtual bool ShowViewOnlyBanner => ViewOnly;
     public string ViewOnlyText => "Режим просмотра: права администратора не выданы, изменения отключены.";
 
     public bool IsBusy
@@ -189,6 +191,7 @@ public abstract class StatefulPageViewModel : PageViewModel
     private void OnAccessChanged()
     {
         OnPropertyChanged(nameof(ViewOnly));
+        OnPropertyChanged(nameof(ShowViewOnlyBanner));
         OnPropertyChanged(nameof(CanApply));
         OnPropertyChanged(nameof(ApplyHint));
         RequestRightsCommand.RaiseCanExecuteChanged();

@@ -1,3 +1,4 @@
+using Chistovik.App;
 using Chistovik.App.Models;
 using Chistovik.App.Services;
 using Chistovik.App.Services.Agent;
@@ -628,22 +629,100 @@ public class OverviewViewModelTests
     {
         var agent = new FakeAgentClient { Access = AgentAccess.ViewOnly };
         var vm = new OverviewViewModel(
-            new ProgSrc(), new StartupSrc(new StartupInfo("run:hku:A", "A", "a.exe", "Реестр", true, true, null)),
-            new JournalSrc(Array.Empty<JournalOperation>()), agent);
+            new StartupSrc(new StartupInfo("run:hku:A", "A", "a.exe", "Реестр", true, true, null)),
+            new JournalSrc(Array.Empty<JournalOperation>()), Make.Changes(agent));
         await vm.Loaded;
 
-        Assert.Equal("2", vm.ProgramsCount);
         Assert.Contains("1 из 1", vm.StartupText);
         Assert.Equal("Режим просмотра", vm.RightsTitle);
+        Assert.True(vm.ViewOnly);
+        Assert.True(vm.RequestRightsCommand.CanExecute(null));
+        Assert.False(vm.ShowViewOnlyBanner);
         Assert.Contains("изменений ещё не было", vm.JournalHint);
+        Assert.Equal("не применялся", vm.ModeText);
+        Assert.StartsWith("не проверено: ", vm.TweaksHint);
     }
 
-    sealed class ProgSrc : IProgramsSource
+    [Fact]
+    public async Task Last_applied_mode_is_taken_from_journal()
     {
-        public Task<IReadOnlyList<ProgramInfo>> GetProgramsAsync() => Task.FromResult<IReadOnlyList<ProgramInfo>>(new[]
+        var now = new DateTime(2026, 10, 25, 12, 0, 0);
+        var ops = new[]
         {
-            new ProgramInfo("A", "P", "1", 1024, null, "Классическая"),
-            new ProgramInfo("B", "P", "1", 2048, null, "Классическая"),
-        });
+            new JournalOperation(Guid.NewGuid(), OperationKind.Mode, "Режим: Старый", now.AddDays(-2), OperationState.Done, "Завершено", true, null),
+            new JournalOperation(Guid.NewGuid(), OperationKind.Tweaks, "Твики: a", now, OperationState.Done, "Завершено", true, null),
+            new JournalOperation(Guid.NewGuid(), OperationKind.Mode, "Режим: Работа", now.AddDays(-1), OperationState.Done, "Завершено", true, null),
+        };
+        var vm = new OverviewViewModel(new StartupSrc(), new JournalSrc(ops), Make.Changes(new FakeAgentClient()));
+        await vm.Loaded;
+
+        Assert.Equal("Работа", vm.ModeText);
+        Assert.Contains("можно откатить: 3", vm.JournalHint);
+    }
+
+    [Fact]
+    public void Subtitle_says_demo_only_for_demo_data()
+    {
+        var empty = new JournalSrc(Array.Empty<JournalOperation>());
+        var real = new OverviewViewModel(new StartupSrc(), empty);
+        var demo = new OverviewViewModel(new StartupSrc(), empty, isDemo: true);
+
+        Assert.Equal("Демонстрационные данные", demo.Subtitle);
+        Assert.StartsWith("Состояние системы по реальным данным", real.Subtitle);
+    }
+}
+
+public class NavigationTests
+{
+    static MainViewModel Create() => new(CompositionRoot.CreateDemo(new FakeDialogs()));
+
+    [Fact]
+    public void Menu_has_only_release_0_1_sections_in_order()
+    {
+        var vm = Create();
+
+        Assert.Equal(
+            new[] { "Обзор", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат" },
+            vm.NavItems.Select(n => n.Title).ToArray());
+        Assert.Equal(MainViewModel.ReleaseSections, vm.NavItems.Select(n => n.Title).ToArray());
+    }
+
+    [Fact]
+    public void Hidden_sections_stay_in_code_and_group_header_is_shown_once()
+    {
+        var vm = Create();
+
+        Assert.Contains(vm.AllNavItems, n => n.Title == "Инвентарь");
+        Assert.DoesNotContain(vm.NavItems, n => n.Group == "Программы");
+        Assert.Equal(new[] { "Режимы" }, vm.NavItems.Where(n => n.GroupStart).Select(n => n.Title).ToArray());
+        vm.Open("Инвентарь");
+        Assert.Equal("Обзор", vm.SelectedNav!.Title);
+        vm.Open("Журнал и откат");
+        Assert.Equal("Журнал и откат", vm.SelectedNav!.Title);
+    }
+
+    [Fact]
+    public async Task Demo_overview_has_six_tiles_data_and_demo_subtitle()
+    {
+        var vm = Create();
+        var overview = Assert.IsType<OverviewViewModel>(vm.Current);
+        await overview.Loaded;
+
+        Assert.Equal("Демонстрационные данные", overview.Subtitle);
+        foreach (var text in new[] { overview.StartupText, overview.ServicesText, overview.TasksText, overview.TweaksText, overview.ModeText, overview.JournalText })
+            Assert.NotEqual("—", text);
+    }
+
+    [Fact]
+    public async Task Selected_sort_survives_reload()
+    {
+        var vm = new StartupViewModel(new StartupSrc());
+        await vm.Loaded;
+        var second = vm.SortOptions[1];
+
+        vm.SelectedSort = second;
+        await vm.ReloadAsync();
+
+        Assert.Same(second, vm.SelectedSort);
     }
 }

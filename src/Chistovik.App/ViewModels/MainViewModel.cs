@@ -22,6 +22,15 @@ public sealed class NavItem
 
 public sealed class MainViewModel : ObservableObject, INavigator
 {
+    /// <summary>
+    /// Разделы, доступные в этом релизе (0.1). Единственное место, где решается, что видно в боковом меню:
+    /// чтобы вернуть раздел 0.2+, добавьте его заголовок сюда. Код и экраны скрытых разделов остаются в сборке.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ReleaseSections = new[]
+    {
+        "Обзор", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат",
+    };
+
     private NavItem? _selectedNav;
     private PageViewModel? _current;
 
@@ -32,11 +41,10 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
-            ("Обзор", "", () => new OverviewViewModel(s.Programs, s.Startup, s.Journal, s.Changes.Agent, s.Services, s.Tasks)),
+            ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo)),
             ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),
-            ("Журнал и откат", "Программы", () => new JournalViewModel(s.Journal, s.Changes, s.Dialogs, this)),
             ("Карантин", "Программы", () => Ph("Карантин", "Удалённое ждёт здесь. Срок виден на каждой операции.")),
             ("Очистка диска", "Программы", () => Ph("Очистка диска", "Временные файлы и кэш. Только вручную.")),
             ("Режимы", "Система", () => new ModesViewModel(s.Tweaks, s.PowerCatalog, s.Changes, s.Dialogs, this)),
@@ -47,6 +55,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
             ("Твики", "Система", () => new TweaksViewModel("Твики реестра",
                 "Проверенные настройки Windows. Текущее значение читается из реестра; применение идёт через агента с записью в журнал.",
                 "tw", s.Tweaks, s.TweakState, s.Changes, s.Dialogs, s.Effects, this)),
+            ("Журнал и откат", "Система", () => new JournalViewModel(s.Journal, s.Changes, s.Dialogs, this)),
             ("Эффекты", "Система", () => new TweaksViewModel("Эффекты",
                 "Анимации, прозрачность и плавность. Применяются сразу, без перезагрузки, где это возможно.",
                 "fx", s.Tweaks, s.TweakState, s.Changes, s.Dialogs, s.Effects, this)),
@@ -56,18 +65,27 @@ public sealed class MainViewModel : ObservableObject, INavigator
             ("Настройки", "Служебное", () => Ph("Настройки", "Главные настройки, внешний вид и горячие клавиши.")),
         };
 
+        // Заголовок группы ставится у первого пункта группы среди тех, что видны в этом релизе.
+        var all = new List<NavItem>();
         var nav = new List<NavItem>();
         string prev = "\0";
         foreach (var (title, group, f) in items)
         {
+            all.Add(new NavItem(title, group, false, f));
+            if (!ReleaseSections.Contains(title)) continue;
             nav.Add(new NavItem(title, group, group != prev, f));
             prev = group;
         }
         NavItems = nav;
+        AllNavItems = all;
         SelectedNav = nav[0];
     }
 
+    /// <summary>Видимые в меню разделы этого релиза.</summary>
     public IReadOnlyList<NavItem> NavItems { get; }
+
+    /// <summary>Все разделы, включая скрытые 0.2+: для самопроверки и снимков.</summary>
+    public IReadOnlyList<NavItem> AllNavItems { get; }
 
     /// <summary>Данные демонстрационные (самопроверка, предпросмотр дизайна): на экране показывается пометка.</summary>
     public bool IsDemo { get; }

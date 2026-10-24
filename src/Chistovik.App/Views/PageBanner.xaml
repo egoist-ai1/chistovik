@@ -4,7 +4,7 @@
     <!-- Общая полоса экрана: режим просмотра, итог действия, состояние загрузки. DataContext — StatefulPageViewModel. -->
     <StackPanel>
         <Border Style="{StaticResource Card}" Padding="16,12" Margin="0,0,0,12"
-                Visibility="{Binding ViewOnly, Converter={StaticResource BoolToVis}}"
+                Visibility="{Binding ShowViewOnlyBanner, Converter={StaticResource BoolToVis}}"
                 AutomationProperties.Name="Режим просмотра">
             <Grid>
                 <Grid.ColumnDefinitions>

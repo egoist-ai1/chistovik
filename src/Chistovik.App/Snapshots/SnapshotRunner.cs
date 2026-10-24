@@ -71,7 +71,7 @@ internal static class SnapshotRunner
         var screen = SnapshotPlan.Screens.First(s => s.Id == first.Screen);
         var services = SnapshotServices.Create(first.State);
         var vm = new MainViewModel(services);
-        vm.SelectedNav = vm.NavItems.First(n => n.Title == screen.NavTitle);
+        vm.SelectedNav = vm.AllNavItems.First(n => n.Title == screen.NavTitle);
         var page = vm.Current ?? throw new InvalidOperationException("раздел не создан");
 
         var window = new MainWindow { DataContext = vm, SkipTransitions = true };

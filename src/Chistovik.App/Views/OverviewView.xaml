@@ -9,112 +9,129 @@
             <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Subtle}" Margin="0,6,0,24"/>
             <views:PageBanner/>
 
-            <Grid>
+            <Border Style="{StaticResource Card}" Padding="16,10" Margin="0,0,0,16" AutomationProperties.Name="Права">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding RightsTitle}" FontFamily="{DynamicResource FontDisplay}"
+                               FontWeight="ExtraBold" FontSize="{DynamicResource FsBase}"
+                               Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding RightsText}" Style="{StaticResource Subtle}"
+                               Margin="16,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                    <Button Grid.Column="2" Style="{StaticResource SecondaryButton}" Content="Запросить права"
+                            Command="{Binding RequestRightsCommand}" Margin="16,0,0,0" MinHeight="32" Padding="14,5"
+                            Visibility="{Binding ViewOnly, Converter={StaticResource BoolToVis}}"
+                            AutomationProperties.Name="Запросить права администратора снова"/>
+                </Grid>
+            </Border>
+
+            <Grid Margin="0,0,0,16">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="320"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="16"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" Style="{StaticResource Card}"
-                        AutomationProperties.Name="Права">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="16"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource Card}" AutomationProperties.Name="Автозагрузка">
                     <StackPanel>
-                        <TextBlock Text="Права" Style="{StaticResource CardLabel}" Margin="0,0,0,12"/>
-                        <TextBlock Text="{Binding RightsTitle}" FontFamily="{DynamicResource FontDisplay}"
-                                   FontWeight="ExtraBold" FontSize="{DynamicResource FsLg}"
-                                   Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding RightsText}" Style="{StaticResource Subtle}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                        <TextBlock Text="Автозагрузка" Style="{StaticResource CardLabel}"/>
+                        <TextBlock Text="{Binding StartupText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding StartupHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
-
-                <StackPanel Grid.Column="2">
-                    <UniformGrid Columns="3">
-                        <Border Style="{StaticResource Card}" Margin="0,0,8,8" AutomationProperties.Name="Программы">
-                            <StackPanel>
-                                <TextBlock Text="Программы" Style="{StaticResource CardLabel}"/>
-                                <TextBlock Text="{Binding ProgramsCount}" Style="{StaticResource BigNumber}" Margin="0,8,0,4"/>
-                                <TextBlock Text="{Binding ProgramsSize}" Style="{StaticResource Subtle}"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource Card}" Margin="0,0,8,8" AutomationProperties.Name="Автозагрузка">
-                            <StackPanel>
-                                <TextBlock Text="Автозагрузка" Style="{StaticResource CardLabel}"/>
-                                <TextBlock Text="{Binding StartupText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4"/>
-                                <TextBlock Text="{Binding StartupHint}" Style="{StaticResource Subtle}"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource Card}" Margin="0,0,8,8" AutomationProperties.Name="Службы">
-                            <StackPanel>
-                                <TextBlock Text="Службы" Style="{StaticResource CardLabel}"/>
-                                <TextBlock Text="{Binding ServicesText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4"/>
-                                <TextBlock Text="{Binding ServicesHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource Card}" Margin="0,0,8,8" AutomationProperties.Name="Задачи планировщика">
-                            <StackPanel>
-                                <TextBlock Text="Задачи планировщика" Style="{StaticResource CardLabel}"/>
-                                <TextBlock Text="{Binding TasksText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4"/>
-                                <TextBlock Text="{Binding TasksHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource Card}" Margin="0,0,8,8" AutomationProperties.Name="Операции">
-                            <StackPanel>
-                                <TextBlock Text="Операции" Style="{StaticResource CardLabel}"/>
-                                <TextBlock Text="{Binding JournalText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4"/>
-                                <TextBlock Text="{Binding JournalHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                    </UniformGrid>
-
-                    <Border Style="{StaticResource Card}" Margin="0,8,0,0" AutomationProperties.Name="Последние операции">
-                        <StackPanel>
-                            <TextBlock Text="Последние операции" Style="{StaticResource CardLabel}" Margin="0,0,0,12"/>
-                            <TextBlock Text="{Binding RecentEmptyText}" Style="{StaticResource Subtle}" TextWrapping="Wrap"
-                                       Visibility="{Binding HasRecent, Converter={StaticResource InvBoolToVis}}"/>
-                            <ItemsControl ItemsSource="{Binding RecentOperations}" Focusable="False"
-                                          Visibility="{Binding HasRecent, Converter={StaticResource BoolToVis}}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,0,0,8" AutomationProperties.Name="{Binding AutomationName}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding WhenText}" Style="{StaticResource Subtle}"/>
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="1" Text="{Binding StateText}" Style="{StaticResource Subtle}" VerticalAlignment="Center"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}" Margin="0,8,0,0" AutomationProperties.Name="Что учесть">
-                        <StackPanel>
-                            <TextBlock Text="Что учесть" Style="{StaticResource CardLabel}" Margin="0,0,0,12"/>
-                            <ItemsControl ItemsSource="{Binding Suggestions}" Focusable="False">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,0,0,10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Ellipse Width="8" Height="8" Fill="{DynamicResource AccentBrush}"
-                                                     Margin="0,7,12,0" VerticalAlignment="Top"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap"
-                                                       Foreground="{DynamicResource TextBrush}"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                <Border Grid.Column="2" Grid.Row="0" Style="{StaticResource Card}" AutomationProperties.Name="Службы">
+                    <StackPanel>
+                        <TextBlock Text="Службы" Style="{StaticResource CardLabel}"/>
+                        <TextBlock Text="{Binding ServicesText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding ServicesHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="4" Grid.Row="0" Style="{StaticResource Card}" AutomationProperties.Name="Задачи планировщика">
+                    <StackPanel>
+                        <TextBlock Text="Задачи планировщика" Style="{StaticResource CardLabel}"/>
+                        <TextBlock Text="{Binding TasksText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding TasksHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="0" Grid.Row="2" Style="{StaticResource Card}" AutomationProperties.Name="Твики">
+                    <StackPanel>
+                        <TextBlock Text="Твики" Style="{StaticResource CardLabel}"/>
+                        <TextBlock Text="{Binding TweaksText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding TweaksHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Grid.Row="2" Style="{StaticResource Card}" AutomationProperties.Name="Режим">
+                    <StackPanel>
+                        <TextBlock Text="Режим" Style="{StaticResource CardLabel}"/>
+                        <TextBlock Text="{Binding ModeText}" Style="{StaticResource BigNumber}" FontSize="26" Margin="0,16,0,6" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding ModeHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="4" Grid.Row="2" Style="{StaticResource Card}" AutomationProperties.Name="Операции">
+                    <StackPanel>
+                        <TextBlock Text="Операции" Style="{StaticResource CardLabel}"/>
+                        <TextBlock Text="{Binding JournalText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding JournalHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
             </Grid>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16" AutomationProperties.Name="Последние операции">
+                <StackPanel>
+                    <TextBlock Text="Последние операции" Style="{StaticResource CardLabel}" Margin="0,0,0,12"/>
+                    <TextBlock Text="{Binding RecentEmptyText}" Style="{StaticResource Subtle}" TextWrapping="Wrap"
+                               Visibility="{Binding HasRecent, Converter={StaticResource InvBoolToVis}}"/>
+                    <ItemsControl ItemsSource="{Binding RecentOperations}" Focusable="False"
+                                  Visibility="{Binding HasRecent, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,8" AutomationProperties.Name="{Binding AutomationName}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding WhenText}" Style="{StaticResource Subtle}"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding StateText}" Style="{StaticResource Subtle}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16" AutomationProperties.Name="Что учесть">
+                <StackPanel>
+                    <TextBlock Text="Что учесть" Style="{StaticResource CardLabel}" Margin="0,0,0,12"/>
+                    <ItemsControl ItemsSource="{Binding Suggestions}" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource AccentBrush}"
+                                             Margin="0,7,12,0" VerticalAlignment="Top"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextBrush}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -27,7 +27,7 @@ internal static class SelfTest
             });
         }
         catch (Exception ex) { failures++; Console.WriteLine($"FAIL ConflictsDialog: {ex.Message}"); }
-        foreach (var nav in vm.NavItems)
+        foreach (var nav in vm.AllNavItems)
         {
             try
             {

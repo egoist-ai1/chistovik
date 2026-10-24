@@ -1,6 +1,7 @@
 using Chistovik.App.Models;
 using Chistovik.App.Services;
 using Chistovik.App.Services.Agent;
+using Chistovik.App.Services.Changes;
 using Chistovik.Core.Catalog;
 using Chistovik.Core.Ports;
 
@@ -20,14 +21,11 @@ public sealed class OverviewViewModel : StatefulPageViewModel
 {
     private const string NoData = "нет данных";
 
-    private readonly IProgramsSource _programs;
     private readonly IStartupSource _startup;
     private readonly IJournalSource _journal;
     private readonly IServiceSource? _services;
     private readonly ITaskSource? _tasks;
     private readonly IAgentClient? _agent;
-    private string _programsCount = "—";
-    private string _programsSize = "";
     private string _startupText = "—";
     private string _startupHint = "";
     private string _servicesText = "—";
@@ -36,27 +34,40 @@ public sealed class OverviewViewModel : StatefulPageViewModel
     private string _tasksHint = "";
     private string _journalText = "—";
     private string _journalHint = "";
+    private string _modeText = "—";
+    private string _modeHint = "";
     private IReadOnlyList<RecentOperationRow> _recent = Array.Empty<RecentOperationRow>();
     private string _recentEmpty = "";
 
-    public OverviewViewModel(IProgramsSource programs, IStartupSource startup, IJournalSource journal, IAgentClient? agent = null,
-        IServiceSource? services = null, ITaskSource? tasks = null)
-        : base("Обзор", "Состояние системы по реальным данным. Чтение идёт без прав администратора.")
+    public OverviewViewModel(IStartupSource startup, IJournalSource journal, IChangeService? changes = null,
+        IServiceSource? services = null, ITaskSource? tasks = null, bool isDemo = false)
+        : base("Обзор", isDemo ? "Демонстрационные данные"
+            : "Состояние системы по реальным данным. Чтение идёт без прав администратора.", changes)
     {
-        _programs = programs;
         _startup = startup;
         _journal = journal;
         _services = services;
         _tasks = tasks;
-        _agent = agent;
+        var agent = _agent = changes?.Agent;
         if (agent is not null) agent.AccessChanged += (_, _) => Post(() => { OnPropertyChanged(nameof(RightsTitle)); OnPropertyChanged(nameof(RightsText)); });
         Loaded = ReloadAsync();
     }
 
     public Task Loaded { get; }
 
-    public string ProgramsCount { get => _programsCount; private set => SetProperty(ref _programsCount, value); }
-    public string ProgramsSize { get => _programsSize; private set => SetProperty(ref _programsSize, value); }
+    /// <summary>У обзора своя полоса прав сверху, общая полоса «режим просмотра» не нужна.</summary>
+    public override bool ShowViewOnlyBanner => false;
+
+    public string TweaksText { get; } = Fmt.Number(TweakCatalog.Shared.Tweaks.Count(t => t.Area == "tw"));
+    public string TweaksHint { get; } = TweaksHintText();
+    public string ModeText { get => _modeText; private set => SetProperty(ref _modeText, value); }
+    public string ModeHint { get => _modeHint; private set => SetProperty(ref _modeHint, value); }
+
+    private static string TweaksHintText()
+    {
+        var unverified = TweakCatalog.Shared.Tweaks.Count(t => t.Area == "tw" && !t.Verified);
+        return unverified > 0 ? $"не проверено: {unverified}" : "все проверены";
+    }
     public string StartupText { get => _startupText; private set => SetProperty(ref _startupText, value); }
     public string StartupHint { get => _startupHint; private set => SetProperty(ref _startupHint, value); }
     public string ServicesText { get => _servicesText; private set => SetProperty(ref _servicesText, value); }
@@ -78,12 +89,13 @@ public sealed class OverviewViewModel : StatefulPageViewModel
         _ => "Режим просмотра",
     };
 
+    /// <summary>Короткое пояснение для узкой полосы прав: одна строка.</summary>
     public string RightsText => _agent?.Access switch
     {
-        AgentAccess.Connected => "Агент работает с правами администратора, изменения применяются и пишутся в журнал.",
-        AgentAccess.ViewOnly => "Вы отказали в правах: всё можно смотреть, но нельзя менять. Запросить снова можно на любом экране изменений.",
-        AgentAccess.Lost => "Агент перестал отвечать. Следующее изменение подключится заново.",
-        _ => "Агент не запущен, права не запрашивались: просмотр работает без них. Окно UAC появится при первом изменении.",
+        AgentAccess.Connected => "Права администратора есть, изменения применяются и пишутся в журнал.",
+        AgentAccess.ViewOnly => "Права не выданы: смотреть можно, менять нельзя.",
+        AgentAccess.Lost => "Агент не отвечает, следующее изменение подключит его заново.",
+        _ => "Права не запрашивались, окно UAC появится при первом изменении.",
     };
 
     public IReadOnlyList<string> Suggestions { get; private set; } = Array.Empty<string>();
@@ -92,14 +104,13 @@ public sealed class OverviewViewModel : StatefulPageViewModel
     {
         var tips = new List<string>();
         await Task.WhenAll(
-            Guarded(LoadPrograms, ct, () => { ProgramsCount = NoData; ProgramsSize = "не удалось прочитать список программ"; }),
             Guarded(c => LoadStartup(tips, c), ct, () => { StartupText = NoData; StartupHint = "не удалось прочитать автозагрузку"; }),
             Guarded(LoadServices, ct, () => { ServicesText = NoData; ServicesHint = "не удалось прочитать службы"; }),
             Guarded(LoadTasks, ct, () => { TasksText = NoData; TasksHint = "не удалось прочитать планировщик"; }),
-            Guarded(LoadJournal, ct, () => { JournalText = NoData; JournalHint = "не удалось прочитать журнал"; RecentEmptyText = "Журнал не прочитан."; }));
+            Guarded(LoadJournal, ct, () => { JournalText = NoData; JournalHint = "не удалось прочитать журнал"; ModeText = NoData; ModeHint = "не удалось прочитать журнал"; RecentEmptyText = "Журнал не прочитан."; }));
         ct.ThrowIfCancellationRequested();
 
-        var unverified = TweakCatalog.Shared.Tweaks.Count(t => !t.Verified);
+        var unverified = TweakCatalog.Shared.Tweaks.Count(t => t.Area == "tw" && !t.Verified);
         if (unverified > 0) tips.Add($"Твиков с пометкой «не проверено»: {unverified}. Они ещё не проходили проверку в песочнице, применяйте осознанно.");
         tips.Add("Любое изменение попадает в журнал с шагами. Если что-то пошло не так, откатите его на экране «Журнал и откат».");
         Suggestions = tips;
@@ -113,15 +124,6 @@ public sealed class OverviewViewModel : StatefulPageViewModel
         try { await load(ct); }
         catch (OperationCanceledException) { throw; }
         catch (Exception) { onFail(); }
-    }
-
-    private async Task LoadPrograms(CancellationToken ct)
-    {
-        var p = await _programs.GetProgramsAsync();
-        ct.ThrowIfCancellationRequested();
-        ProgramsCount = Fmt.Number(p.Count);
-        var known = p.Sum(x => x.SizeBytes);
-        ProgramsSize = known > 0 ? "по данным реестра занимают " + Fmt.Size(known) : "размер в реестре не указан";
     }
 
     private async Task LoadStartup(List<string> tips, CancellationToken ct)
@@ -162,6 +164,10 @@ public sealed class OverviewViewModel : StatefulPageViewModel
         var reversible = j.Count(x => x.Reversible);
         JournalText = Fmt.Number(j.Count);
         JournalHint = j.Count == 0 ? "изменений ещё не было" : $"можно откатить: {reversible}";
+        var lastMode = j.Where(x => x.Kind == OperationKind.Mode).OrderByDescending(x => x.When).FirstOrDefault();
+        const string ModePrefix = "Режим: ";
+        ModeText = lastMode is null ? "не применялся" : lastMode.Title.StartsWith(ModePrefix, StringComparison.Ordinal) ? lastMode.Title[ModePrefix.Length..] : lastMode.Title;
+        ModeHint = lastMode is null ? "готовые наборы настроек" : Fmt.DateTimeText(lastMode.When);
         RecentOperations = j.Take(5).Select(x => new RecentOperationRow(x.Title, Fmt.DateTimeText(x.When), x.StatusText)).ToList();
         RecentEmptyText = j.Count == 0 ? "Изменений ещё не было: журнал появится после первого изменения." : "";
     }
