@@ -1,0 +1,90 @@
+<UserControl x:Class="Chistovik.App.Views.OverviewView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ctl="clr-namespace:Chistovik.App.Controls">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+        <StackPanel Margin="{DynamicResource PageMargin}">
+            <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}"
+                       AutomationProperties.HeadingLevel="Level1"/>
+            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Subtle}" Margin="0,6,0,24"/>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="320"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource Card}"
+                        AutomationProperties.Name="Порядок в системе">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="Порядок в системе" Style="{StaticResource CardLabel}"
+                                   HorizontalAlignment="Center" Margin="0,0,0,16"/>
+                        <Grid Width="200" Height="200">
+                            <ctl:RingGauge Value="{Binding Score}" Thickness="14"
+                                           TrackBrush="{DynamicResource Surface3Brush}"
+                                           ArcBrush="{DynamicResource AccentBrush}"
+                                           AutomationProperties.Name="Индикатор порядка в системе"/>
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock Text="{Binding ScoreText}" FontFamily="{DynamicResource FontDisplay}"
+                                           FontWeight="ExtraBold" FontSize="{DynamicResource FsHero}"
+                                           Foreground="{DynamicResource TextBrush}" HorizontalAlignment="Center"/>
+                                <TextBlock Text="из 100" Style="{StaticResource Subtle}" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Style="{StaticResource Subtle}" TextAlignment="Center" Margin="0,16,0,0"
+                                   Text="Оценка пересчитывается по автозагрузке и записям с неясным источником."/>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Column="2">
+                    <UniformGrid Columns="3">
+                        <Border Style="{StaticResource Card}" Margin="0,0,8,0" AutomationProperties.Name="Программы">
+                            <StackPanel>
+                                <TextBlock Text="Программы" Style="{StaticResource CardLabel}"/>
+                                <TextBlock Text="{Binding ProgramsCount}" Style="{StaticResource BigNumber}" Margin="0,8,0,4"/>
+                                <TextBlock Text="{Binding ProgramsSize}" Style="{StaticResource Subtle}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="8,0" AutomationProperties.Name="Автозагрузка">
+                            <StackPanel>
+                                <TextBlock Text="Автозагрузка" Style="{StaticResource CardLabel}"/>
+                                <TextBlock Text="{Binding StartupText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4"/>
+                                <TextBlock Text="{Binding StartupHint}" Style="{StaticResource Subtle}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="8,0,0,0" AutomationProperties.Name="Операции">
+                            <StackPanel>
+                                <TextBlock Text="Операции" Style="{StaticResource CardLabel}"/>
+                                <TextBlock Text="{Binding JournalText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4"/>
+                                <TextBlock Text="{Binding JournalHint}" Style="{StaticResource Subtle}"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <Border Style="{StaticResource Card}" Margin="0,16,0,0" AutomationProperties.Name="Что стоит улучшить">
+                        <StackPanel>
+                            <TextBlock Text="Что стоит улучшить" Style="{StaticResource CardLabel}" Margin="0,0,0,12"/>
+                            <ItemsControl ItemsSource="{Binding Suggestions}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse Width="8" Height="8" Fill="{DynamicResource AccentBrush}"
+                                                     Margin="0,7,12,0" VerticalAlignment="Top"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextBrush}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

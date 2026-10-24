@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: windows-latest
+          - arch: arm64
+            os: windows-11-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Chistovik.sln
+
+      - name: Build
+        run: dotnet build Chistovik.sln -c Release --no-restore
+
+      # Негативные тесты политики отдельным шагом: падение здесь блокирует всё остальное.
+      - name: Policy negative tests (gate)
+        run: dotnet test tests/Policy.Negative -c Release --no-build
+
+      - name: Unit tests
+        run: dotnet test tests/Core.Tests -c Release --no-build
+
+      - name: Native tests
+        run: dotnet test tests/Native.Tests -c Release --no-build
+
+      - name: Publish agent and app
+        run: |
+          dotnet publish src/Chistovik.Agent -c Release -o artifacts/${{ matrix.arch }}/agent --no-build
+          dotnet publish src/Chistovik.App -c Release -o artifacts/${{ matrix.arch }}/app --no-build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chistovik-${{ matrix.arch }}
+          path: artifacts/${{ matrix.arch }}
+          retention-days: 7

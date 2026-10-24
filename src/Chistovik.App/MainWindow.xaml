@@ -1,0 +1,89 @@
+<Window x:Class="Chistovik.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Chistovik.App.ViewModels"
+        xmlns:views="clr-namespace:Chistovik.App.Views"
+        Title="Чистовик" Width="1320" Height="820" MinWidth="1080" MinHeight="680"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+        FontFamily="{DynamicResource FontText}" FontSize="{DynamicResource FsBase}"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:OverviewViewModel}"><views:OverviewView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ProgramsViewModel}"><views:ProgramsView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:StartupViewModel}"><views:StartupView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:JournalViewModel}"><views:JournalView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PlaceholderViewModel}"><views:PlaceholderView/></DataTemplate>
+
+        <Style x:Key="GroupHeader" TargetType="TextBlock">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="{DynamicResource FsXs}"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Margin" Value="22,18,0,6"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding GroupStart}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="NavItemContainer" TargetType="ListBoxItem" BasedOn="{StaticResource NavItemStyle}">
+            <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
+        </Style>
+
+        <DataTemplate x:Key="NavTemplate">
+            <StackPanel>
+                <TextBlock Text="{Binding Group}" Style="{StaticResource GroupHeader}"/>
+                <Border x:Name="Row" Margin="10,1" Padding="12,9" CornerRadius="{DynamicResource RadiusMd}"
+                        Background="Transparent">
+                    <TextBlock x:Name="Label" Text="{Binding Title}" Foreground="{DynamicResource TextBrush}"/>
+                </Border>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource Surface2Brush}"/>
+                </Trigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentTintBrush}"/>
+                    <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                    <Setter TargetName="Label" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="264"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,1,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal" Margin="24,26,0,10">
+                    <Ellipse Width="12" Height="12" Fill="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text="Чистовик" Margin="12,0,0,0" FontFamily="{DynamicResource FontDisplay}"
+                               FontWeight="ExtraBold" FontSize="{DynamicResource FsLg}"
+                               Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <ListBox Grid.Row="1" Style="{StaticResource PlainList}" ItemsSource="{Binding NavItems}"
+                         SelectedItem="{Binding SelectedNav, Mode=TwoWay}"
+                         ItemTemplate="{StaticResource NavTemplate}"
+                         ItemContainerStyle="{StaticResource NavItemContainer}"
+                         AutomationProperties.Name="Разделы" Margin="0,0,0,12"/>
+            </Grid>
+        </Border>
+
+        <ContentControl x:Name="ContentHost" Grid.Column="1" Content="{Binding Current}"
+                        IsTabStop="False" RenderTransformOrigin="0.5,0.5">
+            <ContentControl.RenderTransform>
+                <TranslateTransform x:Name="HostShift"/>
+            </ContentControl.RenderTransform>
+        </ContentControl>
+    </Grid>
+</Window>

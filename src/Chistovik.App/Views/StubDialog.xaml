@@ -1,0 +1,15 @@
+<Window x:Class="Chistovik.App.Views.StubDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="460" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+        FontFamily="{DynamicResource FontText}" FontSize="{DynamicResource FsBase}">
+    <StackPanel Margin="28">
+        <TextBlock x:Name="TitleText" Style="{StaticResource PageTitle}" FontSize="{DynamicResource FsLg}"
+                   AutomationProperties.HeadingLevel="Level1"/>
+        <TextBlock x:Name="MessageText" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap" Margin="0,12,0,24"/>
+        <Button Style="{StaticResource PrimaryButton}" Content="Понятно" IsDefault="True" IsCancel="True"
+                HorizontalAlignment="Right" Click="OnClose" AutomationProperties.Name="Закрыть окно"/>
+    </StackPanel>
+</Window>
