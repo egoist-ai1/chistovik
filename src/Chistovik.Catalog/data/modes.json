@@ -1,0 +1,92 @@
+[
+  {
+    "id": "balance",
+    "name": "Сбалансированный",
+    "tag": "по умолчанию",
+    "description": "Стандартное поведение Windows.",
+    "powerPlan": "bal",
+    "requiresAdmin": false,
+    "tweaks": {
+      "transp": false,
+      "taskanim": false,
+      "minanim": false,
+      "listshadow": false,
+      "dragfull": false
+    }
+  },
+  {
+    "id": "work",
+    "name": "Работа",
+    "tag": "без отвлечений",
+    "description": "Расширения файлов, чистая автозагрузка, анимации в меру.",
+    "powerPlan": "bal",
+    "requiresAdmin": false,
+    "tweaks": {
+      "ext": true,
+      "hidden": true,
+      "thispc": true,
+      "seconds": true,
+      "adid": true,
+      "startsug": true
+    }
+  },
+  {
+    "id": "game",
+    "name": "Игровой",
+    "tag": "максимум кадров",
+    "description": "Высокая производительность, игровой режим, без фоновой записи и лишних программ.",
+    "powerPlan": "high",
+    "requiresAdmin": false,
+    "tweaks": {
+      "gamemode": true,
+      "gamedvr": true,
+      "appcapture": true,
+      "mouseacc": true,
+      "transp": true,
+      "taskanim": true,
+      "minanim": true
+    }
+  },
+  {
+    "id": "quiet",
+    "name": "Тихий",
+    "tag": "ночь и презентации",
+    "description": "Экономный план, меньше нагрев и шум, без лишней фоновой активности.",
+    "powerPlan": "saver",
+    "requiresAdmin": false,
+    "tweaks": {
+      "transp": true,
+      "taskanim": true
+    }
+  },
+  {
+    "id": "saver",
+    "name": "Экономия батареи",
+    "tag": "в дороге",
+    "description": "Экономия энергии, минимум анимаций и фоновых программ.",
+    "powerPlan": "saver",
+    "requiresAdmin": false,
+    "tweaks": {
+      "transp": true,
+      "taskanim": true,
+      "minanim": true,
+      "listshadow": true
+    }
+  },
+  {
+    "id": "max",
+    "name": "Максимум",
+    "tag": "нужны права",
+    "description": "План «Максимальная производительность», без лишних служб и телеметрии.",
+    "powerPlan": "ult",
+    "requiresAdmin": true,
+    "tweaks": {
+      "gamemode": true,
+      "mouseacc": true,
+      "transp": true,
+      "taskanim": true,
+      "minanim": true,
+      "telemetry": true
+    }
+  }
+]
