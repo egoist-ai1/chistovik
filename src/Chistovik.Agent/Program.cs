@@ -48,7 +48,9 @@ public static class Program
         }
 
         var expected = new ExpectedClient(parentPid, appPath, hash, ClientProbe.CurrentSession(), userSid.Value);
-        var server = new AgentPipeServer(pipe, userSid, expected, new RequestDispatcher(composition.Handler), TimeSpan.FromMinutes(5));
+        // Причина отказа клиенту (client-rejected:pid и т. п.) идёт в stderr: только фиксированное слово, без путей и SID.
+        var server = new AgentPipeServer(pipe, userSid, expected, new RequestDispatcher(composition.Handler), TimeSpan.FromMinutes(5),
+            msg => Console.Error.WriteLine("[agent] " + msg));
         var served = await server.RunAsync(CancellationToken.None);
         return served ? ExitOk : ExitIdle;
     }

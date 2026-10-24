@@ -84,6 +84,42 @@ public class AgentPipeTests
         Assert.True(server.RejectedClients >= 1);
     }
 
+    [Theory]
+    [InlineData("hash", "image-hash")]
+    [InlineData("path", "image-path")]
+    [InlineData("pid", "pid")]
+    [InlineData("user", "user")]
+    public async Task Rejection_reason_is_reported_to_the_log_callback(string what, string reason)
+    {
+        var expected = ExpectSelf(e => what switch
+        {
+            "hash" => e with { ImageSha256 = new string('0', 64) },
+            "path" => e with { ImagePath = @"C:\Windows\System32\notepad.exe" },
+            "pid" => e with { Pid = Environment.ProcessId + 100000 },
+            _ => e with { UserSid = "S-1-5-18" },
+        });
+        var lines = new List<string>();
+        var name = NewPipeName();
+        var server = new AgentPipeServer(name, Me, expected, new RequestDispatcher(), TimeSpan.FromSeconds(3),
+            m => { lock (lines) lines.Add(m); });
+        var run = server.RunAsync(CancellationToken.None);
+
+        await using (var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous))
+        {
+            await client.ConnectAsync(5000);
+            try
+            {
+                await FrameCodec.WriteAsync(client, AgentJson.Serialize(new PingRequest { Id = Guid.NewGuid() }));
+                await FrameCodec.ReadAsync(client);
+            }
+            catch (IOException) { }
+        }
+
+        Assert.False(await run.WaitAsync(TimeSpan.FromSeconds(15)));
+        // Строка ровно такая, какую ждёт стенд S7 (WaitReject).
+        lock (lines) Assert.Contains("client-rejected:" + reason, lines);
+    }
+
     [Fact]
     public async Task Oversized_first_frame_is_dropped_before_verification()
     {
