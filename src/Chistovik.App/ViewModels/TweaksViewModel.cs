@@ -87,6 +87,7 @@ public sealed class TweaksViewModel : StatefulPageViewModel
         _catalog = catalog;
         _state = state;
         _dialogs = dialogs;
+        UndoDialogs = dialogs;
         _effects = effects;
         ApplyCommand = new RelayCommand(() => LastApply = ApplyAsync(), () => CanApply && PendingCount > 0);
         DiscardCommand = new RelayCommand(Discard, () => PendingCount > 0);

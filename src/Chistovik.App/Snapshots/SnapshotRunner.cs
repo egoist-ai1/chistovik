@@ -74,7 +74,7 @@ internal static class SnapshotRunner
         vm.SelectedNav = vm.AllNavItems.First(n => n.Title == screen.NavTitle);
         var page = vm.Current ?? throw new InvalidOperationException("раздел не создан");
 
-        var window = new MainWindow { DataContext = vm, SkipTransitions = true };
+        var window = new MainWindow { DataContext = vm, SkipTransitions = true, KeepBounds = true };
         Prepare(window, first.Width, first.Height);
         try
         {

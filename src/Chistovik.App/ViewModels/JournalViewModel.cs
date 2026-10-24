@@ -130,7 +130,7 @@ public sealed class JournalViewModel : StatefulPageViewModel
         try
         {
             var outcome = await _undo.RunAsync(op.Model.Id);
-            ShowOutcome(outcome);
+            ShowOutcome(outcome, undoable: false);
             if (outcome.Changed) await ReloadAsync();
         }
         finally { IsBusy = false; }

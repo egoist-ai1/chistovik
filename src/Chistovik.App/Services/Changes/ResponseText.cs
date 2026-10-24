@@ -45,6 +45,8 @@ public static class ResponseText
                 return Make(OutcomeKind.Denied, "Запрос отклонён проверкой." + Tail(r.Message));
             case ResponseCodes.Busy:
                 return Make(OutcomeKind.Unavailable, "Агент занят другой операцией. Повторите через несколько секунд.");
+            case ResponseCodes.Internal:
+                return Make(OutcomeKind.Unavailable, "Агент столкнулся с внутренней ошибкой. Проверьте журнал, прежде чем повторять." + Tail(r.Message));
             case ResponseCodes.JournalUnavailable:
                 return Make(OutcomeKind.Unavailable, "Журнал недоступен, поэтому изменения не выполнены.");
             case ResponseCodes.JournalUntrusted:
@@ -65,7 +67,13 @@ public static class ResponseText
         }
     }
 
-    static string Tail(string? message) => string.IsNullOrWhiteSpace(message) ? "" : " " + message.Trim();
+    /// <summary>Хвост сообщения агента; если сообщение — известный код причины, он переводится на русский.</summary>
+    static string Tail(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return "";
+        var m = message.Trim();
+        return " " + (Models.ReasonTexts.IsKnown(m) ? Models.ReasonTexts.Explain(m) : m);
+    }
 
     /// <summary>Done и пропущенные «уже так» считаются выполненными; Failed/Denied/Pending/Undone нет.</summary>
     static (int Done, int Total) Count(IReadOnlyList<StepResult>? steps)
@@ -135,6 +143,7 @@ public static class ResponseText
         "recovered-not-applied" => "восстановлено после сбоя: не применялось",
         "already-reverted" => "уже возвращено",
         _ when code.StartsWith("win32:", StringComparison.Ordinal) => "ошибка Windows " + code[6..],
+        _ when Models.ReasonTexts.IsKnown(code) => Models.ReasonTexts.Explain(code),
         _ => code,
     };
 

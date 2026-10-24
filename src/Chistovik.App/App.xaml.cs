@@ -10,6 +10,10 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Анимации и контраст по настройкам Windows: до создания окон, чтобы шаблоны взяли нужные токены.
+        Motion.Apply(this);
+        Motion.Watch(this);
+
         // Снимки экранов: окна не показываются и не берут фокус, реальная система не читается.
         if (!Snapshots.SnapshotPlan.TryParseArgs(e.Args, out var snapshots, out var snapshotDir, out var snapshotError))
         {
@@ -27,6 +31,7 @@ public partial class App : Application
         // Демонстрационные данные только для самопроверки и предпросмотра дизайна (--demo).
         // Обычный запуск читает реальную систему; агент стартует лишь при первом изменении.
         var selfTest = e.Args.Contains("--selftest");
+        if (selfTest) Services.Motion.ForceOff = true;
         var demo = selfTest || e.Args.Contains("--demo");
         var dialogs = new WpfDialogService();
         var services = demo ? CompositionRoot.CreateDemo(dialogs) : CompositionRoot.CreateReal(dialogs);
@@ -52,6 +57,7 @@ public partial class App : Application
         try
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Services.Motion.ForceOff = true;
             var logFile = System.IO.Path.Combine(directory, "snapshots.log");
             System.IO.Directory.CreateDirectory(directory);
             System.IO.File.WriteAllText(logFile, "");

@@ -33,6 +33,9 @@ public sealed class AppServices
 
     /// <summary>true — данные демонстрационные (самопроверка и предпросмотр дизайна), на экране об этом написано.</summary>
     public bool IsDemo { get; init; }
+
+    /// <summary>Размер и позиция окна, последний раздел, флаг приветствия. По умолчанию без диска.</summary>
+    public IUiSettingsStore UiSettings { get; init; } = new MemoryUiSettingsStore();
 }
 
 public static class CompositionRoot
@@ -77,6 +80,7 @@ public static class CompositionRoot
             Dialogs = dialogs,
             Tweaks = tweaks,
             PowerCatalog = power,
+            UiSettings = new FileUiSettingsStore(FileUiSettingsStore.DefaultPath),
         };
     }
 

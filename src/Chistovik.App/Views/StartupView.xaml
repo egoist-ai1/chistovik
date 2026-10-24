@@ -26,15 +26,11 @@
 
         <StackPanel Grid.Row="2" Margin="0,0,0,12" Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
             <TextBlock Text="{Binding SummaryText}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10"/>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="340"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBox Style="{StaticResource SearchBox}" Tag="Поиск по имени или команде"
+            <WrapPanel Margin="0,0,0,4">
+<TextBox Style="{StaticResource SearchBox}" Width="320" Margin="0,0,12,8" Tag="Поиск по имени или команде"
                          Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
                          AutomationProperties.Name="Поиск в автозагрузке"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+<WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <ComboBox ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SelectedSort, Mode=TwoWay}"
                               DisplayMemberPath="Label" MinWidth="170" Margin="0,0,8,0" VerticalAlignment="Center"
                               AutomationProperties.Name="Сортировка автозагрузки"/>
@@ -47,8 +43,8 @@
                     <Button Style="{StaticResource SecondaryButton}" Content="Только чтение"
                             Command="{Binding FilterCommand}" CommandParameter="ro"
                             AutomationProperties.Name="Показать только для чтения"/>
-                </StackPanel>
-            </Grid>
+                </WrapPanel>
+</WrapPanel>
             <TextBlock Text="{Binding StatusText}" Style="{StaticResource Subtle}" Margin="4,8,0,0"/>
         </StackPanel>
 

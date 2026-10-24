@@ -81,6 +81,8 @@ internal static class SnapshotServices
         var baseSet = CompositionRoot.CreateDemo(new SilentDialogs());
         switch (state)
         {
+            case SnapshotState.Welcome:
+                return With(baseSet, ui: new MemoryUiSettingsStore(new UiSettings()));
             case SnapshotState.Empty:
             {
                 var e = new EmptySources();
@@ -106,7 +108,7 @@ internal static class SnapshotServices
     private static AppServices With(AppServices s,
         IProgramsSource? programs = null, IStartupSource? startup = null, IJournalSource? journal = null,
         IServiceSource? services = null, ITaskSource? tasks = null, ITweakStateSource? tweakState = null,
-        IPowerSource? power = null, IChangeService? changes = null) => new()
+        IPowerSource? power = null, IChangeService? changes = null, IUiSettingsStore? ui = null) => new()
     {
         Programs = programs ?? s.Programs,
         Startup = startup ?? s.Startup,
@@ -120,6 +122,7 @@ internal static class SnapshotServices
         Dialogs = s.Dialogs,
         Tweaks = s.Tweaks,
         PowerCatalog = s.PowerCatalog,
+        UiSettings = ui ?? s.UiSettings,
         IsDemo = true,
     };
 }

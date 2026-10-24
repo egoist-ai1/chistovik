@@ -65,6 +65,7 @@ public sealed class ServicesViewModel : ListPageViewModel<ServiceRowViewModel>
     {
         _source = source;
         _dialogs = dialogs;
+        UndoDialogs = dialogs;
         SetStartCommand = new RelayCommand(p => LastAction = SetStartAsync(p as string ?? ""), p => CanChangeSelected);
         Loaded = ReloadAsync();
     }
@@ -217,6 +218,7 @@ public sealed class TasksViewModel : ListPageViewModel<TaskRowViewModel>
     {
         _source = source;
         _dialogs = dialogs;
+        UndoDialogs = dialogs;
         SetEnabledCommand = new RelayCommand(p => LastAction = SetEnabledAsync(string.Equals(p as string, "on", StringComparison.Ordinal)), p => CanChangeSelected);
         Loaded = ReloadAsync();
     }

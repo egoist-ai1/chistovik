@@ -1,5 +1,6 @@
 using Chistovik.App.Mvvm;
 using Chistovik.App.Services;
+using Chistovik.App.Services.Agent;
 
 namespace Chistovik.App.ViewModels;
 
@@ -33,15 +34,28 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
     private NavItem? _selectedNav;
     private PageViewModel? _current;
+    private readonly IAgentClient _agent;
+    private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
 
     public MainViewModel(AppServices s)
     {
         IsDemo = s.IsDemo;
+        UiStore = s.UiSettings;
+        _agent = s.Changes.Agent;
+        _agent.AccessChanged += (_, _) => Post(() =>
+        {
+            OnPropertyChanged(nameof(AgentStatusText));
+            OnPropertyChanged(nameof(AgentStatusDetail));
+            OnPropertyChanged(nameof(AgentStatusGlyph));
+            OnPropertyChanged(nameof(AgentStatusKind));
+        });
+        ReloadCurrentCommand = new RelayCommand(() => (Current as StatefulPageViewModel)?.ReloadCommand.Execute(null));
+        OpenByIndexCommand = new RelayCommand(OpenByIndex);
         PageViewModel Ph(string t, string d) => new PlaceholderViewModel(t, d);
 
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
-            ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo)),
+            ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings)),
             ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),
@@ -49,7 +63,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
             ("Очистка диска", "Программы", () => Ph("Очистка диска", "Временные файлы и кэш. Только вручную.")),
             ("Режимы", "Система", () => new ModesViewModel(s.Tweaks, s.PowerCatalog, s.Changes, s.Dialogs, this)),
             ("Питание", "Система", () => new PowerViewModel(s.PowerCatalog, s.Power, s.Changes, s.Dialogs, this)),
-            ("Автозагрузка", "Система", () => new StartupViewModel(s.Startup, s.Changes, this)),
+            ("Автозагрузка", "Система", () => new StartupViewModel(s.Startup, s.Changes, this, s.Dialogs)),
             ("Службы", "Система", () => new ServicesViewModel(s.Services, s.Changes, s.Dialogs, this)),
             ("Задачи", "Система", () => new TasksViewModel(s.Tasks, s.Changes, s.Dialogs, this)),
             ("Твики", "Система", () => new TweaksViewModel("Твики реестра",
@@ -78,8 +92,65 @@ public sealed class MainViewModel : ObservableObject, INavigator
         }
         NavItems = nav;
         AllNavItems = all;
-        SelectedNav = nav[0];
+        var last = UiStore.Load().LastSection;
+        SelectedNav = nav.FirstOrDefault(n => n.Title == last) ?? nav[0];
     }
+
+    /// <summary>Файл ui.json (или память в демонстрации и снимках).</summary>
+    public IUiSettingsStore UiStore { get; }
+
+    /// <summary>F5: перечитать текущий раздел.</summary>
+    public RelayCommand ReloadCurrentCommand { get; }
+
+    /// <summary>Ctrl+1…8: открыть раздел по номеру в меню (параметр — строка с номером).</summary>
+    public RelayCommand OpenByIndexCommand { get; }
+
+    private void OpenByIndex(object? p)
+    {
+        var items = NavItems;
+        if (p is string t && int.TryParse(t, out var i) && i >= 1 && i <= items.Count) SelectedNav = items[i - 1];
+    }
+
+    private void Post(Action a)
+    {
+        if (_ui is null || SynchronizationContext.Current == _ui) a();
+        else _ui.Post(_ => a(), null);
+    }
+
+    // ----- строка состояния агента: слово, значок-форма и пояснение -----
+
+    public string AgentStatusText => _agent.Access switch
+    {
+        AgentAccess.Connected => "Агент запущен",
+        AgentAccess.ViewOnly => "Только просмотр",
+        AgentAccess.Lost => "Связь с агентом потеряна",
+        _ => "Агент не запущен",
+    };
+
+    public string AgentStatusDetail => _agent.Access switch
+    {
+        AgentAccess.Connected => "Права администратора есть, изменения применяются и пишутся в журнал.",
+        AgentAccess.ViewOnly => "Права не выданы: смотреть можно, менять нельзя.",
+        AgentAccess.Lost => "Следующее изменение подключит агента заново.",
+        _ => "Запустится при первом изменении: Windows покажет окно UAC.",
+    };
+
+    /// <summary>Значок Segoe MDL2: у каждого состояния своя форма, а не только цвет.</summary>
+    public string AgentStatusGlyph => _agent.Access switch
+    {
+        AgentAccess.Connected => "\uE73E",
+        AgentAccess.ViewOnly => "\uE7B3",
+        AgentAccess.Lost => "\uE7BA",
+        _ => "\uE946",
+    };
+
+    /// <summary>ok / warn / info: цвет значка.</summary>
+    public string AgentStatusKind => _agent.Access switch
+    {
+        AgentAccess.Connected => "ok",
+        AgentAccess.Lost => "warn",
+        _ => "info",
+    };
 
     /// <summary>Видимые в меню разделы этого релиза.</summary>
     public IReadOnlyList<NavItem> NavItems { get; }
@@ -104,8 +175,11 @@ public sealed class MainViewModel : ObservableObject, INavigator
         {
             if (value is null || !SetProperty(ref _selectedNav, value)) return;
             Current = value.Cached ??= value.Factory();
+            OnPropertyChanged(nameof(SelectedTitle));
         }
     }
+
+    public string SelectedTitle => _selectedNav?.Title ?? "";
 
     public PageViewModel? Current
     {

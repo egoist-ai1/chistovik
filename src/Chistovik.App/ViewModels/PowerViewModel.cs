@@ -127,6 +127,7 @@ public sealed class PowerViewModel : StatefulPageViewModel
         _catalog = catalog;
         _source = source;
         _dialogs = dialogs;
+        UndoDialogs = dialogs;
         Loaded = ReloadAsync();
     }
 

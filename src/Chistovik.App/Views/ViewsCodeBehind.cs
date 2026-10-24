@@ -36,6 +36,8 @@ public partial class StubDialog : Window
     public StubDialog(string title, string message)
     {
         InitializeComponent();
+        WindowStyling.UseDarkTitleBar(this);
+        WindowStyling.UseAppIcon(this);
         Title = title;
         TitleText.Text = title;
         MessageText.Text = message;
@@ -47,21 +49,55 @@ public partial class StubDialog : Window
 /// <summary>Подтверждение изменения: что изменится и откуда вернуть. Результат — DialogResult.</summary>
 public partial class ConfirmDialog : Window
 {
+    private const string RollbackMarker = "Откуда вернуть:";
+    private const string ChangesHeading = "Что изменится:";
+
     public ConfirmDialog(ConfirmContent content)
     {
         InitializeComponent();
+        WindowStyling.UseDarkTitleBar(this);
+        WindowStyling.UseAppIcon(this);
         Title = content.Title;
         TitleText.Text = content.Title;
-        MessageText.Text = content.Message;
+        var (what, rollback) = Split(content.Message);
+        MessageText.Text = what;
+        if (rollback.Length > 0)
+        {
+            RollbackText.Text = rollback;
+            RollbackBox.Visibility = Visibility.Visible;
+        }
         OkButton.Content = content.ConfirmText;
         OkButton.SetResourceReference(StyleProperty, content.Danger ? "DangerButton" : "PrimaryButton");
         OkButton.SetValue(System.Windows.Automation.AutomationProperties.NameProperty, content.ConfirmText + ": " + content.Title);
-        // Для опасных действий по умолчанию стоит «Отмена»: случайный Enter ничего не меняет.
         if (content.Danger)
         {
+            // Для опасных действий по умолчанию стоит «Отмена»: случайный Enter ничего не меняет.
             OkButton.IsDefault = false;
             CancelButton.IsDefault = true;
+            KindText.Text = "Изменение системы";
+            Badge.SetResourceReference(Border.BackgroundProperty, "WarnTintBrush");
+            BadgeGlyph.Text = "\uE7BA";
+            BadgeGlyph.SetResourceReference(TextBlock.ForegroundProperty, "WarnBrush");
         }
+        Loaded += (_, _) => WindowStyling.FadeIn(Root);
+    }
+
+    /// <summary>
+    /// Делит текст на «что произойдёт» и «как вернуть»: всё после «Откуда вернуть:» уходит в отдельную панель.
+    /// Заголовок «Что изменится:» в начале убирается, он уже есть в подписи раздела.
+    /// </summary>
+    internal static (string What, string Rollback) Split(string message)
+    {
+        var text = message.Trim();
+        var rollback = "";
+        var i = text.IndexOf(RollbackMarker, StringComparison.Ordinal);
+        if (i >= 0)
+        {
+            rollback = text[(i + RollbackMarker.Length)..].Trim();
+            text = text[..i].TrimEnd();
+        }
+        if (text.StartsWith(ChangesHeading, StringComparison.Ordinal)) text = text[ChangesHeading.Length..].TrimStart();
+        return (text, rollback);
     }
 
     private void OnOk(object sender, RoutedEventArgs e) => DialogResult = true;
@@ -110,6 +146,8 @@ public partial class ConflictsDialog : Window
     public ConflictsDialog(IReadOnlyList<ConflictInfo> conflicts)
     {
         InitializeComponent();
+        WindowStyling.UseDarkTitleBar(this);
+        WindowStyling.UseAppIcon(this);
         _rows = conflicts.Select(c => new ConflictRowViewModel(c)).ToList();
         Rows.ItemsSource = _rows;
     }

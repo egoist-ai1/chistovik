@@ -29,9 +29,9 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="1.5*"/>
             <ColumnDefinition Width="16"/>
-            <ColumnDefinition Width="380"/>
+            <ColumnDefinition Width="*" MinWidth="260" MaxWidth="380"/>
         </Grid.ColumnDefinitions>
 
         <StackPanel Grid.ColumnSpan="3">
@@ -42,16 +42,12 @@
 
         <views:PageBanner Grid.Row="1" Grid.ColumnSpan="3"/>
 
-        <Grid Grid.Row="2" Grid.ColumnSpan="3" Margin="0,0,0,12"
+        <WrapPanel Grid.Row="2" Grid.ColumnSpan="3" Margin="0,0,0,4"
               Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="340"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBox Style="{StaticResource SearchBox}" Tag="Поиск по имени или пути"
+<TextBox Style="{StaticResource SearchBox}" Width="320" Margin="0,0,12,8" Tag="Поиск по имени или пути"
                      Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
                      AutomationProperties.Name="Поиск задач"/>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+<WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <ComboBox ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SelectedSort, Mode=TwoWay}"
                           DisplayMemberPath="Label" MinWidth="170" Margin="0,0,8,0" VerticalAlignment="Center"
                           AutomationProperties.Name="Сортировка списка задач"/>
@@ -64,8 +60,8 @@
                 <Button Style="{StaticResource SecondaryButton}" Content="Только чтение"
                         Command="{Binding FilterCommand}" CommandParameter="ro"
                         AutomationProperties.Name="Показать только для чтения"/>
-            </StackPanel>
-        </Grid>
+            </WrapPanel>
+</WrapPanel>
 
         <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0"
                 Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
@@ -80,8 +76,7 @@
                         <Grid MinHeight="56" Margin="0,2">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="110"/>
-                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
                                 <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextBrush}"
@@ -90,11 +85,13 @@
                                            Foreground="{DynamicResource TextMutedBrush}" FontSize="{DynamicResource FsXs}"
                                            TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
-                            <TextBlock Grid.Column="1" Text="{Binding EnabledText}" Style="{StaticResource Subtle}"
-                                       VerticalAlignment="Center"/>
-                            <Border Grid.Column="2" Style="{StaticResource ClassPill}" HorizontalAlignment="Left">
-                                <TextBlock Text="{Binding ClassText}"/>
-                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <Border Style="{StaticResource ClassPill}" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding ClassText}"/>
+                                </Border>
+                                <TextBlock Text="{Binding EnabledText}" Style="{StaticResource Subtle}"
+                                           FontSize="{DynamicResource FsXs}" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                            </StackPanel>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
@@ -130,6 +127,7 @@
             </StackPanel>
         </Border>
 
-        <TextBlock Grid.Row="4" Grid.ColumnSpan="3" Text="{Binding StatusText}" Style="{StaticResource Subtle}" Margin="4,10,0,0"/>
+        <TextBlock Grid.Row="4" Grid.ColumnSpan="3" Text="{Binding StatusText}" Style="{StaticResource Subtle}" Margin="4,10,0,0"
+                   Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}"/>
     </Grid>
 </UserControl>

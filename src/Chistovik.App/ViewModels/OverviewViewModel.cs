@@ -1,4 +1,5 @@
 using Chistovik.App.Models;
+using Chistovik.App.Mvvm;
 using Chistovik.App.Services;
 using Chistovik.App.Services.Agent;
 using Chistovik.App.Services.Changes;
@@ -25,6 +26,8 @@ public sealed class OverviewViewModel : StatefulPageViewModel
     private readonly IJournalSource _journal;
     private readonly IServiceSource? _services;
     private readonly ITaskSource? _tasks;
+    private readonly IUiSettingsStore? _ui;
+    private bool _showWelcome;
     private readonly IAgentClient? _agent;
     private string _startupText = "—";
     private string _startupHint = "";
@@ -40,7 +43,7 @@ public sealed class OverviewViewModel : StatefulPageViewModel
     private string _recentEmpty = "";
 
     public OverviewViewModel(IStartupSource startup, IJournalSource journal, IChangeService? changes = null,
-        IServiceSource? services = null, ITaskSource? tasks = null, bool isDemo = false)
+        IServiceSource? services = null, ITaskSource? tasks = null, bool isDemo = false, IUiSettingsStore? ui = null)
         : base("Обзор", isDemo ? "Демонстрационные данные"
             : "Состояние системы по реальным данным. Чтение идёт без прав администратора.", changes)
     {
@@ -48,12 +51,29 @@ public sealed class OverviewViewModel : StatefulPageViewModel
         _journal = journal;
         _services = services;
         _tasks = tasks;
+        _ui = ui;
+        _showWelcome = ui is not null && !ui.Load().WelcomeSeen;
+        DismissWelcomeCommand = new RelayCommand(DismissWelcome);
         var agent = _agent = changes?.Agent;
         if (agent is not null) agent.AccessChanged += (_, _) => Post(() => { OnPropertyChanged(nameof(RightsTitle)); OnPropertyChanged(nameof(RightsText)); });
         Loaded = ReloadAsync();
     }
 
     public Task Loaded { get; }
+
+    /// <summary>Приветствие при первом запуске: что делает программа и как вернуть изменения. Закрывается и больше не появляется.</summary>
+    public bool ShowWelcome { get => _showWelcome; private set => SetProperty(ref _showWelcome, value); }
+
+    public RelayCommand DismissWelcomeCommand { get; }
+
+    private void DismissWelcome()
+    {
+        ShowWelcome = false;
+        if (_ui is null) return;
+        var s = _ui.Load();
+        s.WelcomeSeen = true;
+        _ui.Save(s);
+    }
 
     /// <summary>У обзора своя полоса прав сверху, общая полоса «режим просмотра» не нужна.</summary>
     public override bool ShowViewOnlyBanner => false;

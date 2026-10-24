@@ -4,6 +4,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <RootNamespace>Chistovik.App</RootNamespace>
+    <ApplicationIcon>../../installer/assets/chistovik.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Chistovik.Core\Chistovik.Core.csproj" />
@@ -31,5 +32,9 @@
   </Target>
   <ItemGroup>
     <InternalsVisibleTo Include="App.Tests" />
+    <!-- Встроенные шрифты Egoist DS (SIL OFL 1.1, тексты лицензий в licenses/). -->
+    <Resource Include="Fonts/*.ttf" />
+    <!-- Иконка окна и диалогов (та же, что у exe). -->
+    <Resource Include="../../installer/assets/chistovik.ico" Link="Assets/chistovik.ico" />
   </ItemGroup>
 </Project>

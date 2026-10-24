@@ -180,6 +180,7 @@ public abstract class StatefulPageViewModel : PageViewModel
             if (!SetProperty(ref _busy, value)) return;
             OnPropertyChanged(nameof(CanApply));
             OnCanApplyChanged();
+            RefreshUndoResult();
         }
     }
 
@@ -196,6 +197,7 @@ public abstract class StatefulPageViewModel : PageViewModel
         OnPropertyChanged(nameof(ApplyHint));
         RequestRightsCommand.RaiseCanExecuteChanged();
         OnCanApplyChanged();
+        RefreshUndoResult();
     }
 
     /// <summary>Повторно показывает запрос UAC: следующее изменение запустит агент заново.</summary>
@@ -209,6 +211,50 @@ public abstract class StatefulPageViewModel : PageViewModel
     protected virtual void OnCanApplyChanged() { }
 
     // ----- итог действия -----
+
+    /// <summary>Диалоги для отката из итога (окно конфликтов); экран с диалогами задаёт их в конструкторе.</summary>
+    protected IDialogService? UndoDialogs { get; set; }
+
+    private Guid? _resultOperation;
+    private string _resultCounts = "";
+    private IReadOnlyList<string> _resultProblems = Array.Empty<string>();
+    private string _resultGlyph = "";
+
+    /// <summary>Откатывает операцию, о которой сообщает итог (кнопка «Откатить» рядом с итогом).</summary>
+    public RelayCommand UndoResultCommand => _undoResultCommand ??= new RelayCommand(() => ResultUndoTask = UndoResultAsync(), () => CanUndoResult);
+    private RelayCommand? _undoResultCommand;
+    public RelayCommand DismissResultCommand => _dismissResultCommand ??= new RelayCommand(ClearResult);
+    private RelayCommand? _dismissResultCommand;
+
+    public Task ResultUndoTask { get; private set; } = Task.CompletedTask;
+
+    /// <summary>Есть что откатывать, права выданы и ничего другого не выполняется.</summary>
+    public bool CanUndoResult => _resultOperation is not null && CanApply && UndoDialogs is not null;
+
+    /// <summary>Сводка «Применено: 3 · Пропущено: 1 · Не получилось: 1»; пусто, если шагов не было.</summary>
+    public string ResultCounts { get => _resultCounts; private set => SetProperty(ref _resultCounts, value); }
+
+    /// <summary>Пропущенные и неудавшиеся шаги с причиной понятным языком.</summary>
+    public IReadOnlyList<string> ResultProblems { get => _resultProblems; private set => SetProperty(ref _resultProblems, value); }
+
+    public bool HasResultCounts => ResultCounts.Length > 0;
+    public bool HasResultProblems => ResultProblems.Count > 0;
+
+    /// <summary>Значок итога: форма различает исход без опоры на цвет.</summary>
+    public string ResultGlyph { get => _resultGlyph; private set => SetProperty(ref _resultGlyph, value); }
+
+    private async Task UndoResultAsync()
+    {
+        if (Changes is null || UndoDialogs is null || _resultOperation is not { } id) return;
+        IsBusy = true;
+        try
+        {
+            var outcome = await new UndoFlow(Changes, UndoDialogs).RunAsync(id);
+            ShowOutcome(outcome, undoable: false);
+            if (outcome.Changed) await ReloadAsync();
+        }
+        finally { IsBusy = false; }
+    }
 
     public ResultKind Result { get => _result; private set => SetProperty(ref _result, value); }
     public string ResultText { get => _resultText; private set => SetProperty(ref _resultText, value); }
@@ -226,15 +272,36 @@ public abstract class StatefulPageViewModel : PageViewModel
         ResultText = text;
         ResultHint = hint;
         HasChange = changed;
+        _resultOperation = null;
+        ResultCounts = "";
+        ResultProblems = Array.Empty<string>();
+        ResultGlyph = kind switch
+        {
+            ResultKind.Success => "\uE73E",   // галочка
+            ResultKind.Info => "\uE946",      // «i»
+            ResultKind.Warning => "\uE7BA",   // треугольник
+            ResultKind.Error => "\uE711",     // крест
+            _ => "",
+        };
         OnPropertyChanged(nameof(HasResult));
         OnPropertyChanged(nameof(ResultIsGood));
         OnPropertyChanged(nameof(ResultIsWarn));
         OnPropertyChanged(nameof(ResultIsBad));
         OnPropertyChanged(nameof(HasResultHint));
         OnPropertyChanged(nameof(HasChange));
+        OnPropertyChanged(nameof(HasResultCounts));
+        OnPropertyChanged(nameof(HasResultProblems));
+        RefreshUndoResult();
     }
 
-    protected void ShowOutcome(ChangeOutcome o)
+    private void RefreshUndoResult()
+    {
+        OnPropertyChanged(nameof(CanUndoResult));
+        UndoResultCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <param name="undoable">false для самого отката: откат отката не предлагаем, подписи «Возвращено».</param>
+    protected void ShowOutcome(ChangeOutcome o, bool undoable = true)
     {
         var kind = o.Kind switch
         {
@@ -246,6 +313,16 @@ public abstract class StatefulPageViewModel : PageViewModel
             _ => ResultKind.Error,
         };
         SetResult(kind, o.Message, o.RestartHint ?? "", o.Changed);
+        if (o.Response?.Steps is { Count: > 0 } steps)
+        {
+            var (summary, problems) = ResultSummary.Build(steps, undoable);
+            ResultCounts = summary;
+            ResultProblems = problems;
+            OnPropertyChanged(nameof(HasResultCounts));
+            OnPropertyChanged(nameof(HasResultProblems));
+        }
+        _resultOperation = undoable && o.Changed ? o.OperationId : null;
+        RefreshUndoResult();
     }
 
     /// <summary>Показывает готовый итог действия так же, как после ответа агента (снимки экранов: частичный результат).</summary>

@@ -52,6 +52,7 @@ public sealed class ModesViewModel : StatefulPageViewModel
         _catalog = catalog;
         _power = power;
         _dialogs = dialogs;
+        UndoDialogs = dialogs;
         _undo = changes is null ? null : new UndoFlow(changes, dialogs);
         UndoLastCommand = new RelayCommand(() => LastAction = UndoLastAsync(), () => CanApply && _lastOperation is not null);
         Loaded = ReloadAsync();
@@ -114,7 +115,7 @@ public sealed class ModesViewModel : StatefulPageViewModel
         try
         {
             var outcome = await _undo.RunAsync(id);
-            ShowOutcome(outcome);
+            ShowOutcome(outcome, undoable: false);
             if (outcome.Kind is OutcomeKind.Success or OutcomeKind.NoChange)
             {
                 _lastOperation = null;

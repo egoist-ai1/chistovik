@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Chistovik.App.ViewModels"
         xmlns:views="clr-namespace:Chistovik.App.Views"
-        Title="Чистовик" Width="1320" Height="820" MinWidth="1080" MinHeight="680"
+        Title="Чистовик" Width="1320" Height="820" MinWidth="900" MinHeight="600"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
         FontFamily="{DynamicResource FontText}" FontSize="{DynamicResource FsBase}"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
@@ -57,50 +57,144 @@
         </DataTemplate>
     </Window.Resources>
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="264"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+    <Window.InputBindings>
+        <KeyBinding Key="D1" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="1"/>
+        <KeyBinding Key="D2" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="2"/>
+        <KeyBinding Key="D3" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="3"/>
+        <KeyBinding Key="D4" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="4"/>
+        <KeyBinding Key="D5" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="5"/>
+        <KeyBinding Key="D6" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="6"/>
+        <KeyBinding Key="D7" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="7"/>
+        <KeyBinding Key="D8" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="8"/>
+        <KeyBinding Key="F5" Command="{Binding ReloadCurrentCommand}"/>
+    </Window.InputBindings>
 
-        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="0,0,1,0">
-            <Grid>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="248" MinWidth="200"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" Margin="24,26,0,10">
+                        <Ellipse Width="12" Height="12" Fill="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
+                        <TextBlock Text="Чистовик" Margin="12,0,0,0" FontFamily="{DynamicResource FontDisplay}"
+                                   FontWeight="ExtraBold" FontSize="{DynamicResource FsLg}"
+                                   Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <ListBox Grid.Row="1" Style="{StaticResource PlainList}" ItemsSource="{Binding NavItems}"
+                             SelectedItem="{Binding SelectedNav, Mode=TwoWay}"
+                             ItemTemplate="{StaticResource NavTemplate}"
+                             ItemContainerStyle="{StaticResource NavItemContainer}"
+                             AutomationProperties.Name="Разделы" Margin="0,0,0,12"/>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <StackPanel Orientation="Horizontal" Margin="24,26,0,10">
-                    <Ellipse Width="12" Height="12" Fill="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
-                    <TextBlock Text="Чистовик" Margin="12,0,0,0" FontFamily="{DynamicResource FontDisplay}"
-                               FontWeight="ExtraBold" FontSize="{DynamicResource FsLg}"
-                               Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                <Border Background="{DynamicResource WarnTintBrush}" Padding="24,8"
+                        Visibility="{Binding IsDemo, Converter={StaticResource BoolToVis}}"
+                        AutomationProperties.Name="Демонстрационные данные">
+                    <TextBlock Foreground="{DynamicResource WarnBrush}" FontWeight="Medium" TextWrapping="Wrap"
+                               Text="Демонстрационные данные: это не ваш компьютер, изменения никуда не применяются."/>
+                </Border>
+                <ContentControl x:Name="ContentHost" Grid.Row="1" Content="{Binding Current}"
+                                IsTabStop="False" RenderTransformOrigin="0.5,0.5">
+                    <ContentControl.RenderTransform>
+                        <TranslateTransform x:Name="HostShift"/>
+                    </ContentControl.RenderTransform>
+                </ContentControl>
+            </Grid>
+        </Grid>
+
+        <!-- Строка состояния: агент (слово и значок-форма, не только цвет) и подсказка о горячих клавишах. -->
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0" Padding="16,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                            AutomationProperties.Name="{Binding AgentStatusText, StringFormat=Состояние агента: {0}}"
+                            AutomationProperties.LiveSetting="Polite">
+                    <TextBlock Text="{Binding AgentStatusGlyph}" FontFamily="{DynamicResource FontIcons}"
+                               FontSize="14" Margin="0,1,8,0" VerticalAlignment="Center"
+>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AgentStatusKind}" Value="ok">
+                                        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding AgentStatusKind}" Value="warn">
+                                        <Setter Property="Foreground" Value="{DynamicResource WarnBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Text="{Binding AgentStatusText}" Foreground="{DynamicResource TextBrush}"
+                               FontSize="{DynamicResource FsSm}" FontWeight="Medium" VerticalAlignment="Center"/>
                 </StackPanel>
-                <ListBox Grid.Row="1" Style="{StaticResource PlainList}" ItemsSource="{Binding NavItems}"
-                         SelectedItem="{Binding SelectedNav, Mode=TwoWay}"
-                         ItemTemplate="{StaticResource NavTemplate}"
-                         ItemContainerStyle="{StaticResource NavItemContainer}"
-                         AutomationProperties.Name="Разделы" Margin="0,0,0,12"/>
+                <TextBlock Grid.Column="1" Text="{Binding AgentStatusDetail}" Style="{StaticResource Subtle}"
+                           FontSize="{DynamicResource FsSm}" Margin="14,0,14,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                           ToolTip="{Binding AgentStatusDetail}"/>
+                <ToggleButton x:Name="KeysButton" Grid.Column="2" Style="{StaticResource KeysToggle}"
+                              AutomationProperties.Name="Горячие клавиши">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE765;" FontFamily="{DynamicResource FontIcons}" FontSize="14" Margin="0,1,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Клавиши" FontSize="{DynamicResource FsSm}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ToggleButton>
+                <Popup Grid.Column="2" PlacementTarget="{Binding ElementName=KeysButton}" Placement="Top"
+                       HorizontalOffset="0" VerticalOffset="-6" StaysOpen="False" AllowsTransparency="True"
+                       IsOpen="{Binding IsChecked, ElementName=KeysButton, Mode=TwoWay}">
+                    <Border Background="{DynamicResource Surface2Brush}" BorderBrush="{DynamicResource BorderStrongBrush}"
+                            BorderThickness="1" CornerRadius="{DynamicResource RadiusMd}" Padding="18,14"
+                            AutomationProperties.Name="Горячие клавиши">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Ctrl+1 … Ctrl+8" Style="{StaticResource MonoText}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,18,6"/>
+                            <TextBlock Grid.Column="1" Text="разделы по порядку в меню" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="1" Text="F5" Style="{StaticResource MonoText}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,18,6"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="перечитать текущий раздел" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="2" Text="Ctrl+F" Style="{StaticResource MonoText}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,18,6"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="перейти к поиску" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                            <TextBlock Grid.Row="3" Text="Esc" Style="{StaticResource MonoText}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,18,0"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="закрыть окно подтверждения или эту подсказку" Foreground="{DynamicResource TextBrush}"/>
+                        </Grid>
+                    </Border>
+                </Popup>
             </Grid>
         </Border>
-
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-            <Border Background="{DynamicResource WarnTintBrush}" Padding="24,8"
-                    Visibility="{Binding IsDemo, Converter={StaticResource BoolToVis}}"
-                    AutomationProperties.Name="Демонстрационные данные">
-                <TextBlock Foreground="{DynamicResource WarnBrush}" FontWeight="Medium" TextWrapping="Wrap"
-                           Text="Демонстрационные данные: это не ваш компьютер, изменения никуда не применяются."/>
-            </Border>
-            <ContentControl x:Name="ContentHost" Grid.Row="1" Content="{Binding Current}"
-                            IsTabStop="False" RenderTransformOrigin="0.5,0.5">
-                <ContentControl.RenderTransform>
-                    <TranslateTransform x:Name="HostShift"/>
-                </ContentControl.RenderTransform>
-            </ContentControl>
-        </Grid>
     </Grid>
 </Window>

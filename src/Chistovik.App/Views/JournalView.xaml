@@ -48,7 +48,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="400"/>
+            <ColumnDefinition Width="*" MinWidth="280" MaxWidth="400"/>
             <ColumnDefinition Width="16"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -102,13 +102,13 @@
                     <TextBlock Text="{Binding Title}" FontFamily="{DynamicResource FontDisplay}" FontWeight="Bold"
                                FontSize="{DynamicResource FsLg}" Foreground="{DynamicResource TextBrush}"
                                TextWrapping="Wrap"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,8,0,20">
+                    <WrapPanel Margin="0,8,0,20">
                         <TextBlock Text="{Binding Id}" Style="{StaticResource MonoText}"
                                    Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
                         <TextBlock Text="{Binding WhenText}" Style="{StaticResource MonoText}"
                                    Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
                         <Border Style="{StaticResource StatusPill}"><TextBlock Text="{Binding Status}"/></Border>
-                    </StackPanel>
+                    </WrapPanel>
                 </StackPanel>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Focusable="False">
@@ -119,15 +119,19 @@
                                       AutomationProperties.Name="Шаги операции">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
                                         <TextBlock Style="{StaticResource StepGlyph}"/>
-                                        <StackPanel>
+                                        <StackPanel Grid.Column="1">
                                             <TextBlock Foreground="{DynamicResource TextBrush}" FontWeight="Medium" TextWrapping="Wrap">
                                                 <Run Text="{Binding Title, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding StateText, Mode=OneWay}"/>
                                             </TextBlock>
                                             <TextBlock Text="{Binding Detail}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
                                         </StackPanel>
-                                    </StackPanel>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

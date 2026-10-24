@@ -32,6 +32,13 @@
     <SolidColorBrush x:Key="DangerTintBrush" Color="#26FF6B6B"/>
     <SolidColorBrush x:Key="WarnTintBrush" Color="#26FFC247"/>
 
+    <!-- Граница полей ввода: 3,2:1 к поверхности (WCAG 1.4.11); обычная BorderBrush только разделяет -->
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#6B6B73"/>
+    <SolidColorBrush x:Key="SkeletonBrush" Color="#26262A"/>
+    <SolidColorBrush x:Key="AccentLineBrush" Color="#66D7FF3C"/>
+    <SolidColorBrush x:Key="WarnLineBrush" Color="#66FFC247"/>
+    <SolidColorBrush x:Key="DangerLineBrush" Color="#66FF6B6B"/>
+
     <!-- Радиусы -->
     <CornerRadius x:Key="RadiusSm">6</CornerRadius>
     <CornerRadius x:Key="RadiusMd">10</CornerRadius>
@@ -44,10 +51,10 @@
     <Thickness x:Key="PadLg">24</Thickness>
     <Thickness x:Key="PageMargin">32,28,32,24</Thickness>
 
-    <!-- Шрифты: Unbounded/Onest/JetBrains Mono, пока не встроены — запасной стек -->
-    <FontFamily x:Key="FontDisplay">Unbounded, Segoe UI Variable Display, Segoe UI</FontFamily>
-    <FontFamily x:Key="FontText">Onest, Segoe UI Variable Text, Segoe UI</FontFamily>
-    <FontFamily x:Key="FontMono">JetBrains Mono, Cascadia Mono, Consolas</FontFamily>
+    <!-- Шрифты встроены в сборку (папка Fonts); запасной стек — на случай сбоя загрузки -->
+    <FontFamily x:Key="FontDisplay">pack://application:,,,/Fonts/#Unbounded, Segoe UI Variable Display, Segoe UI</FontFamily>
+    <FontFamily x:Key="FontText">pack://application:,,,/Fonts/#Onest, Segoe UI Variable Text, Segoe UI</FontFamily>
+    <FontFamily x:Key="FontMono">pack://application:,,,/Fonts/#JetBrains Mono, Cascadia Mono, Consolas</FontFamily>
     <FontFamily x:Key="FontIcons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
     <!-- Типографика -->
@@ -61,4 +68,8 @@
     <!-- Движение -->
     <Duration x:Key="DurFast">0:0:0.12</Duration>
     <Duration x:Key="DurBase">0:0:0.2</Duration>
+    <!-- Длительности и повтор переопределяются в App при отключённых анимациях Windows (reduced motion) -->
+    <Duration x:Key="DurSwitch">0:0:0.16</Duration>
+    <Duration x:Key="DurSkeleton">0:0:0.9</Duration>
+    <RepeatBehavior x:Key="SkeletonRepeat">Forever</RepeatBehavior>
 </ResourceDictionary>

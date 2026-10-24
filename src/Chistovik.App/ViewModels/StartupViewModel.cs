@@ -93,10 +93,11 @@ public sealed class StartupViewModel : ListPageViewModel<StartupRowViewModel>
         new("name", "По названию"), new("state", "Сначала включённые"), new("origin", "По источнику"), new("class", "Сначала те, что можно менять"),
     };
 
-    public StartupViewModel(IStartupSource source, IChangeService? changes = null, INavigator? navigator = null)
+    public StartupViewModel(IStartupSource source, IChangeService? changes = null, INavigator? navigator = null, IDialogService? dialogs = null)
         : base("Автозагрузка", "Что запускается при входе в Windows. Переключатель меняет запись через агента, любое изменение можно откатить в журнале.", Sorts, changes, navigator)
     {
         _source = source;
+        UndoDialogs = dialogs;
         Loaded = ReloadAsync();
     }
 

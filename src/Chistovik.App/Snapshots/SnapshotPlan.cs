@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Chistovik.App.Snapshots;
 
 /// <summary>Состояние экрана на снимке. Ready — обычный вид с демонстрационными данными.</summary>
-public enum SnapshotState { Ready, Empty, Loading, Error, ViewOnly, Partial }
+public enum SnapshotState { Ready, Empty, Loading, Error, ViewOnly, Partial, Welcome }
 
 /// <summary>
 /// Один снимок: экран, состояние, размер окна в независимых единицах и DPI (96 = 100 %, 192 = 200 %).
@@ -20,6 +20,7 @@ public sealed record SnapshotSpec(string Screen, SnapshotState State, int Width,
         SnapshotState.Error => "-error",
         SnapshotState.ViewOnly => "-viewonly",
         SnapshotState.Partial => "-partial",
+        SnapshotState.Welcome => "-welcome",
         _ => "",
     };
 
@@ -43,8 +44,12 @@ public static class SnapshotPlan
     public static readonly (int Width, int Height)[] Sizes = { (1280, 800), (1920, 1080) };
     public static readonly int[] Dpis = { 96, 192 };
 
+    /// <summary>Самое маленькое окно, которое разрешает программа: проверка, что ничего не обрезается.</summary>
+    public static readonly (int Width, int Height) MinimumSize = (900, 600);
+
     private static readonly SnapshotState[] ListStates = { SnapshotState.Empty, SnapshotState.Loading, SnapshotState.Error };
     private static readonly SnapshotState[] LoadStates = { SnapshotState.Loading, SnapshotState.Error };
+    private static readonly SnapshotState[] OverviewStates = { SnapshotState.Loading, SnapshotState.Error, SnapshotState.Welcome };
     private static readonly SnapshotState[] ChangeStates = { SnapshotState.ViewOnly, SnapshotState.Partial };
     private static readonly SnapshotState[] ListAndChange =
         { SnapshotState.Empty, SnapshotState.Loading, SnapshotState.Error, SnapshotState.ViewOnly, SnapshotState.Partial };
@@ -53,7 +58,7 @@ public static class SnapshotPlan
 
     public static readonly IReadOnlyList<SnapshotScreen> Screens = new SnapshotScreen[]
     {
-        new("overview", "Обзор", LoadStates),
+        new("overview", "Обзор", OverviewStates),
         new("programs", "Инвентарь", ListStates),
         new("startup", "Автозагрузка", ListAndChange),
         new("services", "Службы", ListAndChange),
@@ -78,6 +83,7 @@ public static class SnapshotPlan
             foreach (var (w, h) in Sizes)
                 foreach (var dpi in Dpis)
                     list.Add(new SnapshotSpec(screen.Id, SnapshotState.Ready, w, h, dpi));
+            list.Add(new SnapshotSpec(screen.Id, SnapshotState.Ready, MinimumSize.Width, MinimumSize.Height, 96));
             foreach (var state in screen.ExtraStates)
                 list.Add(new SnapshotSpec(screen.Id, state, Sizes[0].Width, Sizes[0].Height, 96));
         }
