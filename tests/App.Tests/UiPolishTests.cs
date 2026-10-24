@@ -141,6 +141,7 @@ public class UiPolishTests : IDisposable
         "task-exec-outside-roots", "task-exec-system-zone", "task-modifiable", "task-no-actions", "task-not-found", "task-path-mismatch",
         "task-privileged-principal", "task-protected-tree", "task-unknown-principal", "task-unknown-runlevel",
         "tweak-bad-hive", "tweak-not-in-catalog",
+        "not-elevated",
     };
 
     [Fact]

@@ -194,7 +194,9 @@ public sealed class AgentClient : IAgentClient, IDisposable
 
     static AgentResponse Untrusted(AgentRequest request, AgentUntrustedException e)
         => Fail(request, ClientCodes.Untrusted,
-            "Канал занят процессом, который не является установленным агентом Чистовика (" + e.Reason + "). Запрос не отправлен.");
+            e.Reason == "not-elevated"
+                ? Models.ReasonTexts.Explain(e.Reason)
+                : "Канал занят процессом, который не является установленным агентом Чистовика (" + e.Reason + "). Запрос не отправлен.");
 
     void SetConnected()
     {

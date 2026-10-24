@@ -51,7 +51,7 @@ public sealed class AgentServerVerificationTests : IDisposable
         }
     }
 
-    ActualServer Own() => new(4321, _agent, Chistovik.Core.Ipc.ClientVerifier.Sha256OfFile(_agent));
+    ActualServer Own() => new(4321, _agent, Chistovik.Core.Ipc.ClientVerifier.Sha256OfFile(_agent), true);
 
     // ---------- ServerVerifier ----------
 
@@ -59,7 +59,7 @@ public sealed class AgentServerVerificationTests : IDisposable
     public void Verifier_accepts_own_image()
     {
         var (ok, reason) = ServerVerifier.Verify(new ExpectedServer(@"C:\Program Files\Chistovik\Chistovik.Agent.exe", Sha),
-            new ActualServer(10, @"c:\program files\chistovik\CHISTOVIK.AGENT.EXE", Sha.ToLowerInvariant()));
+            new ActualServer(10, @"c:\program files\chistovik\CHISTOVIK.AGENT.EXE", Sha.ToLowerInvariant(), true));
         Assert.True(ok);
         Assert.Equal("ok", reason);
     }
@@ -73,7 +73,7 @@ public sealed class AgentServerVerificationTests : IDisposable
     public void Verifier_rejects_foreign_or_missing_image(string? path, string? hash, string expectedReason)
     {
         var (ok, reason) = ServerVerifier.Verify(new ExpectedServer(@"C:\Program Files\Chistovik\Chistovik.Agent.exe", Sha),
-            new ActualServer(10, path, hash));
+            new ActualServer(10, path, hash, true));
         Assert.False(ok);
         Assert.Equal(expectedReason, reason);
     }
@@ -81,9 +81,50 @@ public sealed class AgentServerVerificationTests : IDisposable
     [Fact]
     public void Verifier_rejects_unknown_pid()
     {
-        var (ok, reason) = ServerVerifier.Verify(new ExpectedServer(@"C:\a\Chistovik.Agent.exe", Sha), new ActualServer(-1, null, null));
+        var (ok, reason) = ServerVerifier.Verify(new ExpectedServer(@"C:\a\Chistovik.Agent.exe", Sha), new ActualServer(-1, null, null, true));
         Assert.False(ok);
         Assert.Equal("pid", reason);
+    }
+
+    [Fact]
+    public void Verifier_rejects_right_image_without_elevation()
+    {
+        var (ok, reason) = ServerVerifier.Verify(new ExpectedServer(@"C:\Program Files\Chistovik\Chistovik.Agent.exe", Sha),
+            new ActualServer(10, @"C:\Program Files\Chistovik\Chistovik.Agent.exe", Sha, false));
+        Assert.False(ok);
+        Assert.Equal("not-elevated", reason);
+    }
+
+    [Fact]
+    public void Verifier_accepts_right_image_with_elevation()
+    {
+        var (ok, reason) = ServerVerifier.Verify(new ExpectedServer(@"C:\Program Files\Chistovik\Chistovik.Agent.exe", Sha),
+            new ActualServer(10, @"C:\Program Files\Chistovik\Chistovik.Agent.exe", Sha, true));
+        Assert.True(ok);
+        Assert.Equal("ok", reason);
+    }
+
+    [Fact]
+    public async Task Transport_refuses_non_elevated_server_with_right_image()
+    {
+        var name = "Chistovik.test." + Guid.NewGuid().ToString("N");
+        using var server = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var plain = Own() with { IsElevated = false }; // тот же образ и хеш, но токен не повышен
+        var transport = new NamedPipeAgentTransport(new FakeProbe(plain), _agent);
+
+        var accept = server.WaitForConnectionAsync();
+        var ex = await Assert.ThrowsAsync<AgentUntrustedException>(
+            () => transport.ConnectAsync(name, TimeSpan.FromSeconds(5), CancellationToken.None));
+        await accept;
+
+        Assert.Equal("not-elevated", ex.Reason);
+    }
+
+    [Fact]
+    public void Not_elevated_has_a_plain_russian_explanation()
+    {
+        Assert.True(Chistovik.App.Models.ReasonTexts.IsKnown("not-elevated"));
+        Assert.Matches("[А-Яа-я]", Chistovik.App.Models.ReasonTexts.Explain("not-elevated"));
     }
 
     // ---------- NamedPipeAgentTransport ----------
@@ -109,7 +150,7 @@ public sealed class AgentServerVerificationTests : IDisposable
     {
         var name = "Chistovik.test." + Guid.NewGuid().ToString("N");
         using var server = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-        var foreign = new ActualServer(4321, @"C:\Users\evil\agent.exe", OtherSha);
+        var foreign = new ActualServer(4321, @"C:\Users\evil\agent.exe", OtherSha, true);
         var transport = new NamedPipeAgentTransport(new FakeProbe(foreign), _agent);
 
         var accept = server.WaitForConnectionAsync();
@@ -128,7 +169,7 @@ public sealed class AgentServerVerificationTests : IDisposable
     {
         var name = "Chistovik.test." + Guid.NewGuid().ToString("N");
         using var server = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-        var swapped = new ActualServer(4321, _agent, OtherSha); // тот же путь, файл подменён
+        var swapped = new ActualServer(4321, _agent, OtherSha, true); // тот же путь, файл подменён
         var transport = new NamedPipeAgentTransport(new FakeProbe(swapped), _agent);
 
         var accept = server.WaitForConnectionAsync();

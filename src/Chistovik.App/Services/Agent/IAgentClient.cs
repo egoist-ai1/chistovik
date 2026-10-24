@@ -30,7 +30,7 @@ public static class ClientCodes
 /// <summary>Транспорт не принял сервер канала: образ процесса не совпал с установленным агентом. Данные по каналу не передавались.</summary>
 public sealed class AgentUntrustedException(string reason) : Exception("Сервер канала не прошёл проверку: " + reason)
 {
-    /// <summary>Код причины из ServerVerifier (pid, image-path, image-hash) или agent-missing.</summary>
+    /// <summary>Код причины из ServerVerifier (pid, image-path, image-hash, not-elevated) или agent-missing.</summary>
     public string Reason { get; } = reason;
 }
 
