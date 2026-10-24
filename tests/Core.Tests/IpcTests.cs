@@ -84,7 +84,11 @@ public class DispatcherTests
         // Любой новый тип запроса должен быть добавлен осознанно вместе с этим тестом, обработчиком и проверкой политики.
         var types = typeof(AgentRequest).Assembly.GetTypes()
             .Where(t => t.IsSubclassOf(typeof(AgentRequest))).Select(t => t.Name).OrderBy(x => x).ToArray();
-        Assert.Equal(["PingRequest"], types);
+        Assert.Equal(
+            [
+                "ApplyModeRequest", "ApplyTweaksRequest", "PingRequest", "SetPowerSchemeRequest", "SetPowerSettingRequest",
+                "SetServiceStartRequest", "SetStartupEntryRequest", "SetTaskEnabledRequest", "UndoRequest",
+            ], types);
     }
 }
 

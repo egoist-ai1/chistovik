@@ -74,7 +74,7 @@ public sealed class TweakCatalogTests
     static string Tweak(string id = "a", string extra = "") =>
         $$"""
         {"id":"{{id}}","title":"T","description":"D","area":"tw","risk":"safe","hive":"HKCU","key":"Software\\X","value":"V",
-         "valueType":"DWord","onValue":1,"offValue":0,"restart":"none","requiresAdmin":false,"source":"known-setting","verified":false{{extra}}}
+         "valueType":"DWord","onValue":1,"offValue":0,"restart":"none","effect":"none","requiresAdmin":false,"source":"known-setting","verified":false{{extra}}}
         """;
 
     static InvalidDataException Fails(string tweaks, string modes = GoodMode)
@@ -111,6 +111,7 @@ public sealed class TweakCatalogTests
     [InlineData("\"hive\":\"HKCU\"", "\"hive\":\"HKCR\"")]
     [InlineData("\"valueType\":\"DWord\"", "\"valueType\":\"Binary\"")]
     [InlineData("\"restart\":\"none\"", "\"restart\":\"sometime\"")]
+    [InlineData("\"effect\":\"none\"", "\"effect\":\"unknown\"")]
     [InlineData("\"title\":\"T\"", "\"title\":\"\"")]
     [InlineData("\"description\":\"D\"", "\"description\":\" \"")]
     [InlineData("\"onValue\":1", "\"onValue\":\"text\"")]

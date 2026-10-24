@@ -17,6 +17,7 @@ public sealed record TweakEntry(
     JsonElement OnValue,
     JsonElement? OffValue,
     string Restart,
+    string Effect,
     bool RequiresAdmin,
     string Source,
     bool Verified)

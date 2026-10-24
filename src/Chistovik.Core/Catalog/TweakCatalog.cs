@@ -12,6 +12,14 @@ public sealed class TweakCatalog
     public static readonly IReadOnlySet<string> ValueTypes = new HashSet<string> { "DWord", "String" };
     public static readonly IReadOnlySet<string> Restarts = new HashSet<string> { "none", "explorer", "logoff", "reboot" };
     public static readonly IReadOnlySet<string> PowerPlans = new HashSet<string> { "saver", "bal", "high", "ult" };
+    /// <summary>Что приложение делает в сеансе после применения: none, SystemParametersInfo (spi-*) или WM_SETTINGCHANGE (broadcast).</summary>
+    public static readonly IReadOnlySet<string> Effects = new HashSet<string> { "none", "spi-animation", "spi-dragfull", "spi-mouse", "broadcast" };
+
+    static readonly Lazy<TweakCatalog> SharedLazy = new(Load);
+
+    /// <summary>Общий экземпляр встроенного каталога (для проверки запросов).</summary>
+    public static TweakCatalog Shared => SharedLazy.Value;
+    public ModeEntry? FindMode(string id) => Modes.FirstOrDefault(m => m.Id == id);
 
     static readonly JsonSerializerOptions Options = new()
     {
@@ -81,6 +89,7 @@ public sealed class TweakCatalog
             OneOf(t.Area, Areas, "area", w); OneOf(t.Risk, Risks, "risk", w);
             OneOf(t.Hive, Hives, "hive", w); OneOf(t.ValueType, ValueTypes, "valueType", w);
             OneOf(t.Restart, Restarts, "restart", w);
+            OneOf(t.Effect, Effects, "effect", w);
             if (t.Key.StartsWith('\\') || t.Key.EndsWith('\\') || t.Key.Contains(':'))
                 throw Bad($"{w}: key должен быть путём без куста и без «:» («{t.Key}»)");
             CheckValue(t.OnValue, t.ValueType, "onValue", w);

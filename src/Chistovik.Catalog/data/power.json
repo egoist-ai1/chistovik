@@ -1,0 +1,119 @@
+{
+  "schemes": [
+    {
+      "id": "saver",
+      "title": "Экономия энергии",
+      "description": "Встроенная схема Windows «Экономия энергии» (SCHEME_MAX): меньше производительность и расход.",
+      "guid": "a1841308-3541-4fab-bc81-f71556f20b4a",
+      "builtIn": true,
+      "createFromTemplate": null,
+      "guidVerified": true
+    },
+    {
+      "id": "bal",
+      "title": "Сбалансированная",
+      "description": "Встроенная схема Windows «Сбалансированная» (SCHEME_BALANCED): стандартное поведение.",
+      "guid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+      "builtIn": true,
+      "createFromTemplate": null,
+      "guidVerified": true
+    },
+    {
+      "id": "high",
+      "title": "Высокая производительность",
+      "description": "Встроенная схема Windows «Высокая производительность» (SCHEME_MIN): максимум скорости, больше расход.",
+      "guid": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+      "builtIn": true,
+      "createFromTemplate": null,
+      "guidVerified": true
+    },
+    {
+      "id": "ult",
+      "title": "Максимальная производительность",
+      "description": "Скрытая схема Windows «Ultimate Performance». Если нашей копии ещё нет, агент создаёт её дублированием шаблона; при откате удаляется только наша копия.",
+      "guid": "e9a42b02-d5df-448d-aa00-03f14749eb61",
+      "builtIn": false,
+      "createFromTemplate": "e9a42b02-d5df-448d-aa00-03f14749eb61",
+      "guidVerified": false
+    }
+  ],
+  "settings": [
+    {
+      "id": "min",
+      "title": "Минимальное состояние процессора",
+      "description": "Нижняя граница частоты процессора в процентах от максимума. Выше значение: отзывчивее, но больше нагрев и расход.",
+      "subgroup": "54533251-82be-4824-96c1-47b60b740d00",
+      "setting": "893dee8e-2bef-41e0-89c6-b55d0929964c",
+      "unit": "percent",
+      "min": 0,
+      "max": 100,
+      "guidVerified": true
+    },
+    {
+      "id": "max",
+      "title": "Максимальное состояние процессора",
+      "description": "Верхняя граница частоты процессора в процентах. Значение ниже 100 ограничивает производительность и нагрев.",
+      "subgroup": "54533251-82be-4824-96c1-47b60b740d00",
+      "setting": "bc5038f7-23e0-4960-96da-33abaf5935ec",
+      "unit": "percent",
+      "min": 0,
+      "max": 100,
+      "guidVerified": true
+    },
+    {
+      "id": "boost",
+      "title": "Режим повышения производительности процессора",
+      "description": "0 отключён, 1 включён, 2 агрессивный, 3 эффективный включённый, 4 эффективный агрессивный, 5 агрессивный при гарантированном, 6 эффективный агрессивный при гарантированном. Доступные режимы зависят от процессора.",
+      "subgroup": "54533251-82be-4824-96c1-47b60b740d00",
+      "setting": "be337238-0d82-4146-a960-4f3749d470c7",
+      "unit": "enum",
+      "min": 0,
+      "max": 6,
+      "guidVerified": true
+    },
+    {
+      "id": "display",
+      "title": "Отключать экран через",
+      "description": "Бездействие до выключения экрана, в секундах. 0 означает «никогда».",
+      "subgroup": "7516b95f-f776-4464-8c53-06167f40cc99",
+      "setting": "3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e",
+      "unit": "seconds",
+      "min": 0,
+      "max": 86400,
+      "guidVerified": true
+    },
+    {
+      "id": "sleep",
+      "title": "Переходить в спящий режим через",
+      "description": "Бездействие до сна, в секундах. 0 означает «никогда».",
+      "subgroup": "238c9fa8-0aad-41ed-83f4-97be242c8f20",
+      "setting": "29f6c1db-86da-48c5-9fdb-f2b67b1f44da",
+      "unit": "seconds",
+      "min": 0,
+      "max": 86400,
+      "guidVerified": true
+    },
+    {
+      "id": "aspm",
+      "title": "Управление питанием состояния связи (PCI Express)",
+      "description": "0 выключено, 1 умеренная экономия, 2 максимальная экономия. Максимум экономит энергию, но может добавить задержку устройствам PCIe.",
+      "subgroup": "501a4d13-42af-4429-9fd1-a8218c268e20",
+      "setting": "ee12f906-d277-404b-b6da-e5fa1a576df5",
+      "unit": "enum",
+      "min": 0,
+      "max": 2,
+      "guidVerified": true
+    },
+    {
+      "id": "usb",
+      "title": "Временное отключение USB-портов",
+      "description": "0 запрещено, 1 разрешено. Разрешено экономит энергию, но редкие USB-устройства могут отваливаться.",
+      "subgroup": "2a737441-1930-4402-8d77-b2bebba308a3",
+      "setting": "48e6b7a6-50f5-4782-a5d4-53bb8f07e226",
+      "unit": "enum",
+      "min": 0,
+      "max": 1,
+      "guidVerified": true
+    }
+  ]
+}

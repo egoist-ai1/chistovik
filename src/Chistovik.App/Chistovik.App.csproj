@@ -5,4 +5,7 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>Chistovik.App</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Chistovik.Core\Chistovik.Core.csproj" />
+  </ItemGroup>
 </Project>

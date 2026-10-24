@@ -5,4 +5,8 @@
   <ItemGroup>
     <EmbeddedResource Include="..\Chistovik.Catalog\data\*.json" LogicalName="catalog/%(Filename)%(Extension)" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Core.Tests" />
+    <InternalsVisibleTo Include="Policy.Negative" />
+  </ItemGroup>
 </Project>
