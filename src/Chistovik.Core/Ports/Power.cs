@@ -11,4 +11,10 @@ public interface IPowerControl
     void SetActive(ApprovedPowerScheme c);
     void Duplicate(ApprovedSchemeCreate c);
     void Delete(ApprovedSchemeDelete c);
+
+    /// <summary>
+    /// Имя схемы или null, если порт его не отдаёт. Нужно для удаления: схема считается нашей, только если журнал и имя совпали.
+    /// Реализация по умолчанию возвращает null (проверка имени пропускается, пока Native не реализует метод).
+    /// </summary>
+    string? GetName(Guid scheme) => null;
 }
