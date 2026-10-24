@@ -29,6 +29,15 @@ public sealed class Report(string dir)
     public void Check(string sc, string name, bool ok, string detailOk = "", string detailFail = "")
         => Add(sc, name, ok ? Status.Pass : Status.Fail, ok ? detailOk : detailFail);
 
+    /// <summary>Копирует записи другого отчёта (для запасной записи).</summary>
+    public void CopyFrom(Report other)
+    {
+        CheckResult[] snap;
+        lock (other._gate) snap = [.. other._items];
+        lock (_gate) { _items.Clear(); _items.AddRange(snap); }
+        Save();
+    }
+
     public void Save()
     {
         CheckResult[] snap;

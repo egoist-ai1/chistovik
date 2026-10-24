@@ -138,6 +138,7 @@ static class S3Power
         using var s = Session.Open(c, "s3c", p => p with { Ids = ids });
         created.Add(schemeId);
 
+        var before = Schemes();
         var r = await s.Send(new SetPowerSchemeRequest { Id = Guid.NewGuid(), Plan = PowerPlan.Ult });
         var list = Schemes();
         if (!r.Ok && r.Steps?.Any(x => x.Code == "not-found") == true)
@@ -151,15 +152,23 @@ static class S3Power
             $"создана {schemeId} «{name}» (GUID выдал IIdGenerator)", $"ответ: {s.Describe(r)}; схемы: {string.Join(", ", list.Keys)}");
         c.Report.Check(Sc, "Ultimate: имя своей схемы", ours && name!.StartsWith("Chistovik ", StringComparison.Ordinal), $"имя «{name}»", $"имя «{name}», ждали префикс «Chistovik »");
         c.Report.Check(Sc, "Ultimate: схема активна", Active() == schemeId, "активна своя копия", $"активна {Active()}");
-        if (!list.ContainsKey(template.Guid)) c.Report.Pass(Sc, "Ultimate: шаблон не тронут", "шаблона в списке нет и он не трогался");
+        var templateBefore = before.ContainsKey(template.Guid);
+        var templateAfter = list.ContainsKey(template.Guid);
+        c.Report.Check(Sc, "Ultimate: шаблон не тронут", templateBefore == templateAfter,
+            templateBefore ? "шаблон был в списке и остался" : "шаблона в списке не было и он не появился",
+            templateBefore ? "шаблон был в списке до операции, а после его нет (агент его удалил)" : "шаблона не было в списке до операции, а после появился");
 
         if (r.OperationId is { } op)
         {
             var u = await s.Undo(op);
             var after = Schemes();
             c.Report.Check(Sc, "Ultimate: откат возвращает схему", u.Ok && Active() == original, $"активна {Active()}", $"ответ: {s.Describe(u)}; активна {Active()}, ждали {original}");
-            c.Report.Check(Sc, "Ultimate: откат удаляет только свою схему", !after.ContainsKey(schemeId), "своей копии в списке нет",
-                $"своя копия осталась в списке; ответ отката: {s.Describe(u)}");
+            var expected = new HashSet<Guid>(before.Keys);
+            var actual = new HashSet<Guid>(after.Keys);
+            c.Report.Check(Sc, "Ultimate: откат удаляет только свою схему", !after.ContainsKey(schemeId) && actual.SetEquals(expected),
+                "набор схем совпал с набором до операции",
+                $"свою копию {(after.ContainsKey(schemeId) ? "не удалили" : "удалили")}; набор схем отличается от исходного: " +
+                $"лишние [{string.Join(", ", actual.Except(expected))}], пропали [{string.Join(", ", expected.Except(actual))}]; ответ отката: {s.Describe(u)}");
         }
     }
 }

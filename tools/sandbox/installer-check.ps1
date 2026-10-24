@@ -16,7 +16,9 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
-if ($env:USERNAME -ne 'WDAGUtilityAccount' -or -not (Test-Path -LiteralPath 'C:\ProgramData\ChistovikSandbox.marker')) {
+$sbUser = ([Security.Principal.WindowsIdentity]::GetCurrent().Name -split '\\')[-1]
+$sbService = Get-Service -Name 'CExecSvc' -ErrorAction SilentlyContinue
+if ($sbUser -ine 'WDAGUtilityAccount' -or -not $sbService -or -not (Test-Path -LiteralPath 'C:\ProgramData\ChistovikSandbox.marker')) {
   Write-Host 'Только в Windows Sandbox. Скрипт ничего не сделал.'
   exit 3
 }

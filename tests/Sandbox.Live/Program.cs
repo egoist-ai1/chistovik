@@ -72,11 +72,28 @@ public static class Program
             {
                 report.Fail(name, "необработанное исключение", e.GetType().Name + ": " + e.Message);
             }
-            report.Save();
+            SaveSafe(report, results);
         }
 
-        report.Save();
+        SaveSafe(report, results);
         Console.WriteLine($"Готово. FAIL: {report.FailCount}. Отчёт: {results}");
         return report.FailCount == 0 ? 0 : 1;
     }
+
+    /// <summary>Отчёт не должен теряться: при ошибке записи в папку результатов пишем в запасную папку и говорим об этом в консоль.</summary>
+    static void SaveSafe(Report report, string dir)
+    {
+        try { report.Save(); return; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Не удалось записать отчёт в {dir}: {e.Message}. Пишу в {FallbackDir}.");
+        }
+        try { new Report(FallbackDir).CopyFrom(report); Console.Error.WriteLine("Отчёт записан в " + FallbackDir); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine("Запасная запись тоже не удалась: " + e.Message);
+        }
+    }
+
+    const string FallbackDir = @"C:\Users\Public\ChistovikResults";
 }

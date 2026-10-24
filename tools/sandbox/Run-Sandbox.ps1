@@ -5,7 +5,10 @@
   По умолчанию только создаёт <ResultsDir>\chistovik-live.wsb и печатает, что дальше. Запуск Sandbox владелец делает сам
   (двойной щелчок по .wsb) либо этим скриптом с ключом -Launch.
   Конфигурация: релиз и стенд смонтированы только на чтение, <ResultsDir> на запись, сеть отключена, vGPU отключён,
-  буфер обмена, принтеры, аудио и видео отключены, ProtectedClient включён (если мешает: -NoProtectedClient).
+  буфер обмена, принтеры, аудио и видео отключены. ProtectedClient по умолчанию ВЫКЛЮЧЕН (первый прогон: он может мешать записи
+  в смонтированную папку результатов и запуску агента); включить: -ProtectedClient.
+  Скрипты и MSI копируются в <ResultsDir>\scripts и <ResultsDir>\msi, и в Sandbox монтируются именно эти копии на чтение:
+  путь без кириллицы, и гость не видит остальное содержимое папок репозитория и MSI.
   Токен запуска случайный: его знают только .wsb и скрипты внутри Sandbox; без него стенд отказывается работать.
   PowerShell 5.1.
 .PARAMETER StandDir
@@ -15,7 +18,7 @@
 .PARAMETER MsiPath
   Необязательно: MSI для сценария 8 (установка/удаление в Sandbox).
 .PARAMETER ResultsDir
-  Куда Sandbox пишет results.json/results.md/логи. По умолчанию <корень репозитория>\artifacts\sandbox-results\<метка времени>.
+  Куда Sandbox пишет results.json/results.md/логи. Путь только ASCII (без кириллицы). По умолчанию C:\Users\Public\ChistovikSandbox\<метка времени>.
 #>
 param(
   [Parameter(Mandatory = $true)][string]$StandDir,
@@ -23,7 +26,7 @@ param(
   [string]$MsiPath = '',
   [string]$ResultsDir = '',
   [switch]$SkipIdle,
-  [switch]$NoProtectedClient,
+  [switch]$ProtectedClient,
   [switch]$Launch
 )
 
@@ -40,14 +43,23 @@ if (-not (Test-Path -LiteralPath (Join-Path $stand 'Sandbox.Live.exe'))) { throw
 if (-not (Test-Path -LiteralPath (Join-Path $release 'Chistovik.Agent.exe'))) { throw "В $release нет Chistovik.Agent.exe." }
 $scripts = $PSScriptRoot
 
-if (-not $ResultsDir) { $ResultsDir = Join-Path $scripts ('..\..\artifacts\sandbox-results\' + (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss')) }
+if (-not $ResultsDir) { $ResultsDir = Join-Path $env:PUBLIC ('ChistovikSandbox\' + (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss')) }
 New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
 $results = (Resolve-Path -LiteralPath $ResultsDir).ProviderPath
+if ($results -notmatch '^[\x20-\x7E]+$') { throw "Папка результатов должна быть с ASCII-путём (без кириллицы): $results" }
+
+# Гость получает копии скриптов (только *.ps1) на чтение, а не рабочую папку репозитория.
+$scriptsCopy = Join-Path $results 'scripts'
+New-Item -ItemType Directory -Force -Path $scriptsCopy | Out-Null
+Get-ChildItem -LiteralPath $scripts -Filter '*.ps1' -File | Copy-Item -Destination $scriptsCopy -Force
 
 $msiDir = $null
 if ($MsiPath) {
   if (-not (Test-Path -LiteralPath $MsiPath -PathType Leaf)) { throw "MSI не найден: $MsiPath" }
-  $msiDir = Split-Path -Parent (Resolve-Path -LiteralPath $MsiPath).ProviderPath
+  # Только сам пакет, без остальных файлов его папки.
+  $msiDir = Join-Path $results 'msi'
+  New-Item -ItemType Directory -Force -Path $msiDir | Out-Null
+  Copy-Item -LiteralPath (Resolve-Path -LiteralPath $MsiPath).ProviderPath -Destination $msiDir -Force
 }
 
 # Токен: 32 случайных шестнадцатеричных символа.
@@ -64,16 +76,16 @@ function Folder([string]$host_, [string]$guest, [bool]$readOnly) {
   return "    <MappedFolder>`r`n      <HostFolder>$(X $host_)</HostFolder>`r`n      <SandboxFolder>$guest</SandboxFolder>`r`n      <ReadOnly>$ro</ReadOnly>`r`n    </MappedFolder>`r`n"
 }
 
-$folders = (Folder $stand 'C:\Stand' $true) + (Folder $release 'C:\Release' $true) + (Folder $scripts 'C:\Scripts' $true) + (Folder $results 'C:\Results' $false)
+$folders = (Folder $stand 'C:\Stand' $true) + (Folder $release 'C:\Release' $true) + (Folder $scriptsCopy 'C:\Scripts' $true) + (Folder $results 'C:\Results' $false)
 if ($msiDir) {
-  # MSI лежит в общей папке рядом с другими файлами: монтируем её только на чтение. В Sandbox нужен один пакет, берётся первый Chistovik-*-x64.msi.
+  # Копия единственного MSI, на чтение. В Sandbox берётся первый Chistovik-*-x64.msi.
   $folders += (Folder $msiDir 'C:\Msi' $true)
 }
 
 $guestArgs = "-Token $token"
 if ($SkipIdle) { $guestArgs += ' -SkipIdle' }
 if (-not $msiDir) { $guestArgs += ' -SkipInstaller' }
-$protected = if ($NoProtectedClient) { 'Disable' } else { 'Enable' }
+$protected = if ($ProtectedClient) { 'Enable' } else { 'Disable' }
 
 $wsb = @"
 <Configuration>
@@ -97,7 +109,7 @@ $wsbPath = Join-Path $results 'chistovik-live.wsb'
 
 Write-Host "Файл конфигурации: $wsbPath"
 Write-Host "Результаты появятся в: $results (results.md, results.json, stand.log, installer-results.md)"
-Write-Host 'Сеть в Sandbox отключена, релиз и стенд смонтированы только на чтение.'
+Write-Host 'Сеть в Sandbox отключена, релиз, стенд, скрипты и MSI смонтированы только на чтение (скрипты и MSI это копии в папке результатов).'
 
 if ($Launch) {
   $exe = Join-Path $env:SystemRoot 'System32\WindowsSandbox.exe'

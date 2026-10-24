@@ -58,6 +58,10 @@ static class ChildModes
     {
         var pipe = o.Get("--pipe")!;
         var outFile = o.Get("--out")!;
+        // --wait-file: подключаться только когда родитель создаст файл (агент к этому времени уже открыл канал).
+        var waitFile = o.Get("--wait-file");
+        if (waitFile is not null)
+            for (var i = 0; i < 600 && !File.Exists(waitFile); i++) await Task.Delay(100);
         string text;
         try
         {

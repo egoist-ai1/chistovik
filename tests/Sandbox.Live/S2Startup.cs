@@ -86,7 +86,14 @@ static class S2Startup
                     $"флаг {Bytes(back)}", $"ответ: {s.Describe(u)}; флаг {Bytes(back)}, до операции было {Bytes(start)}");
             }
 
-            // 3. включить: 12 байт, первый чётный
+            // 3. включить: после отката значения StartupApproved нет, а «нет значения» = включено, и агент ответит no-change.
+            // Поэтому сначала выключаем без отката, затем включаем: 12 байт, первый чётный.
+            var offAgain = Set(false);
+            if (!offAgain.Ok)
+            {
+                c.Report.Fail(Sc, $"{e.Label}: включение", "не удалось подготовить шаг (повторное выключение без отката): " + s.Describe(offAgain));
+                return;
+            }
             var on = Set(true);
             var vOn = Read();
             c.Report.Check(Sc, $"{e.Label}: включение", on.Ok && IsFlag(vOn, true),

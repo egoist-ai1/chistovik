@@ -54,7 +54,9 @@ static class S7Agent
         try
         {
             await AclCheck(c, pipe);
-            await ForeignClient(c, pipe);
+            await ForeignClient(c, pipe, stderr);
+            await ForeignCopyPath(c);
+            await ForeignCopyHash(c);
 
             await using var client = new NamedPipeClientStream(".", pipe, PipeDirection.InOut, PipeOptions.Asynchronous);
             await client.ConnectAsync(30000);
@@ -152,15 +154,108 @@ static class S7Agent
             $"deny-сеть: {denyNetwork}, пользователь: {allowUser}, SYSTEM: {allowSystem}, широкие группы: {string.Join(",", extra)}; правила: {text}");
     }
 
-    /// <summary>Чужой процесс (не тот PID и образ, что агент получил в --parent-pid/--app-path) должен быть отключён без ответа.</summary>
-    static async Task ForeignClient(LiveContext c, string pipe)
+    /// <summary>Ждёт строку «client-rejected:ПРИЧИНА» в stderr агента и возвращает причину (null, если за время ожидания её не было).</summary>
+    static string? WaitReject(StringBuilder stderr, int ms)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < ms)
+        {
+            string log;
+            lock (stderr) log = stderr.ToString();
+            var i = log.IndexOf("client-rejected:", StringComparison.Ordinal);
+            if (i >= 0)
+            {
+                var rest = log[(i + "client-rejected:".Length)..];
+                var end = rest.IndexOfAny(['\r', '\n']);
+                return (end >= 0 ? rest[..end] : rest).Trim();
+            }
+            Thread.Sleep(200);
+        }
+        return null;
+    }
+
+    /// <summary>Чужой процесс (не тот PID, что агент получил в --parent-pid) должен быть отключён без ответа; причина берётся из журнала агента.</summary>
+    static async Task ForeignClient(LiveContext c, string pipe, StringBuilder stderr)
     {
         var outFile = Path.Combine(c.WorkDir, "foreign-" + Guid.NewGuid().ToString("N") + ".txt");
         var psi = new ProcessStartInfo(c.SelfExe) { UseShellExecute = false, CreateNoWindow = true };
         foreach (var a in new[] { "--child-client", "--pipe", pipe, "--out", outFile, "--token", c.Token }) psi.ArgumentList.Add(a);
         using var p = Process.Start(psi) ?? throw new InvalidOperationException("чужой клиент не запущен");
-        if (!p.WaitForExit(60000)) { p.Kill(true); c.Report.Fail(Sc, "проверка клиента: чужой процесс", "дочерний клиент завис"); return; }
+        if (!await Task.Run(() => p.WaitForExit(60000))) { p.Kill(true); c.Report.Fail(Sc, "проверка клиента: чужой процесс", "дочерний клиент завис"); return; }
         var text = File.Exists(outFile) ? File.ReadAllText(outFile) : "<нет файла результата>";
-        c.Report.Check(Sc, "проверка клиента: чужому процессу отказано без ответа", text.StartsWith("refused", StringComparison.Ordinal), text, "чужой процесс не был отключён: " + text);
+        var reason = WaitReject(stderr, 5000);
+        c.Report.Check(Sc, "проверка клиента: чужому процессу отказано без ответа", text.StartsWith("refused", StringComparison.Ordinal) && reason == "pid",
+            $"{text}; причина отказа: {reason}", $"результат клиента: {text}; причина отказа в журнале агента: {reason ?? "<нет>"} (ждали pid)");
+    }
+
+    /// <summary>Отдельный агент, которому родителем назван процесс-копия exe; подключается копия. Возвращает причину отказа из журнала агента.</summary>
+    static async Task<(string ClientText, string? Reason)> CopyAttempt(LiveContext c, string childExe, string agentAppPath, Func<int, Task>? beforeAgent, string label)
+    {
+        var pipe = "Chistovik.live" + Guid.NewGuid().ToString("N");
+        var outFile = Path.Combine(c.WorkDir, label + "-" + Guid.NewGuid().ToString("N") + ".txt");
+        var waitFile = outFile + ".go";
+        var psi = new ProcessStartInfo(childExe) { UseShellExecute = false, CreateNoWindow = true };
+        foreach (var a in new[] { "--child-client", "--pipe", pipe, "--out", outFile, "--wait-file", waitFile, "--token", c.Token }) psi.ArgumentList.Add(a);
+        using var child = Process.Start(psi) ?? throw new InvalidOperationException("копия не запущена");
+        Process? agent = null;
+        var stderr = new StringBuilder();
+        try
+        {
+            if (beforeAgent is not null) await beforeAgent(child.Id);
+            var apsi = new ProcessStartInfo(c.AgentPath!)
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(c.AgentPath)!,
+            };
+            foreach (var a in new[] { "--pipe", pipe, "--parent-pid", child.Id.ToString(), "--user-sid", c.Sid, "--app-path", agentAppPath }) apsi.ArgumentList.Add(a);
+            agent = Process.Start(apsi) ?? throw new InvalidOperationException("агент не запущен");
+            agent.ErrorDataReceived += (_, e) => { if (e.Data is not null) lock (stderr) stderr.AppendLine(e.Data); };
+            agent.BeginErrorReadLine();
+            await Task.Delay(1500); // агент считает хеш и открывает канал
+            File.WriteAllText(waitFile, "go");
+            var done = await Task.Run(() => child.WaitForExit(60000));
+            var text = done && File.Exists(outFile) ? File.ReadAllText(outFile) : "<клиент не завершился>";
+            return (text, WaitReject(stderr, 5000));
+        }
+        finally
+        {
+            try { if (!child.HasExited) child.Kill(true); } catch (InvalidOperationException) { }
+            try { if (agent is { HasExited: false }) agent.Kill(true); } catch (InvalidOperationException) { }
+            agent?.Dispose();
+        }
+    }
+
+    /// <summary>Клиент-копия exe по другому пути (подписанная копия в Program Files): PID совпал с ожидаемым, путь образа нет, ждём image-path.</summary>
+    static async Task ForeignCopyPath(LiveContext c)
+    {
+        if (c.SvcExe is null || !File.Exists(c.SvcExe)) { c.Report.Skip(Sc, "проверка клиента: копия по другому пути (image-path)", "нет копии exe (--svc-exe)"); return; }
+        var (text, reason) = await CopyAttempt(c, c.SvcExe, c.SelfExe, null, "copy-path");
+        c.Report.Check(Sc, "проверка клиента: копия по другому пути (image-path)", text.StartsWith("refused", StringComparison.Ordinal) && reason == "image-path",
+            $"{text}; причина отказа: {reason}", $"результат клиента: {text}; причина отказа: {reason ?? "<нет>"} (ждали image-path)");
+    }
+
+    /// <summary>
+    /// Клиент с тем же путём, но другим содержимым: процесс запускается из файла P, затем P переименовывается и на его место
+    /// кладётся файл с другим хешем, и только потом стартует агент с --app-path P. Ждём image-hash; если Windows после
+    /// переименования отдаёт новое имя образа (получится image-path), ветку изолировать нельзя, это ПРОПУСК.
+    /// </summary>
+    static async Task ForeignCopyHash(LiveContext c)
+    {
+        var dir = Path.Combine(c.WorkDir, "hashcopy-" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(dir);
+        var p = Path.Combine(dir, "stand.exe");
+        File.Copy(c.SelfExe, p);
+        var (text, reason) = await CopyAttempt(c, p, p, async _ =>
+        {
+            File.Move(p, p + ".run");
+            File.Copy(c.SelfExe, p);
+            await using (var fs = new FileStream(p, FileMode.Append, FileAccess.Write)) fs.WriteByte(0);
+        }, "copy-hash");
+        if (reason == "image-hash")
+            c.Report.Pass(Sc, "проверка клиента: тот же путь, другой хеш (image-hash)", $"{text}; причина отказа: {reason}");
+        else if (reason == "image-path")
+            c.Report.Skip(Sc, "проверка клиента: тот же путь, другой хеш (image-hash)", "Windows отдала переименованное имя образа, ветка image-hash этим способом не изолируется; отказ был по image-path");
+        else
+            c.Report.Fail(Sc, "проверка клиента: тот же путь, другой хеш (image-hash)", $"результат клиента: {text}; причина отказа: {reason ?? "<нет>"} (ждали image-hash)");
     }
 }

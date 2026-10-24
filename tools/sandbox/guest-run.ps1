@@ -22,8 +22,11 @@ param(
 $ErrorActionPreference = 'Continue'
 
 # 1. Только Windows Sandbox.
-if ($env:USERNAME -ne 'WDAGUtilityAccount') {
-  Write-Host 'Только в Windows Sandbox. Скрипт ничего не сделал: учётная запись не WDAGUtilityAccount.'
+# Два независимых признака: имя из токена Windows (не из переменной окружения) и служба CExecSvc, которая есть только в Sandbox.
+$sbUser = ([Security.Principal.WindowsIdentity]::GetCurrent().Name -split '\\')[-1]
+$sbService = Get-Service -Name 'CExecSvc' -ErrorAction SilentlyContinue
+if ($sbUser -ine 'WDAGUtilityAccount' -or -not $sbService) {
+  Write-Host 'Только в Windows Sandbox. Скрипт ничего не сделал: нет учётной записи WDAGUtilityAccount или службы CExecSvc.'
   exit 3
 }
 if ($Token.Length -lt 16) { Write-Host 'Токен запуска слишком короткий.'; exit 2 }
