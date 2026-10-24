@@ -245,6 +245,9 @@ public abstract class StatefulPageViewModel : PageViewModel
         SetResult(kind, o.Message, o.RestartHint ?? "", o.Changed);
     }
 
+    /// <summary>Показывает готовый итог действия так же, как после ответа агента (снимки экранов: частичный результат).</summary>
+    internal void ShowDemoOutcome(ChangeOutcome outcome) => ShowOutcome(outcome);
+
     protected void ClearResult() => SetResult(ResultKind.None, "", "");
 
     protected void Post(Action a)

@@ -15,6 +15,9 @@ public partial class MainWindow : Window
         DataContextChanged += OnDataContextChanged;
     }
 
+    /// <summary>Снимки экранов: без анимации смены раздела, чтобы кадр не поймал её середину.</summary>
+    internal bool SkipTransitions { get; set; }
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -41,7 +44,7 @@ public partial class MainWindow : Window
     /// <summary>Короткая смена раздела: прозрачность и сдвиг. Без анимаций в системе — мгновенно.</summary>
     private void PlayTransition()
     {
-        if (!SystemParameters.ClientAreaAnimation) return;
+        if (SkipTransitions || !SystemParameters.ClientAreaAnimation) return;
         var dur = new Duration(TimeSpan.FromMilliseconds(180));
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         ContentHost.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { EasingFunction = ease });
