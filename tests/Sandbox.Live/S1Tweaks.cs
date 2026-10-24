@@ -76,52 +76,134 @@ static class S1Tweaks
 
     /// <summary>
     /// На месте ключа пользовательского твика создаётся ссылка HKU\SID\... -> HKLM\SOFTWARE\ChistovikTest_LinkTarget.
-    /// Запись через ссылку не должна пройти: в цели в HKLM значения не появится. Нужен твик, чьего ключа в HKU ещё нет.
+    /// Запись через ссылку не должна пройти: в цели в HKLM значения не появится. Ключа твика в HKU обычно уже нет только у
+    /// редких твиков, поэтому существующий небольшой ключ на время сценария снимается в память, удаляется и после сценария
+    /// возвращается как был. Контроль: обычная запись через ту же ссылку в цель доходит (иначе проверка ничего не доказывает).
     /// </summary>
     static async Task Symlink(LiveContext c, Session s)
     {
+        const string Check = "ссылка HKU->HKLM";
         const string Target = @"SOFTWARE\ChistovikTest_LinkTarget";
-        var t = TweakCatalog.Shared.Tweaks.FirstOrDefault(x => Tweaks.IsUser(x) && !Reg.KeyExists(true, c.Sid, x.Key));
+        const int MaxNodes = 200;
+
+        // 1. выбор твика: сначала с отсутствующим ключом, затем с самым маленьким существующим (политики предпочтительнее)
+        TweakEntry? t = null;
+        RegKeySnap? snap = null;
+        var users = TweakCatalog.Shared.Tweaks.Where(Tweaks.IsUser).GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
+        t = users.FirstOrDefault(x => !Reg.KeyExists(true, c.Sid, x.Key));
         if (t is null)
         {
-            c.Report.Skip(Sc, "ссылка HKU->HKLM", "у всех пользовательских твиков ключ в HKU уже существует; ссылку на его место не поставить");
-            return;
+            var best = users
+                .Select(x => (Tweak: x, Snap: SafeCapture(c.Sid, x.Key, MaxNodes)))
+                .Where(x => x.Snap is not null)
+                .OrderBy(x => x.Tweak.Key.Contains("Policies", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(x => x.Snap!.Nodes).ThenBy(x => x.Snap!.ValueCount)
+                .FirstOrDefault();
+            if (best.Tweak is null)
+            {
+                c.Report.Skip(Sc, Check, $"нет пользовательского твика с отсутствующим ключом или ключом не больше {MaxNodes} узлов; ссылку на его место не поставить");
+                return;
+            }
+            t = best.Tweak;
+            snap = best.Snap;
         }
 
         var linkPath = c.Sid + "\\" + t.Key;
         var segments = t.Key.Split('\\');
-        var top = segments[0]; // самый верхний ключ цепочки, которого ещё нет: его потом удалим целиком
-        for (var i = 1; i <= segments.Length; i++)
-        {
-            var prefix = string.Join('\\', segments.Take(i));
-            if (!Reg.KeyExists(true, c.Sid, prefix)) { top = prefix; break; }
-        }
+        var top = t.Key; // самый верхний ключ цепочки, которого ещё нет: при отсутствующем ключе твика его потом удалим целиком
+        if (snap is null)
+            for (var i = 1; i <= segments.Length; i++)
+            {
+                var prefix = string.Join('\\', segments.Take(i));
+                if (!Reg.KeyExists(true, c.Sid, prefix)) { top = prefix; break; }
+            }
 
-        Reg.SetRaw(false, c.Sid, Target, "Marker", 1, Microsoft.Win32.RegistryValueKind.DWord);
-        var rc = RegLink.CreateInUsers(linkPath, @"\Registry\Machine\" + Target);
-        if (rc != 0)
-        {
-            c.Report.Skip(Sc, "ссылка HKU->HKLM", $"система не дала создать ссылку (Win32 {rc}); проверить нечем");
-            Reg.DeleteTree(false, c.Sid, Target);
-            if (!Reg.KeyExists(true, c.Sid, t.Key)) Reg.DeleteTree(true, c.Sid, top);
-            return;
-        }
-
+        var removed = false;
+        var linkCreated = false;
+        Reg.DeleteTree(false, c.Sid, Target);
         try
         {
+            // 2. освобождаем место под ссылку, если ключ был
+            if (snap is not null)
+            {
+                try { Reg.DeleteTree(true, c.Sid, t.Key); removed = true; }
+                catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException or ArgumentException)
+                {
+                    c.Report.Skip(Sc, Check, $"ключ {t.Key} нельзя убрать на время сценария ({e.GetType().Name}: {e.Message})");
+                    return;
+                }
+                if (Reg.KeyExists(true, c.Sid, t.Key))
+                {
+                    c.Report.Skip(Sc, Check, $"ключ {t.Key} не удалился (открытые дескрипторы); ссылку на его место не поставить");
+                    return;
+                }
+            }
+
+            Reg.SetRaw(false, c.Sid, Target, "Marker", 1, Microsoft.Win32.RegistryValueKind.DWord);
+            var rc = RegLink.CreateInUsers(linkPath, @"\Registry\Machine\" + Target);
+            if (rc != 0)
+            {
+                c.Report.Skip(Sc, Check, $"система не дала создать ссылку (Win32 {rc}; для REG_OPTION_CREATE_LINK нужны права и свободное место ключа); проверить нечем");
+                return;
+            }
+            linkCreated = true;
+
+            // 3. контроль: обычная запись через ссылку доходит до цели
+            const string ControlName = "ChistovikTest_Control";
+            Reg.SetRaw(true, c.Sid, t.Key, ControlName, 1, Microsoft.Win32.RegistryValueKind.DWord);
+            var control = Reg.Read(false, c.Sid, Target, ControlName);
+            Reg.Delete(false, c.Sid, Target, ControlName);
+            if (!control.Exists)
+            {
+                c.Report.Skip(Sc, Check, "ссылка создана, но обычная запись через неё в HKLM не доходит: проверка отказа была бы пустой");
+                return;
+            }
+
+            // 4. сам сценарий
             var want = Tweaks.Expect(t, true);
             var r = await s.Send(Tweaks.Request(t.Id, true));
             var leaked = Reg.Read(false, c.Sid, Target, t.Value);
-            c.Report.Check(Sc, $"ссылка HKU->HKLM: запись {t.Id} не ушла в HKLM", !leaked.Exists && !r.Ok,
-                $"агент: {s.Describe(r)}; в цели HKLM значения нет",
-                leaked.Exists ? $"ЗНАЧЕНИЕ ПОПАЛО В HKLM ({leaked}, ожидалось бы {want})" : $"запись не попала в HKLM, но агент ответил {r.Code} (ожидался отказ)");
+            var others = TargetValueNames(Target).Where(n => !n.Equals("Marker", StringComparison.OrdinalIgnoreCase)).ToArray();
+            c.Report.Check(Sc, $"{Check}: запись {t.Id} не ушла в HKLM", !leaked.Exists && others.Length == 0 && !r.Ok,
+                $"агент: {s.Describe(r)}; в цели HKLM ничего не появилось (контроль записи через ссылку работал)",
+                leaked.Exists ? $"ЗНАЧЕНИЕ ПОПАЛО В HKLM ({leaked}, ожидалось бы {want})"
+                : others.Length > 0 ? $"В ЦЕЛИ HKLM появились значения: {string.Join(",", others)}"
+                : $"запись не попала в HKLM, но агент ответил {r.Code} (ожидался отказ)");
         }
         finally
         {
-            var d = RegLink.DeleteInUsers(linkPath);
-            if (d != 0) c.Report.Fail(Sc, "ссылка HKU->HKLM: уборка", $"ссылка не удалена (код {d})");
+            if (linkCreated)
+            {
+                var d = RegLink.DeleteInUsers(linkPath);
+                if (d != 0) c.Report.Fail(Sc, $"{Check}: уборка", $"ссылка не удалена (код {d})");
+                else linkCreated = false;
+            }
             Reg.DeleteTree(false, c.Sid, Target);
-            if (d == 0) Reg.DeleteTree(true, c.Sid, top);
+            if (!linkCreated)
+            {
+                try
+                {
+                    if (snap is not null && removed) snap.Restore(c.Sid, t.Key);
+                    else if (snap is null) Reg.DeleteTree(true, c.Sid, top);
+                }
+                catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+                {
+                    c.Report.Fail(Sc, $"{Check}: возврат ключа", $"ключ {t.Key} не восстановлен: {e.GetType().Name}: {e.Message}");
+                }
+            }
         }
+    }
+
+    static RegKeySnap? SafeCapture(string sid, string key, int max)
+    {
+        try { return RegKeySnap.Capture(sid, key, max); }
+        catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException or IOException) { return null; }
+    }
+
+    static string[] TargetValueNames(string target)
+    {
+        using var b = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64);
+        using var k = b.OpenSubKey(target);
+        return k?.GetValueNames() ?? [];
     }
 }

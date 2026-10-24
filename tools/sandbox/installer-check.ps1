@@ -46,6 +46,33 @@ function Invoke-Msi([string[]]$msiArgs) {
   return $p.ExitCode
 }
 
+# Выжимка причины отказа из подробного лога MSI (/l*v): сообщения «Продукт: ... -- ...» и строки перед «Return value 3»
+# (в русской локали «Код возврата 3»), чтобы не открывать лог вручную. Лог Windows Installer пишется в UTF-16, Get-Content это распознаёт.
+function Get-MsiFailureSummary([string]$logPath) {
+  if (-not (Test-Path -LiteralPath $logPath)) { return 'лог не найден' }
+  try {
+    $lines = @(Get-Content -LiteralPath $logPath -ErrorAction Stop)
+    $parts = New-Object System.Collections.ArrayList
+    $msgs = @($lines | Where-Object { $_ -match '(Продукт|Product):\s.*\s--\s' } | ForEach-Object { ($_ -replace '^.*?(Продукт|Product):\s*', '').Trim() } | Select-Object -Unique)
+    foreach ($m in ($msgs | Select-Object -First 5)) { [void]$parts.Add('сообщение: ' + $m) }
+    $idx = @(for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '(Return value|Код возврата)\s+3\b') { $i } })
+    if ($idx.Count -gt 0) {
+      $first = $idx[0]
+      $from = [Math]::Max(0, $first - 6)
+      $ctx = @($lines[$from..($first)] | ForEach-Object { ($_ -replace '^MSI \([sc]\) \([0-9A-F:]+\) \[[0-9:]+\]:\s*', '').Trim() } | Where-Object { $_ -and $_ -notmatch '^Note: 1: 22(05|28)' })
+      [void]$parts.Add('перед отказом: ' + ($ctx -join ' / '))
+    }
+    $errs = @($lines | Where-Object { $_ -match 'CustomAction .* returned actual error code|Error \d{4}\.|Ошибка \d{4}\.' } | Select-Object -First 3 | ForEach-Object { $_.Trim() })
+    foreach ($e in $errs) { [void]$parts.Add($e) }
+    if ($parts.Count -eq 0) { return 'в логе нет понятных сообщений об отказе; смотрите ' + (Split-Path -Leaf $logPath) }
+    $text = ($parts -join '; ')
+    if ($text.Length -gt 1200) { $text = $text.Substring(0, 1200) + '...' }
+    return $text
+  } catch {
+    return 'не удалось разобрать лог: ' + $_.Exception.Message
+  }
+}
+
 try {
   if (Test-Path -LiteralPath $installDir) {
     Add-Result 'чистое состояние перед установкой' 'FAIL' "каталог $installDir уже существует: Sandbox не чистый"
@@ -53,7 +80,9 @@ try {
 
   # Установка.
   $code = Invoke-Msi @('/i', "`"$MsiPath`"", '/qn', '/l*v', "`"$msiLog`"")
-  Check 'установка MSI (тихая)' ($code -eq 0 -or $code -eq 3010) "msiexec код $code" "msiexec код $code, см. msi-install.log"
+  $installOk = ($code -eq 0 -or $code -eq 3010)
+  $why = if ($installOk) { '' } else { '; причина: ' + (Get-MsiFailureSummary $msiLog) }
+  Check 'установка MSI (тихая)' $installOk "msiexec код $code" "msiexec код $code, см. msi-install.log$why"
 
   $app = Join-Path $installDir 'Chistovik.App.exe'
   $agent = Join-Path $installDir 'Chistovik.Agent.exe'
@@ -93,10 +122,21 @@ try {
   }
 
   # Удаление.
-  $code = Invoke-Msi @('/x', "`"$MsiPath`"", '/qn', '/l*v', "`"$(Join-Path $ResultsDir 'msi-uninstall.log')`"")
-  Check 'удаление MSI (тихое)' ($code -eq 0 -or $code -eq 3010) "msiexec код $code" "msiexec код $code, см. msi-uninstall.log"
-  Check 'после удаления нет файлов App и Agent' (-not (Test-Path -LiteralPath $app) -and -not (Test-Path -LiteralPath $agent)) 'файлов нет' 'файлы остались (возможна отложенная замена до перезагрузки)'
-  Check 'после удаления нет записи в «Программы и компоненты»' (@(Get-Arp).Count -eq 0) 'записи нет' 'запись осталась'
+  # Если установка не удалась, удалять нечего: «нет файлов» и «нет записи» прошли бы вхолостую (так было в первом прогоне),
+  # поэтому эти проверки тогда ПРОПУСК, а не PASS, и msiexec /x (код 1605) не запускается.
+  if (-not $installOk) {
+    $skipWhy = 'установка не удалась (код ' + $code + '), удалять нечего'
+    Add-Result 'удаление MSI (тихое)' 'ПРОПУСК' $skipWhy
+    Add-Result 'после удаления нет файлов App и Agent' 'ПРОПУСК' $skipWhy
+    Add-Result 'после удаления нет записи в «Программы и компоненты»' 'ПРОПУСК' $skipWhy
+  } else {
+    $ulog = Join-Path $ResultsDir 'msi-uninstall.log'
+    $ucode = Invoke-Msi @('/x', "`"$MsiPath`"", '/qn', '/l*v', "`"$ulog`"")
+    $uwhy = if ($ucode -eq 0 -or $ucode -eq 3010) { '' } else { '; причина: ' + (Get-MsiFailureSummary $ulog) }
+    Check 'удаление MSI (тихое)' ($ucode -eq 0 -or $ucode -eq 3010) "msiexec код $ucode" "msiexec код $ucode, см. msi-uninstall.log$uwhy"
+    Check 'после удаления нет файлов App и Agent' (-not (Test-Path -LiteralPath $app) -and -not (Test-Path -LiteralPath $agent)) 'файлов нет' 'файлы остались (возможна отложенная замена до перезагрузки)'
+    Check 'после удаления нет записи в «Программы и компоненты»' (@(Get-Arp).Count -eq 0) 'записи нет' 'запись осталась'
+  }
 
   $data = Join-Path $env:ProgramData 'Chistovik'
   Add-Result 'данные пользователя (%ProgramData%\Chistovik)' 'PASS' ('по проекту установщик их не создаёт и не удаляет; сейчас ' + $(if (Test-Path -LiteralPath $data) { 'каталог есть' } else { 'каталога нет' }))

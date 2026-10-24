@@ -26,19 +26,37 @@ static class S4Services
         using var s = Session.Open(c, "s4");
 
         // запретный список: отказ, состояние не меняется
-        foreach (var hard in new[] { "Dnscache", "WinDefend" })
+        // Dnscache и WinDefend в образе Sandbox отсутствуют, поэтому берём весь список служб из жёсткого списка политики,
+        // которые есть в любой Windows, и проверяем те, что реально установлены. Критерий: отказ с правилом service-hardlist
+        // и неизменный START_TYPE (читается независимо через sc qc).
+        string[] candidates =
+        [
+            "EventLog", "Schedule", "RpcSs", "Winmgmt", "BITS", "CryptSvc", "gpsvc", "ProfSvc", "SamSs", "PlugPlay", "Power",
+            "BFE", "LanmanWorkstation", "DcomLaunch", "Dhcp", "Dnscache", "WinDefend", "mpssvc", "wuauserv", "TrustedInstaller",
+        ];
+        var tested = 0;
+        var missing = new List<string>();
+        foreach (var hard in candidates)
         {
+            if (!Chistovik.Core.Policy.ServicePolicy.IsHardListed(hard)) { c.Report.Fail(Sc, $"запретная служба {hard}", "имени нет в жёстком списке политики: стенд устарел относительно кода"); continue; }
             var was = StartType(hard);
-            if (was is null) { c.Report.Skip(Sc, $"запретная служба {hard}", "службы нет в этом образе"); continue; }
+            if (was is null) { missing.Add(hard); continue; }
             var r = await s.Send(new SetServiceStartRequest { Id = Guid.NewGuid(), ServiceName = hard, Start = StartMode.Disabled });
             var now = StartType(hard);
-            c.Report.Check(Sc, $"запретная служба {hard}: отказ", !r.Ok && now == was,
-                $"ответ {s.Describe(r)}; START_TYPE остался {now}", $"ответ: {s.Describe(r)}; START_TYPE было {was}, стало {now}");
+            var text = s.Describe(r);
+            tested++;
+            // отказ по другой причине (не hardlist) тоже защитил бы, но проверка тогда не доказывает то, что должна
+            var viaHardlist = text.Contains("service-hardlist", StringComparison.Ordinal);
+            c.Report.Check(Sc, $"запретная служба {hard}: отказ", !r.Ok && now == was && viaHardlist,
+                $"ответ {text}; START_TYPE остался {now}", $"ответ: {text}; START_TYPE было {was}, стало {now}; ждали отказ с правилом service-hardlist");
         }
+        if (tested == 0) c.Report.Skip(Sc, "запретные службы", "ни одной службы из проверочного списка нет в образе");
+        else if (missing.Count > 0) c.Report.Info(Sc, "запретные службы: проверено " + tested, "в образе нет: " + string.Join(", ", missing));
 
         if (c.SvcExe is null || !File.Exists(c.SvcExe))
         {
-            c.Report.Skip(Sc, "тестовая служба", "нет подписанного тестового файла (--svc-exe): его готовит guest-run.ps1");
+            c.Report.Skip(Sc, "тестовая служба", "нет подписанного тестового файла (--svc-exe)"
+                + (string.IsNullOrEmpty(c.SvcSkipReason) ? ": его готовит guest-run.ps1" : ": " + c.SvcSkipReason));
             return;
         }
 

@@ -45,6 +45,8 @@ sealed class LiveContext
     public required string SelfExe { get; init; }
     public string? AgentPath { get; init; }
     public string? SvcExe { get; init; }
+    /// <summary>Почему нет подписанного тестового файла (пишет guest-run.ps1); попадает в ПРОПУСК S4.</summary>
+    public string? SvcSkipReason { get; init; }
     public bool SkipIdle { get; init; }
 }
 

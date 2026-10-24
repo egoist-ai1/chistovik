@@ -46,6 +46,7 @@ public static class Program
             SelfExe = Environment.ProcessPath ?? throw new InvalidOperationException("Нет пути к exe"),
             AgentPath = o.Get("--agent"),
             SvcExe = o.Get("--svc-exe"),
+            SvcSkipReason = o.Get("--svc-skip-reason"),
             SkipIdle = o.Has("--skip-idle"),
         };
         Directory.CreateDirectory(ctx.WorkDir);

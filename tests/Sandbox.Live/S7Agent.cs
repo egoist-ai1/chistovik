@@ -25,6 +25,11 @@ static class S7Agent
             return;
         }
 
+        // Копии-клиенты проверяются ДО основного агента: у агента мьютекс Global\Chistovik.Agent.<SID>, второй агент
+        // при работающем первом сразу выходит с кодом 3 (в первом прогоне именно из-за этого image-hash не отрабатывал).
+        await Guarded(c, "проверка клиента: копия по другому пути (image-path)", () => ForeignCopyPath(c));
+        await Guarded(c, "проверка клиента: тот же путь, другой хеш (image-hash)", () => ForeignCopyHash(c));
+
         var t = Tweaks.SimpleUserDword();
         var orig = t is null ? null : Tweaks.Read(c, t);
         var keyExisted = t is not null && Reg.KeyExists(true, c.Sid, t.Key);
@@ -55,8 +60,6 @@ static class S7Agent
         {
             await AclCheck(c, pipe);
             await ForeignClient(c, pipe, stderr);
-            await ForeignCopyPath(c);
-            await ForeignCopyHash(c);
 
             await using var client = new NamedPipeClientStream(".", pipe, PipeDirection.InOut, PipeOptions.Asynchronous);
             await client.ConnectAsync(30000);
@@ -110,7 +113,7 @@ static class S7Agent
             try { if (!agent.HasExited) agent.Kill(true); } catch (InvalidOperationException) { }
             string log;
             lock (stderr) log = stderr.ToString().Trim();
-            if (log.Length > 0) c.Report.Pass(Sc, "журнал stderr агента (справка)", log.Length > 1500 ? log[^1500..] : log);
+            if (log.Length > 0) c.Report.Info(Sc, "журнал stderr агента (справка)", log.Length > 1500 ? log[^1500..] : log);
             agent.Dispose();
             if (t is not null && orig is not null)
             {
@@ -188,13 +191,62 @@ static class S7Agent
             $"{text}; причина отказа: {reason}", $"результат клиента: {text}; причина отказа в журнале агента: {reason ?? "<нет>"} (ждали pid)");
     }
 
-    /// <summary>Отдельный агент, которому родителем назван процесс-копия exe; подключается копия. Возвращает причину отказа из журнала агента.</summary>
+    /// <summary>Выполняет сценарий копии; любое исключение ввода-вывода или запуска становится понятным FAIL, а не обрывом всего S7.</summary>
+    static async Task Guarded(LiveContext c, string check, Func<Task> body)
+    {
+        try { await body(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            c.Report.Fail(Sc, check, e.GetType().Name + ": " + e.Message);
+        }
+    }
+
+    /// <summary>
+    /// Копия всего каталога стенда: self-contained публикация состоит из многих файлов, один Sandbox.Live.exe без соседей
+    /// не запускается (в первом прогоне клиент-копия молча выходила, и это выглядело как «клиент не завершился»).
+    /// </summary>
+    static string CopyStandDir(LiveContext c, string label)
+    {
+        var src = Path.GetDirectoryName(c.SelfExe)!;
+        var dest = Path.Combine(c.WorkDir, label + "-" + Guid.NewGuid().ToString("N")[..6]);
+        Directory.CreateDirectory(dest);
+        foreach (var dir in Directory.EnumerateDirectories(src, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(dest, Path.GetRelativePath(src, dir)));
+        foreach (var file in Directory.EnumerateFiles(src, "*", SearchOption.AllDirectories))
+            File.Copy(file, Path.Combine(dest, Path.GetRelativePath(src, file)), true);
+        return Path.Combine(dest, Path.GetFileName(c.SelfExe));
+    }
+
+    static void TryDeleteDir(string? dir)
+    {
+        try { if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
+    static void KillAndWait(Process? p)
+    {
+        if (p is null) return;
+        try { if (!p.HasExited) p.Kill(true); } catch (InvalidOperationException) { }
+        try { p.WaitForExit(5000); } catch (InvalidOperationException) { }
+    }
+
+    static string Tail(StringBuilder sb)
+    {
+        string s;
+        lock (sb) s = sb.ToString().Trim();
+        return s.Length > 300 ? s[^300..] : s;
+    }
+
+    /// <summary>
+    /// Отдельный агент, которому родителем назван процесс-копия exe; подключается копия. Возвращает текст результата клиента
+    /// и причину отказа из журнала агента. Ожидания с таймаутом; клиент и агент в конце гарантированно убиваются.
+    /// </summary>
     static async Task<(string ClientText, string? Reason)> CopyAttempt(LiveContext c, string childExe, string agentAppPath, Func<int, Task>? beforeAgent, string label)
     {
         var pipe = "Chistovik.live" + Guid.NewGuid().ToString("N");
         var outFile = Path.Combine(c.WorkDir, label + "-" + Guid.NewGuid().ToString("N") + ".txt");
         var waitFile = outFile + ".go";
-        var psi = new ProcessStartInfo(childExe) { UseShellExecute = false, CreateNoWindow = true };
+        var psi = new ProcessStartInfo(childExe) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(childExe)! };
         foreach (var a in new[] { "--child-client", "--pipe", pipe, "--out", outFile, "--wait-file", waitFile, "--token", c.Token }) psi.ArgumentList.Add(a);
         using var child = Process.Start(psi) ?? throw new InvalidOperationException("копия не запущена");
         Process? agent = null;
@@ -212,26 +264,36 @@ static class S7Agent
             agent.ErrorDataReceived += (_, e) => { if (e.Data is not null) lock (stderr) stderr.AppendLine(e.Data); };
             agent.BeginErrorReadLine();
             await Task.Delay(1500); // агент считает хеш и открывает канал
+            if (agent.HasExited) return ($"<агент вышел сразу с кодом {agent.ExitCode}: {Tail(stderr)}>", null);
             File.WriteAllText(waitFile, "go");
+
             var done = await Task.Run(() => child.WaitForExit(60000));
-            var text = done && File.Exists(outFile) ? File.ReadAllText(outFile) : "<клиент не завершился>";
+            string text;
+            if (!done) text = "<клиент не завершился за 60 с; его прервали>";
+            else if (File.Exists(outFile)) text = File.ReadAllText(outFile);
+            else text = $"<клиент вышел с кодом {child.ExitCode} без файла результата (не запустился или упал)>";
             return (text, WaitReject(stderr, 5000));
         }
         finally
         {
-            try { if (!child.HasExited) child.Kill(true); } catch (InvalidOperationException) { }
-            try { if (agent is { HasExited: false }) agent.Kill(true); } catch (InvalidOperationException) { }
+            KillAndWait(child);
+            KillAndWait(agent);
             agent?.Dispose();
         }
     }
 
-    /// <summary>Клиент-копия exe по другому пути (подписанная копия в Program Files): PID совпал с ожидаемым, путь образа нет, ждём image-path.</summary>
+    /// <summary>Клиент-копия exe по другому пути: PID совпал с ожидаемым, путь образа нет, ждём image-path.</summary>
     static async Task ForeignCopyPath(LiveContext c)
     {
-        if (c.SvcExe is null || !File.Exists(c.SvcExe)) { c.Report.Skip(Sc, "проверка клиента: копия по другому пути (image-path)", "нет копии exe (--svc-exe)"); return; }
-        var (text, reason) = await CopyAttempt(c, c.SvcExe, c.SelfExe, null, "copy-path");
-        c.Report.Check(Sc, "проверка клиента: копия по другому пути (image-path)", text.StartsWith("refused", StringComparison.Ordinal) && reason == "image-path",
-            $"{text}; причина отказа: {reason}", $"результат клиента: {text}; причина отказа: {reason ?? "<нет>"} (ждали image-path)");
+        const string Check = "проверка клиента: копия по другому пути (image-path)";
+        var copy = CopyStandDir(c, "pathcopy");
+        try
+        {
+            var (text, reason) = await CopyAttempt(c, copy, c.SelfExe, null, "copy-path");
+            c.Report.Check(Sc, Check, text.StartsWith("refused", StringComparison.Ordinal) && reason == "image-path",
+                $"{text}; причина отказа: {reason}", $"результат клиента: {text}; причина отказа: {reason ?? "<нет>"} (ждали image-path)");
+        }
+        finally { TryDeleteDir(Path.GetDirectoryName(copy)); }
     }
 
     /// <summary>
@@ -241,21 +303,23 @@ static class S7Agent
     /// </summary>
     static async Task ForeignCopyHash(LiveContext c)
     {
-        var dir = Path.Combine(c.WorkDir, "hashcopy-" + Guid.NewGuid().ToString("N")[..6]);
-        Directory.CreateDirectory(dir);
-        var p = Path.Combine(dir, "stand.exe");
-        File.Copy(c.SelfExe, p);
-        var (text, reason) = await CopyAttempt(c, p, p, async _ =>
+        const string Check = "проверка клиента: тот же путь, другой хеш (image-hash)";
+        var p = CopyStandDir(c, "hashcopy");
+        try
         {
-            File.Move(p, p + ".run");
-            File.Copy(c.SelfExe, p);
-            await using (var fs = new FileStream(p, FileMode.Append, FileAccess.Write)) fs.WriteByte(0);
-        }, "copy-hash");
-        if (reason == "image-hash")
-            c.Report.Pass(Sc, "проверка клиента: тот же путь, другой хеш (image-hash)", $"{text}; причина отказа: {reason}");
-        else if (reason == "image-path")
-            c.Report.Skip(Sc, "проверка клиента: тот же путь, другой хеш (image-hash)", "Windows отдала переименованное имя образа, ветка image-hash этим способом не изолируется; отказ был по image-path");
-        else
-            c.Report.Fail(Sc, "проверка клиента: тот же путь, другой хеш (image-hash)", $"результат клиента: {text}; причина отказа: {reason ?? "<нет>"} (ждали image-hash)");
+            var (text, reason) = await CopyAttempt(c, p, p, async _ =>
+            {
+                File.Move(p, p + ".run");
+                File.Copy(c.SelfExe, p);
+                await using (var fs = new FileStream(p, FileMode.Append, FileAccess.Write)) fs.WriteByte(0);
+            }, "copy-hash");
+            if (reason == "image-hash")
+                c.Report.Pass(Sc, Check, $"{text}; причина отказа: {reason}");
+            else if (reason == "image-path")
+                c.Report.Skip(Sc, Check, "Windows отдала переименованное имя образа, ветка image-hash этим способом не изолируется; отказ был по image-path");
+            else
+                c.Report.Fail(Sc, Check, $"результат клиента: {text}; причина отказа: {reason ?? "<нет>"} (ждали image-hash)");
+        }
+        finally { TryDeleteDir(Path.GetDirectoryName(p)); }
     }
 }

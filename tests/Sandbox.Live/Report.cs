@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Sandbox.Live;
 
-public enum Status { Pass, Fail, Skip }
+public enum Status { Pass, Fail, Skip, Info }
 
 public sealed record CheckResult(string Scenario, string Name, string Status, string Detail);
 
@@ -17,7 +17,7 @@ public sealed class Report(string dir)
 
     public void Add(string scenario, string name, Status s, string detail = "")
     {
-        var text = s switch { Status.Pass => "PASS", Status.Fail => "FAIL", _ => "ПРОПУСК" };
+        var text = s switch { Status.Pass => "PASS", Status.Fail => "FAIL", Status.Info => "ИНФО", _ => "ПРОПУСК" };
         lock (_gate) _items.Add(new CheckResult(scenario, name, text, detail));
         Console.WriteLine($"[{text}] {scenario} / {name}" + (detail.Length > 0 ? ": " + detail : ""));
     }
@@ -25,6 +25,8 @@ public sealed class Report(string dir)
     public void Pass(string sc, string name, string detail = "") => Add(sc, name, Status.Pass, detail);
     public void Fail(string sc, string name, string detail = "") => Add(sc, name, Status.Fail, detail);
     public void Skip(string sc, string name, string detail = "") => Add(sc, name, Status.Skip, detail);
+    /// <summary>Справочная строка (журнал агента и т. п.): не проверка, в PASS не считается.</summary>
+    public void Info(string sc, string name, string detail = "") => Add(sc, name, Status.Info, detail);
 
     public void Check(string sc, string name, bool ok, string detailOk = "", string detailFail = "")
         => Add(sc, name, ok ? Status.Pass : Status.Fail, ok ? detailOk : detailFail);
@@ -51,13 +53,14 @@ public sealed class Report(string dir)
                 pass = snap.Count(i => i.Status == "PASS"),
                 fail = snap.Count(i => i.Status == "FAIL"),
                 skip = snap.Count(i => i.Status == "ПРОПУСК"),
+                info = snap.Count(i => i.Status == "ИНФО"),
                 checks = snap,
             }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
 
         var sb = new StringBuilder();
         sb.AppendLine("# Результаты живого стенда Чистовика");
         sb.AppendLine();
-        sb.AppendLine($"PASS: {snap.Count(i => i.Status == "PASS")}, FAIL: {snap.Count(i => i.Status == "FAIL")}, ПРОПУСК: {snap.Count(i => i.Status == "ПРОПУСК")}");
+        sb.AppendLine($"PASS: {snap.Count(i => i.Status == "PASS")}, FAIL: {snap.Count(i => i.Status == "FAIL")}, ПРОПУСК: {snap.Count(i => i.Status == "ПРОПУСК")}, ИНФО: {snap.Count(i => i.Status == "ИНФО")}");
         sb.AppendLine();
         sb.AppendLine("| Сценарий | Проверка | Итог | Подробности |");
         sb.AppendLine("|---|---|---|---|");
