@@ -23,6 +23,7 @@ namespace Chistovik.Core.Ipc;
 [JsonDerivedType(typeof(SetPowerSchemeRequest), "SetPowerScheme")]
 [JsonDerivedType(typeof(SetPowerSettingRequest), "SetPowerSetting")]
 [JsonDerivedType(typeof(UndoRequest), "Undo")]
+[JsonDerivedType(typeof(UninstallRequest), "Uninstall")]
 public abstract record AgentRequest
 {
     public required Guid Id { get; init; }
@@ -193,6 +194,26 @@ public sealed record UndoRequest : AgentRequest
     }
 }
 
+/// <summary>
+/// Удаление программы из HKLM по идентификатору находки <c>arp:machine:{x64|x86}:&lt;ключ&gt;</c>. Команды, пути и параметры в запросе
+/// не передаются: агент сам читает запись «Программ и компонентов», решает Policy, запускает msi.dll или проверенный деинсталлятор.
+/// Программы текущего пользователя (<c>arp:user:*</c>) агент не удаляет вовсе.
+/// </summary>
+public sealed record UninstallRequest : AgentRequest
+{
+    public const int MaxFindingIdLength = 300;
+
+    public required string FindingId { get; init; }
+
+    public override string? Validate()
+    {
+        if (FindingId is null || FindingId.Length is < 1 or > MaxFindingIdLength) return "FindingId: длина от 1 до 300";
+        foreach (var ch in FindingId)
+            if (ch < ' ' || ch == '\u007f') return "FindingId: управляющие символы недопустимы";
+        return Rules.ArpMachineId.IsMatch(FindingId) ? null : "FindingId: допустимы только программы компьютера (arp:machine:...)";
+    }
+}
+
 /// <summary>Правила форматов полей запросов (DESIGN-0.1 §3 и §7).</summary>
 static partial class Rules
 {
@@ -204,6 +225,11 @@ static partial class Rules
     [GeneratedRegex(@"^(run:(hklm64|hklm32|hku):[^\r\n]+|folder:(user|common):[^\r\n]+)\z", RegexOptions.CultureInvariant)]
     public static partial Regex EntryIdRegex();
     public static Regex EntryId { get; } = EntryIdRegex();
+
+    /// <summary>Находка «программа компьютера»: HKLM, представление x64 или x86, имя ключа без «\» и управляющих символов.</summary>
+    [GeneratedRegex(@"^arp:machine:(x64|x86):[^\\\u0000-\u001f\u007f]{1,255}\z", RegexOptions.CultureInvariant)]
+    public static partial Regex ArpMachineIdRegex();
+    public static Regex ArpMachineId { get; } = ArpMachineIdRegex();
 
     /// <summary>Имя службы: тот же алфавит и длина 1–256, что в ServicePolicy (ограничение ≤257 из спецификации выполняется).</summary>
     [GeneratedRegex(@"^[A-Za-z0-9_.\-$@ ]{1,256}\z", RegexOptions.CultureInvariant)]
@@ -247,6 +273,8 @@ public static class ResponseCodes
     public const string JournalNewerSchema = "journal-newer-schema";
     public const string BadRequest = "bad-request";
     public const string UnknownOperation = "unknown-operation";
+    /// <summary>Откат отклонён: в операции есть шаг, который вернуть нельзя (удаление программы).</summary>
+    public const string NotRevertible = "not-revertible";
     public const string Internal = "internal";
 }
 

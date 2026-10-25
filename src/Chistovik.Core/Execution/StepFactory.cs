@@ -47,6 +47,7 @@ internal static class StepFactory
                 StepKind.PowerActiveScheme => PowerActive(env, targetKey, targetJson, desired, isRevert),
                 StepKind.PowerSetting => PowerSetting(env, targetKey, targetJson, desired, isRevert),
                 StepKind.PowerSchemeCreate => PowerCreate(env, targetKey, targetJson, desired, isRevert),
+                StepKind.UninstallRun => Uninstall(targetKey, targetJson, desired, isRevert),
                 _ => Bad("journal-unknown-kind"),
             };
         }
@@ -137,6 +138,25 @@ internal static class StepFactory
         var s = StateJson.ParseTask(desired);
         if (!s.Exists) return Bad("journal-bad-state");
         return new TaskStep(t.Path, s.Enabled) { IsRevert = isRevert };
+    }
+
+    // ---------- программы ----------
+
+    /// <summary>
+    /// Удаление программы из журнала: только чтение состояния для восстановления (RecoveryOnly). Запись из такого шага невозможна,
+    /// откат отклоняется: удаление программы возвращается только установкой заново.
+    /// </summary>
+    static PlannedStep Uninstall(string key, string target, string desired, bool isRevert)
+    {
+        PlannedStep Bad(string rule) => Refuse(StepKind.UninstallRun, key, target, desired, StepCodes.PolicyDenied, rule, isRevert);
+        if (isRevert) return Bad("uninstall-not-revertible");
+        var t = StateJson.ParseUninstallTarget(target);
+        if (t.Scope != "machine" || !ArpId.TryParse(ArpId.Make(t.Arch, t.Key), out _, out _, out _)) return Bad("uninstall-bad-target");
+        if (t.Kind is not ("msi" or "exe")) return Bad("uninstall-bad-target");
+        if (t.Kind == "msi" && (t.ProductCode is null || !ArpId.IsProductCode(t.ProductCode))) return Bad("uninstall-bad-target");
+        if (!KeyEq(StateJson.UninstallKey(t.Arch, t.Key), key)) return Bad("journal-target-key-mismatch");
+        _ = StateJson.ParseUninstall(desired);
+        return new UninstallStep(t) { RecoveryOnly = true };
     }
 
     // ---------- питание ----------

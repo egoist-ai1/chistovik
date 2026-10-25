@@ -66,7 +66,14 @@ internal static class SqliteJournalSchema
             "CREATE INDEX ix_step_pending ON step(state) WHERE state = 'pending'",
             "CREATE INDEX ix_operation_created ON operation(created_utc)",
         ],
+        // v2: признак «шаг вернуть нельзя» (удаление программ). Старые шаги возвращаемые.
+        [
+            "ALTER TABLE step ADD COLUMN revertible INTEGER NOT NULL DEFAULT 1",
+        ],
     ];
+
+    /// <summary>Первая версия схемы, где есть колонка step.revertible.</summary>
+    public const int RevertibleSince = 2;
 
     public static int Latest => Migrations.Length;
 
@@ -186,7 +193,11 @@ internal static class SqliteJournalSchema
 
     // ---- чтение (общее для писателя и читателя) ----
     private const string OpColumns = "id, kind, subject, state, code, created_utc, finished_utc, reverts_op_id, user_sid, error";
-    private const string StepColumns = "id, op_id, ord, kind, target_key, target_json, before_json, after_json, state, code, policy_rule, reverts_step_id, restart, created_utc, updated_utc";
+    private const string StepColumnsBase = "id, op_id, ord, kind, target_key, target_json, before_json, after_json, state, code, policy_rule, reverts_step_id, restart, created_utc, updated_utc";
+
+    /// <summary>Читатель App может открыть ещё не мигрированный файл v1: колонки revertible там нет, шаги возвращаемые.</summary>
+    private static string StepColumns(SqliteConnection c)
+        => StepColumnsBase + (UserVersion(c) >= RevertibleSince ? ", revertible" : ", 1 AS revertible");
 
     private static DateTimeOffset Ms(long ms) => DateTimeOffset.FromUnixTimeMilliseconds(ms);
 
@@ -222,7 +233,7 @@ internal static class SqliteJournalSchema
             error = r.IsDBNull(9) ? null : r.GetString(9);
         }
         var steps = new List<StepRecord>();
-        using (var cmd = Cmd(c, "SELECT " + StepColumns + " FROM step WHERE op_id = @id ORDER BY ord", null, ("@id", id.ToString("D"))))
+        using (var cmd = Cmd(c, "SELECT " + StepColumns(c) + " FROM step WHERE op_id = @id ORDER BY ord", null, ("@id", id.ToString("D"))))
         using (var r = cmd.ExecuteReader())
             while (r.Read()) steps.Add(ReadStep(r));
         return new OperationView(summary, reverts, sid, error, steps);
@@ -231,7 +242,7 @@ internal static class SqliteJournalSchema
     /// <summary>Эффективное значение цели = последний (по id) шаг со state 'done'. См. XML-комментарий SqliteJournal.LatestEffective.</summary>
     public static StepRecord? LatestEffective(SqliteConnection c, string targetKey)
     {
-        using var cmd = Cmd(c, "SELECT " + StepColumns + " FROM step WHERE target_key = @k AND state = 'done' ORDER BY id DESC LIMIT 1",
+        using var cmd = Cmd(c, "SELECT " + StepColumns(c) + " FROM step WHERE target_key = @k AND state = 'done' ORDER BY id DESC LIMIT 1",
             null, ("@k", targetKey));
         using var r = cmd.ExecuteReader();
         return r.Read() ? ReadStep(r) : null;
@@ -241,5 +252,5 @@ internal static class SqliteJournalSchema
         r.GetInt64(0), Guid.Parse(r.GetString(1)), r.GetInt32(2), ParseEnum<StepKind>(r.GetString(3)), r.GetString(4), r.GetString(5),
         r.IsDBNull(6) ? null : r.GetString(6), r.GetString(7), ParseStepState(r.GetString(8)),
         r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10),
-        r.IsDBNull(11) ? null : r.GetInt64(11), r.GetString(12), Ms(r.GetInt64(13)), Ms(r.GetInt64(14)));
+        r.IsDBNull(11) ? null : r.GetInt64(11), r.GetString(12), Ms(r.GetInt64(13)), Ms(r.GetInt64(14)), r.GetInt64(15) != 0);
 }

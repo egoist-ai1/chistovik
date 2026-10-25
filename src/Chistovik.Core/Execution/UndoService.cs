@@ -39,6 +39,10 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
             resolutions[r.StepId] = r.Action;
         }
 
+        // Удаление программы возвращается только установкой заново: любой выполненный необратимый шаг закрывает откат всей операции.
+        if (view.Steps.Any(s => s.State == StepState.Done && !s.Revertible))
+            return Reject(req.Id, ResponseCodes.NotRevertible, "Эта операция необратима: программу можно вернуть только установкой заново");
+
         // ---- предпроход: только чтение ----
         var sid = client.UserSid;
         var sim = new SimState(env.Power);

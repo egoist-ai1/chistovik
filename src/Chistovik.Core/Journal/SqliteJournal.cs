@@ -98,28 +98,29 @@ public sealed class SqliteJournal : IJournalWriter, IDisposable
         }
     }
 
-    public long AddPending(Guid op, int ord, StepKind k, string targetKey, string target, string before, string after, string restart = "none")
+    public long AddPending(Guid op, int ord, StepKind k, string targetKey, string target, string before, string after,
+        string restart = "none", bool revertible = true)
     {
-        lock (_gate) return InsertStep(op, ord, k, targetKey, target, before, after, StepState.Pending, null, null, restart);
+        lock (_gate) return InsertStep(op, ord, k, targetKey, target, before, after, StepState.Pending, null, null, restart, revertible);
     }
 
     public void AddTerminal(Guid op, int ord, StepKind k, string targetKey, string target, string? before, string after,
-        StepState s, string code, string? rule, string restart = "none")
+        StepState s, string code, string? rule, string restart = "none", bool revertible = true)
     {
         if (s == StepState.Pending) throw new ArgumentException("AddTerminal takes a terminal state, not pending.", nameof(s));
-        lock (_gate) InsertStep(op, ord, k, targetKey, target, before, after, s, code, rule, restart);
+        lock (_gate) InsertStep(op, ord, k, targetKey, target, before, after, s, code, rule, restart, revertible);
     }
 
     private long InsertStep(Guid op, int ord, StepKind k, string targetKey, string target, string? before, string after,
-        StepState s, string? code, string? rule, string restart)
+        StepState s, string? code, string? rule, string restart, bool revertible)
     {
         ValidRestart(restart);
         var t = NowMs();
         var v = Scalar(_conn,
-            "INSERT INTO step(op_id, ord, kind, target_key, target_json, before_json, after_json, state, code, policy_rule, restart, created_utc, updated_utc) " +
-            "VALUES (@op, @ord, @kind, @tk, @tj, @bj, @aj, @st, @code, @rule, @rs, @t, @t) RETURNING id", null,
+            "INSERT INTO step(op_id, ord, kind, target_key, target_json, before_json, after_json, state, code, policy_rule, restart, revertible, created_utc, updated_utc) " +
+            "VALUES (@op, @ord, @kind, @tk, @tj, @bj, @aj, @st, @code, @rule, @rs, @rv, @t, @t) RETURNING id", null,
             ("@op", op.ToString("D")), ("@ord", ord), ("@kind", k.ToString()), ("@tk", targetKey), ("@tj", target), ("@bj", before),
-            ("@aj", after), ("@st", StepStateText(s)), ("@code", code), ("@rule", rule), ("@rs", restart), ("@t", t));
+            ("@aj", after), ("@st", StepStateText(s)), ("@code", code), ("@rule", rule), ("@rs", restart), ("@rv", revertible ? 1 : 0), ("@t", t));
         return Convert.ToInt64(v, CultureInfo.InvariantCulture);
     }
 

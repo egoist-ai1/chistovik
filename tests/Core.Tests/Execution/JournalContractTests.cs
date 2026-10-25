@@ -18,6 +18,7 @@ public class JournalContractTests
         var env = new ExecEnv
         {
             Registry = t.Registry, Services = t.Services, Tasks = t.Tasks, Power = t.Power, Folders = t.Folders, Files = t.Files,
+            Security = t.Security, Uninstaller = t.Uninstaller,
             Clock = t.Clock, Ids = t.Ids, Journal = journal,
             Gate = new StepGate(TweakCatalog.Shared, PowerCatalog.Shared, PolicyContext.Fixed, t.Trust),
             AgentVersion = "0.1-test", CatalogSha256 = "test",

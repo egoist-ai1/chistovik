@@ -29,8 +29,13 @@ internal sealed class CommandResolver
     /// <paramref name="exe"/> непуст только при true. Аргументы не возвращаются: они не влияют на решение.
     /// </summary>
     public bool TryResolve(string? command, out string exe, out string error)
+        => TryResolve(command, out exe, out _, out error);
+
+    /// <summary>То же, что <see cref="TryResolve(string?, out string, out string)"/>, но возвращает и аргументы (остаток строки после файла, без раскрытия переменных).</summary>
+    public bool TryResolve(string? command, out string exe, out string args, out string error)
     {
         exe = string.Empty;
+        args = string.Empty;
         error = string.Empty;
         if (string.IsNullOrWhiteSpace(command)) { error = "Пустая команда"; return false; }
         if (command.Length > 32767) { error = "Слишком длинная команда"; return false; }
@@ -39,21 +44,25 @@ internal sealed class CommandResolver
 
         var s = command.Trim();
         string raw;
+        string rest;
         if (s[0] == '"')
         {
             var end = s.IndexOf('"', 1);
             if (end < 2) { error = "Незакрытая кавычка или пустой путь"; return false; }
             raw = s[1..end];
+            rest = s[(end + 1)..];
         }
         else
         {
             raw = FirstTokenWithKnownExtension(s) ?? (s.Contains(' ') ? string.Empty : s);
             if (raw.Length == 0) { error = "Не удалось выделить файл из команды"; return false; }
+            rest = s[raw.Length..];
         }
 
         raw = Expand(raw);
         if (!PathNormalizer.TryNormalize(raw, out var n, out var err)) { error = err; return false; }
         exe = n;
+        args = rest.Trim();
         return true;
     }
 

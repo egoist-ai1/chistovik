@@ -39,9 +39,11 @@ public sealed class StepGate
     readonly StartupPolicy _startup;
     readonly PowerPolicy _powerPolicy;
     readonly IFileTrust _trust;
+    readonly PolicyContext _context;
 
     public StepGate(TweakCatalog tweaks, PowerCatalog power, PolicyContext context, IFileTrust trust)
     {
+        _context = context;
         Tweaks = tweaks;
         Power = power;
         _service = new ServicePolicy(context);
@@ -240,6 +242,20 @@ public sealed class StepGate
         if (_startup.TryResolveCommand(command, out var exe, out _)) sig = _trust.GetSignature(exe);
         var d = _startup.CheckToggle(id, command, sig);
         return d.IsAllowed ? GateResult<StartupApproval>.Allow(new StartupApproval(id)) : Deny<StartupApproval>(d);
+    }
+
+    // ---------- программы ----------
+
+    /// <summary>
+    /// Разрешает удаление программы по СВЕЖИМ фактам записи Uninstall из HKLM (читает агент, не клиент): PackagePolicy
+    /// (MSI по коду продукта либо exe из Program Files за ACL-барьером с тихим режимом). ExpertOnly (общие среды выполнения)
+    /// считается отказом. Команду шлюз выводит сам, готовой командной строки от клиента нет.
+    /// </summary>
+    public GateResult<ApprovedUninstall> CheckUninstall(string id, PackageFacts facts, IFileSecurity files)
+    {
+        var c = new PackagePolicy(_context, files).Classify(id, facts);
+        if (!c.IsModifiable) return Deny<ApprovedUninstall>(c.Rule);
+        return GateResult<ApprovedUninstall>.Allow(new ApprovedUninstall(id.ToLowerInvariant(), c.Command!));
     }
 
     // ---------- питание ----------

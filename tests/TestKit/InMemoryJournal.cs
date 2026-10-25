@@ -47,6 +47,7 @@ public sealed class InMemoryJournal(IClock clock) : IJournalWriter
         public string? Rule { get; init; }
         public long? RevertsStepId { get; set; }
         public required string Restart { get; init; }
+        public bool Revertible { get; init; } = true;
         public required DateTimeOffset Created { get; init; }
         public DateTimeOffset Updated { get; set; }
     }
@@ -58,7 +59,7 @@ public sealed class InMemoryJournal(IClock clock) : IJournalWriter
 
     public Action<string>? Probe { get; set; }
 
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
 
     public IReadOnlyList<StepRecord> AllSteps => _steps.Select(ToRecord).ToList();
 
@@ -81,7 +82,7 @@ public sealed class InMemoryJournal(IClock clock) : IJournalWriter
     static OperationSummary ToSummary(Op o) => new(o.Id, o.Kind, o.Subject, o.State, o.Code, o.Created, o.Finished);
 
     static StepRecord ToRecord(Step s) => new(s.Id, s.OpId, s.Ord, s.Kind, s.TargetKey, s.TargetJson, s.BeforeJson, s.AfterJson, s.State, s.Code,
-        s.Rule, s.RevertsStepId, s.Restart, s.Created, s.Updated);
+        s.Rule, s.RevertsStepId, s.Restart, s.Created, s.Updated, s.Revertible);
 
     static void ValidRestart(string restart)
     {
@@ -127,7 +128,8 @@ public sealed class InMemoryJournal(IClock clock) : IJournalWriter
         return new OperationRecord(op.Id, op.Kind, op.Subject, OperationState.Running, null, false);
     }
 
-    Step Insert(Guid op, int ord, StepKind k, string targetKey, string target, string? before, string after, StepState s, string? code, string? rule, string restart)
+    Step Insert(Guid op, int ord, StepKind k, string targetKey, string target, string? before, string after, StepState s, string? code, string? rule, string restart,
+        bool revertible)
     {
         ValidRestart(restart);
         if (!_ops.ContainsKey(op)) throw new InvalidOperationException("Операции нет");
@@ -136,27 +138,28 @@ public sealed class InMemoryJournal(IClock clock) : IJournalWriter
         var step = new Step
         {
             Id = _nextStep++, OpId = op, Ord = ord, Kind = k, TargetKey = targetKey, TargetJson = target, BeforeJson = before, AfterJson = after,
-            State = s, Code = code, Rule = rule, Restart = restart, Created = now, Updated = now,
+            State = s, Code = code, Rule = rule, Restart = restart, Revertible = revertible, Created = now, Updated = now,
         };
         _steps.Add(step);
         return step;
     }
 
-    public long AddPending(Guid op, int ord, StepKind k, string targetKey, string target, string before, string after, string restart = "none")
+    public long AddPending(Guid op, int ord, StepKind k, string targetKey, string target, string before, string after, string restart = "none",
+        bool revertible = true)
     {
         P("AddPending:before");
-        var s = Insert(op, ord, k, targetKey, target, before, after, StepState.Pending, null, null, restart);
+        var s = Insert(op, ord, k, targetKey, target, before, after, StepState.Pending, null, null, restart, revertible);
         AddPendingCount++;
         P("AddPending:after");
         return s.Id;
     }
 
     public void AddTerminal(Guid op, int ord, StepKind k, string targetKey, string target, string? before, string after,
-        StepState s, string code, string? rule, string restart = "none")
+        StepState s, string code, string? rule, string restart = "none", bool revertible = true)
     {
         if (s == StepState.Pending) throw new ArgumentException("AddTerminal takes a terminal state, not pending.", nameof(s));
         P("AddTerminal:before");
-        Insert(op, ord, k, targetKey, target, before, after, s, code, rule, restart);
+        Insert(op, ord, k, targetKey, target, before, after, s, code, rule, restart, revertible);
         P("AddTerminal:after");
     }
 

@@ -42,6 +42,15 @@ public sealed record PowerSchemeTarget(Guid Template, Guid Scheme);
 
 public sealed record PowerSchemeState(int V, bool Exists);
 
+/// <summary>
+/// UninstallRun. Scope всегда "machine" (HKCU агент не открывает), Arch "x64" | "x86" (представление реестра), Key — имя ключа ARP,
+/// Kind "msi" | "exe", ProductCode — GUID с фигурными скобками для msi.
+/// </summary>
+public sealed record UninstallTarget(string Scope, string Arch, string Key, string Kind, string? ProductCode);
+
+/// <summary>UninstallRun. Installed: MSI — состояние продукта «установлен»; EXE — ключ ARP существует.</summary>
+public sealed record UninstallState(int V, bool Installed);
+
 /// <summary>Source-generated сериализация payload'ов: без рефлексии, лишние поля запрещены.</summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -63,6 +72,8 @@ public sealed record PowerSchemeState(int V, bool Exists);
 [JsonSerializable(typeof(PowerSettingState))]
 [JsonSerializable(typeof(PowerSchemeTarget))]
 [JsonSerializable(typeof(PowerSchemeState))]
+[JsonSerializable(typeof(UninstallTarget))]
+[JsonSerializable(typeof(UninstallState))]
 public sealed partial class JournalJson : JsonSerializerContext
 {
     /// <summary>Версия формата состояний; пишется в "v".</summary>
@@ -81,6 +92,13 @@ public static class StepCodes
     public const string RecoveredDone = "recovered-done";
     public const string RecoveredNotApplied = "recovered-not-applied";
     public const string AlreadyReverted = "already-reverted";
+    /// <summary>Удаление программы вернуть нельзя: Undo ничего не трогает.</summary>
+    public const string NotRevertible = "not-revertible";
+    /// <summary>Деинсталлятор не уложился во время; процесс не прерывался.</summary>
+    public const string Timeout = "timeout";
+    /// <summary>Установщик занят другой установкой (MSI 1618) или программа запущена.</summary>
+    public const string InUse = "in-use";
+    public const string SkippedByRule = "skipped-by-rule";
 
     public static string Win32(int error) => "win32:" + error;
 
@@ -90,7 +108,7 @@ public static class StepCodes
         if (code.StartsWith("win32:", StringComparison.Ordinal))
             return int.TryParse(code.AsSpan(6), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _);
         return code is NoChange or ExternalChange or PolicyDenied or NotFound or AccessDenied or VerifyMismatch
-            or RecoveredDone or RecoveredNotApplied or AlreadyReverted;
+            or RecoveredDone or RecoveredNotApplied or AlreadyReverted or NotRevertible or Timeout or InUse or SkippedByRule;
     }
 }
 

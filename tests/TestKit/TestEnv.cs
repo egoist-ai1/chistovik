@@ -24,6 +24,8 @@ public sealed class TestEnv
     public FakeFileTrust Trust { get; } = new();
     public FakeUserFolders Folders { get; } = new();
     public FakeFileSystem Files { get; } = new();
+    public FakeFileSecurity Security { get; } = new();
+    public FakeUninstaller Uninstaller { get; } = new();
     public FakeClock Clock { get; } = new();
     public SequentialIdGenerator Ids { get; } = new();
     public InMemoryJournal Journal { get; }
@@ -55,6 +57,8 @@ public sealed class TestEnv
         Power = Power,
         Folders = Folders,
         Files = Files,
+        Security = Security,
+        Uninstaller = Uninstaller,
         Clock = Clock,
         Ids = Ids,
         Journal = Journal,
@@ -88,6 +92,8 @@ public sealed class TestEnv
     public AgentResponse Plan(PowerPlan plan) => Run(new SetPowerSchemeRequest { Id = NextRequestId(), Plan = plan });
 
     public AgentResponse PowerSetting(string id, uint? ac, uint? dc) => Run(new SetPowerSettingRequest { Id = NextRequestId(), SettingId = id, Ac = ac, Dc = dc });
+
+    public AgentResponse Uninstall(string findingId) => Run(new UninstallRequest { Id = NextRequestId(), FindingId = findingId });
 
     public AgentResponse Undo(Guid operationId, params (long StepId, ConflictAction Action)[] resolutions)
         => Run(new UndoRequest

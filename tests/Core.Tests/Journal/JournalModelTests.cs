@@ -82,6 +82,6 @@ public class JournalModelTests
         // Публичных конструкторов нет: создать Approved* может только Core (и тесты через InternalsVisibleTo).
         foreach (var t in typeof(ApprovedRegistryWrite).Assembly.GetTypes().Where(t => t.Name.StartsWith("Approved", StringComparison.Ordinal)))
             Assert.Empty(t.GetConstructors());
-        Assert.Equal(7, typeof(ApprovedRegistryWrite).Assembly.GetTypes().Count(t => t.Name.StartsWith("Approved", StringComparison.Ordinal)));
+        Assert.Equal(8, typeof(ApprovedRegistryWrite).Assembly.GetTypes().Count(t => t.Name.StartsWith("Approved", StringComparison.Ordinal)));
     }
 }

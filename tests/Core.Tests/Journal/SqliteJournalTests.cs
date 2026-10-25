@@ -59,12 +59,12 @@ public class SqliteJournalTests
     }
 
     [Fact]
-    public void Creates_schema_v1_with_pragmas()
+    public void Creates_schema_v2_with_pragmas()
     {
         using var t = new TempJournalDir();
         using var j = new SqliteJournal(t.Db, new JournalFakeClock());
-        Assert.Equal(1, j.SchemaVersion);
-        Assert.Equal(1L, Scalar(t.Db, "PRAGMA user_version"));
+        Assert.Equal(2, j.SchemaVersion);
+        Assert.Equal(2L, Scalar(t.Db, "PRAGMA user_version"));
         Assert.Equal(2L, Scalar(t.Db, "PRAGMA auto_vacuum")); // INCREMENTAL
         Assert.Equal("wal", Scalar(t.Db, "PRAGMA journal_mode"));
         var tables = new List<string>();
@@ -82,6 +82,61 @@ public class SqliteJournalTests
         Assert.Contains("ix_step_pending", tables);
         Assert.Contains("ix_operation_created", tables);
         Assert.Equal("1", Scalar(t.Db, "SELECT count(*) FROM meta WHERE key='created_utc'")?.ToString());
+    }
+
+    /// <summary>Файл журнала v1 (до колонки revertible), как его оставили предыдущие версии.</summary>
+    private static void CreateV1Database(string db, Guid opId)
+    {
+        using var c = new SqliteConnection($"Data Source={db};Mode=ReadWriteCreate;Pooling=False");
+        c.Open();
+        void Run(string sql)
+        {
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.ExecuteNonQuery();
+        }
+        Run("CREATE TABLE meta(key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)");
+        Run("CREATE TABLE operation(id TEXT PRIMARY KEY NOT NULL, request_id TEXT UNIQUE NULL, kind TEXT NOT NULL, subject TEXT NOT NULL, " +
+            "reverts_op_id TEXT NULL REFERENCES operation(id) ON DELETE SET NULL, user_sid TEXT NOT NULL, agent_version TEXT NOT NULL, " +
+            "catalog_sha256 TEXT NOT NULL, created_utc INTEGER NOT NULL, finished_utc INTEGER NULL, state TEXT NOT NULL, code TEXT NULL, error TEXT NULL)");
+        Run("CREATE TABLE step(id INTEGER PRIMARY KEY AUTOINCREMENT, op_id TEXT NOT NULL REFERENCES operation(id) ON DELETE CASCADE, ord INTEGER NOT NULL, " +
+            "kind TEXT NOT NULL, target_key TEXT NOT NULL, target_json TEXT NOT NULL, before_json TEXT NULL, after_json TEXT NOT NULL, state TEXT NOT NULL, " +
+            "code TEXT NULL, policy_rule TEXT NULL, reverts_step_id INTEGER NULL REFERENCES step(id) ON DELETE SET NULL, restart TEXT NOT NULL DEFAULT 'none', " +
+            "created_utc INTEGER NOT NULL, updated_utc INTEGER NOT NULL, UNIQUE(op_id, ord))");
+        Run("CREATE INDEX ix_step_target ON step(target_key, id DESC)");
+        Run("CREATE INDEX ix_step_pending ON step(state) WHERE state = 'pending'");
+        Run("CREATE INDEX ix_operation_created ON operation(created_utc)");
+        Run("INSERT INTO meta(key, value) VALUES ('created_utc', '0')");
+        Run($"INSERT INTO operation(id, kind, subject, user_sid, agent_version, catalog_sha256, created_utc, state) VALUES ('{opId:D}', 'Tweaks', 'old', '{Sid}', '0.1', 'x', 0, 'done')");
+        Run($"INSERT INTO step(op_id, ord, kind, target_key, target_json, before_json, after_json, state, created_utc, updated_utc) VALUES ('{opId:D}', 0, 'RegistryValue', 'k', '{{}}', '{{}}', '{{}}', 'done', 0, 0)");
+        Run("PRAGMA user_version = 1");
+    }
+
+    [Fact]
+    public void Migrates_v1_to_v2_and_old_steps_stay_revertible()
+    {
+        using var t = new TempJournalDir();
+        var oldOp = Guid.NewGuid();
+        CreateV1Database(t.Db, oldOp);
+
+        // Читатель App видит ещё не мигрированный файл v1: шаги возвращаемые.
+        using (var r = new SqliteJournalReader(t.Db))
+        {
+            Assert.Equal(1, r.SchemaVersion);
+            Assert.True(r.Get(oldOp)!.Steps.Single().Revertible);
+        }
+
+        using var j = new SqliteJournal(t.Db, new JournalFakeClock());
+        Assert.Equal(2, j.SchemaVersion);
+        Assert.True(j.Get(oldOp)!.Steps.Single().Revertible);
+
+        var op = NewOp(kind: OperationKind.Uninstall, subject: "arp:machine:x64:x");
+        j.BeginOrGet(op);
+        j.AddPending(op.Id, 0, StepKind.UninstallRun, "arp:machine:x64:x", "{}", "{}", "{}", "none", revertible: false);
+        j.AddTerminal(op.Id, 1, StepKind.RegistryValue, "k2", "{}", null, "{}", StepState.Skipped, StepCodes.NoChange, null);
+        var steps = j.Get(op.Id)!.Steps;
+        Assert.False(steps[0].Revertible);
+        Assert.True(steps[1].Revertible);
     }
 
     [Fact]

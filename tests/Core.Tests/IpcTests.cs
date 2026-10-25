@@ -87,7 +87,7 @@ public class DispatcherTests
         Assert.Equal(
             [
                 "ApplyModeRequest", "ApplyTweaksRequest", "PingRequest", "SetPowerSchemeRequest", "SetPowerSettingRequest",
-                "SetServiceStartRequest", "SetStartupEntryRequest", "SetTaskEnabledRequest", "UndoRequest",
+                "SetServiceStartRequest", "SetStartupEntryRequest", "SetTaskEnabledRequest", "UndoRequest", "UninstallRequest",
             ], types);
     }
 }

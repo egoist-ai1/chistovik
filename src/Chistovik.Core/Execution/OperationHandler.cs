@@ -71,6 +71,8 @@ public sealed class OperationHandler : IOperationHandler
                 return Apply(r, sid, OperationKind.PowerScheme, PowerPlanner.PlanId(r.Plan), () => PowerPlanner.PlanScheme(_env, r));
             case SetPowerSettingRequest r:
                 return Apply(r, sid, OperationKind.PowerSetting, r.SettingId, () => PowerPlanner.PlanSetting(_env, r));
+            case UninstallRequest r:
+                return Apply(r, sid, OperationKind.Uninstall, r.FindingId.ToLowerInvariant(), () => UninstallPlanner.Plan(_env, r));
             case UndoRequest r:
                 return _undo.Undo(r, client);
             default:

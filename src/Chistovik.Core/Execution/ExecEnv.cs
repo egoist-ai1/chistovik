@@ -13,6 +13,8 @@ public sealed class ExecEnv
     public required IPowerControl Power { get; init; }
     public required IUserFolders Folders { get; init; }
     public required IFileSystem Files { get; init; }
+    public required IFileSecurity Security { get; init; }
+    public required IUninstaller Uninstaller { get; init; }
     public required IClock Clock { get; init; }
     public required IIdGenerator Ids { get; init; }
     public required IJournalWriter Journal { get; init; }
@@ -39,6 +41,9 @@ internal interface IStepSession : IDisposable
 
     /// <summary>Выполняет разрешённую запись (Approved* создан шлюзом при открытии). Только для сессии, открытой на запись.</summary>
     void Write();
+
+    /// <summary>Код, с которым успешный шаг закрывается в журнале (например win32:3010 «нужна перезагрузка»); null — без кода.</summary>
+    string? DoneCode => null;
 }
 
 internal sealed class OpenOutcome
@@ -99,6 +104,9 @@ internal abstract class PlannedStep
     /// <summary>Шаг откатывает собственный шаг журнала (выставляет только UndoService).</summary>
     public bool IsRevert { get; init; }
 
+    /// <summary>false: выполненный шаг вернуть нельзя (удаление программы); Undo отвечает not-revertible.</summary>
+    public bool Revertible { get; init; } = true;
+
     /// <summary>Отказ, найденный уже при планировании (например, Policy запретила цель каталога). Проверяется первым.</summary>
     public Refusal? PresetRefusal { get; init; }
 
@@ -136,6 +144,7 @@ internal static class ErrorCodes
 {
     public static string From(Exception e) => e switch
     {
+        StepFailureException f => f.Code,
         UnauthorizedAccessException => StepCodes.AccessDenied,
         PowerSettingNotFoundException => StepCodes.NotFound,
         System.Security.SecurityException => StepCodes.AccessDenied,

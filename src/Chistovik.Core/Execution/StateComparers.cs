@@ -9,7 +9,7 @@ public static class StateComparers
     static readonly IStateComparer[] All =
     [
         new RegistryStateComparer(), new StartupStateComparer(), new ServiceStateComparer(), new TaskStateComparer(),
-        new PowerActiveStateComparer(), new PowerSettingStateComparer(), new PowerSchemeStateComparer(),
+        new PowerActiveStateComparer(), new PowerSettingStateComparer(), new PowerSchemeStateComparer(), new UninstallStateComparer(),
     ];
 
     public static IStateComparer For(StepKind kind)
@@ -153,6 +153,16 @@ public sealed class PowerSchemeStateComparer : IStateComparer
     public StepKind Kind => StepKind.PowerSchemeCreate;
 
     public bool IsSame(string a, string b) => StateJson.ParsePowerScheme(a).Exists == StateJson.ParsePowerScheme(b).Exists;
+
+    public bool IsNoChange(string a, string b) => IsSame(a, b);
+}
+
+/// <summary>Удаление программы: сравнивается только «установлена / нет».</summary>
+public sealed class UninstallStateComparer : IStateComparer
+{
+    public StepKind Kind => StepKind.UninstallRun;
+
+    public bool IsSame(string a, string b) => StateJson.ParseUninstall(a).Installed == StateJson.ParseUninstall(b).Installed;
 
     public bool IsNoChange(string a, string b) => IsSame(a, b);
 }

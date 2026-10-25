@@ -22,7 +22,7 @@ internal sealed class StepRunner(ExecEnv env)
 
     StepOutcome Terminal(Guid op, int ord, PlannedStep step, string? before, StepState state, string code, string? rule)
     {
-        env.Journal.AddTerminal(op, ord, step.Kind, step.TargetKey, step.TargetJson, before, step.DesiredJson, state, code, rule, step.Restart);
+        env.Journal.AddTerminal(op, ord, step.Kind, step.TargetKey, step.TargetJson, before, step.DesiredJson, state, code, rule, step.Restart, step.Revertible);
         var end = state switch
         {
             StepState.Skipped => StepEnd.Skipped,
@@ -68,13 +68,13 @@ internal sealed class StepRunner(ExecEnv env)
         if (noChange)
         {
             if (revert is null) return Terminal(op, ord, step, cur, StepState.Skipped, StepCodes.NoChange, null);
-            var undoId = env.Journal.AddPending(op, ord, step.Kind, step.TargetKey, step.TargetJson, cur, step.DesiredJson, step.Restart);
+            var undoId = env.Journal.AddPending(op, ord, step.Kind, step.TargetKey, step.TargetJson, cur, step.DesiredJson, step.Restart, step.Revertible);
             env.Journal.CompleteRevert(undoId, revert.OriginalStepId, StepCodes.AlreadyReverted);
             return new StepOutcome(StepEnd.Done, StepCodes.AlreadyReverted);
         }
         if (!expected) return Terminal(op, ord, step, cur, StepState.Failed, StepCodes.ExternalChange, "changed-after-preflight");
 
-        var stepId = env.Journal.AddPending(op, ord, step.Kind, step.TargetKey, step.TargetJson, cur, step.DesiredJson, step.Restart);
+        var stepId = env.Journal.AddPending(op, ord, step.Kind, step.TargetKey, step.TargetJson, cur, step.DesiredJson, step.Restart, step.Revertible);
 
         Exception? writeError = null;
         try { session.Write(); }
@@ -103,7 +103,7 @@ internal sealed class StepRunner(ExecEnv env)
 
         if (ok)
         {
-            if (revert is null) env.Journal.Complete(stepId, StepState.Done, null, null);
+            if (revert is null) env.Journal.Complete(stepId, StepState.Done, session.DoneCode, null);
             else env.Journal.CompleteRevert(stepId, revert.OriginalStepId, revert.SuccessCode);
             return new StepOutcome(StepEnd.Done, null);
         }
@@ -159,10 +159,10 @@ internal sealed class StepRunner(ExecEnv env)
                 var s = steps[i];
                 var r = pre[i];
                 if (r is { SkipNotFound: false })
-                    env.Journal.AddTerminal(opId, i, s.Kind, s.TargetKey, s.TargetJson, null, s.DesiredJson, StepState.Denied, r.Code, r.Rule, s.Restart);
+                    env.Journal.AddTerminal(opId, i, s.Kind, s.TargetKey, s.TargetJson, null, s.DesiredJson, StepState.Denied, r.Code, r.Rule, s.Restart, s.Revertible);
                 else
                     env.Journal.AddTerminal(opId, i, s.Kind, s.TargetKey, s.TargetJson, null, s.DesiredJson, StepState.Denied,
-                        StepCodes.PolicyDenied, "operation-denied", s.Restart);
+                        StepCodes.PolicyDenied, "operation-denied", s.Restart, s.Revertible);
             }
             env.Journal.Finish(opId, OperationState.Denied, DenialCode(pre));
             return;

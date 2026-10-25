@@ -17,7 +17,10 @@ public sealed record ServiceSubject(string Name, string DisplayName, string Imag
 
 public sealed record TaskSubject(string Path, string Name, string Summary, ChangeClass Class, string? ClassReason);
 
-public sealed record ProgramSubject(string Name, string Publisher, string Version, long SizeBytes, string Source);
+/// <param name="ProgramId">arp:machine:{x64|x86}:ключ — идентификатор записи; если задан, он же идентификатор находки и запроса на удаление.</param>
+/// <param name="Class">Подсказка PackagePolicy: Modifiable — программу можно удалить через агента.</param>
+public sealed record ProgramSubject(string Name, string Publisher, string Version, long SizeBytes, string Source,
+    string ProgramId = "", ChangeClass Class = ChangeClass.ReadOnly, string ClassReason = "");
 
 /// <summary>
 /// Чистая функция «факты → находка». Правила для автозагрузки (первое совпавшее): Forbidden → Protected; ReadOnly или
@@ -29,11 +32,6 @@ public sealed record ProgramSubject(string Name, string Publisher, string Versio
 public sealed class FindingClassifier
 {
     public static FindingClassifier Shared { get; } = new(AdviceCatalog.Shared);
-
-    static readonly string[] RuntimeMarkers =
-    [
-        "Visual C++", "Redistributable", ".NET", " Runtime", "WebView2", "Java(TM)", "Java ", "DirectX", "OpenAL", "Windows SDK",
-    ];
 
     const string StdUndoStartup = "Запись отключается и включается обратно; изменение пишется в журнал и откатывается кнопкой «Откатить».";
     const string StdUndoService = "Тип запуска меняется и возвращается; изменение пишется в журнал и откатывается кнопкой «Откатить».";
@@ -216,9 +214,9 @@ public sealed class FindingClassifier
 
     public Finding Program(ProgramSubject s)
     {
-        var id = $"program:{s.Source}:{s.Name}";
+        var id = s.ProgramId.Length > 0 ? s.ProgramId : $"program:{s.Source}:{s.Name}";
         var detail = $"{s.Publisher} · {s.Version}".Trim(' ', '·');
-        var runtime = RuntimeMarkers.Any(m => s.Name.Contains(m, StringComparison.OrdinalIgnoreCase));
+        var runtime = ProgramMarkers.IsRuntime(s.Name);
         var ms = s.Publisher.Contains("Microsoft", StringComparison.OrdinalIgnoreCase);
 
         if (runtime)
@@ -232,15 +230,18 @@ public sealed class FindingClassifier
                     "Только скачать и установить заново: удаление отменить нельзя."),
                 ChangeClass.ReadOnly, "");
 
+        // Класс приходит от PackagePolicy; неудаляемая программа остаётся в списке с причиной, почему её нельзя удалить здесь.
+        var blocked = s.Class != ChangeClass.Modifiable && s.ClassReason.Length > 0;
         return Build(id, FindingArea.Programs, s.Name, detail, VerdictKind.Optional,
-            Reasons(ReasonCodes.Make(ReasonCodes.ProgramInstalled), ms ? ReasonCodes.Make(ReasonCodes.PublisherMicrosoft) : null),
+            Reasons(ReasonCodes.Make(ReasonCodes.ProgramInstalled), ms ? ReasonCodes.Make(ReasonCodes.PublisherMicrosoft) : null,
+                blocked ? ReasonCodes.Make(s.Class == ChangeClass.Forbidden ? ReasonCodes.ClassForbidden : ReasonCodes.ClassReadOnly, s.ClassReason) : null),
             Risk.Low, Reversibility.ReinstallOnly, Confidence.L3,
             new Explanation(
                 $"Программа «{s.Name}» {s.Version}, издатель: {(string.IsNullOrWhiteSpace(s.Publisher) ? "не указан" : s.Publisher)}.",
                 "Нужна, пока вы ею пользуетесь. Решить это можете только вы.",
                 "Программа перестанет открываться. Личные файлы в документах обычно остаются, настройки программы могут пропасть.",
                 "Только установкой заново: удаление программы отменить нельзя."),
-            ChangeClass.ReadOnly, "");
+            s.Class, "");
     }
 
     // ----- общее -----

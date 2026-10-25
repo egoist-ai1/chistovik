@@ -102,7 +102,7 @@ public class ProtocolRoundTripTests
         string[] spec =
         [
             "ok", "no-change", "partial", "policy-denied", "not-found", "conflict", "busy", "journal-unavailable",
-            "journal-untrusted", "journal-newer-schema", "bad-request", "unknown-operation", "internal", "pong",
+            "journal-untrusted", "journal-newer-schema", "bad-request", "unknown-operation", "internal", "pong", "not-revertible",
         ];
         Assert.Equal(spec.OrderBy(x => x, StringComparer.Ordinal).ToArray(), codes);
     }

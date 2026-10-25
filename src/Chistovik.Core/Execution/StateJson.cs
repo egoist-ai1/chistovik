@@ -205,7 +205,21 @@ public static class StateJson
         return st;
     }
 
+    // ---------- удаление программ ----------
+
+    public static string UninstallJson(bool installed) => S(new UninstallState(V, installed), JournalJson.Default.UninstallState);
+
+    public static UninstallState ParseUninstall(string json)
+    {
+        var st = Read(json, JournalJson.Default.UninstallState);
+        CheckV(st.V);
+        return st;
+    }
+
     // ---------- цели (target_json) ----------
+
+    public static string UninstallTargetJson(UninstallTarget t) => S(t, JournalJson.Default.UninstallTarget);
+    public static UninstallTarget ParseUninstallTarget(string json) => Read(json, JournalJson.Default.UninstallTarget);
 
     public static string RegistryTargetJson(RegLocation l)
         => S(new RegistryTarget(l.Root == RegRoot.Machine ? "HKLM" : "HKU", l.Root == RegRoot.User ? l.UserSid : null, "64", l.KeyPath, l.ValueName),
@@ -246,4 +260,7 @@ public static class StateJson
     public const string PowerActiveKey = "power-active";
     public static string PowerSettingKey(Guid scheme, Guid sub, Guid setting) => $"power-setting:{scheme:D}:{sub:D}:{setting:D}";
     public static string PowerCreateKey(Guid template) => $"power-create:{template:D}";
+
+    /// <summary>Тот же вид, что идентификатор находки: arp:machine:{x64|x86}:&lt;ключ&gt; в нижнем регистре.</summary>
+    public static string UninstallKey(string arch, string key) => $"arp:machine:{arch}:{key}".ToLowerInvariant();
 }

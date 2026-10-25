@@ -46,6 +46,8 @@ public sealed class FakeRegistry : IRegistry
 
     public bool KeyExists(string path) => _keys.ContainsKey(path);
 
+    public void RemoveKey(string path) => _keys.Remove(path);
+
     public void Set(string keyPath, string name, RegValueState value)
     {
         EnsureKey(keyPath);
