@@ -43,10 +43,12 @@ public sealed class OverviewViewModel : StatefulPageViewModel
     private string _recentEmpty = "";
 
     public OverviewViewModel(IStartupSource startup, IJournalSource journal, IChangeService? changes = null,
-        IServiceSource? services = null, ITaskSource? tasks = null, bool isDemo = false, IUiSettingsStore? ui = null)
+        IServiceSource? services = null, ITaskSource? tasks = null, bool isDemo = false, IUiSettingsStore? ui = null,
+        INavigator? navigator = null)
         : base("Обзор", isDemo ? "Демонстрационные данные"
-            : "Состояние системы по реальным данным. Чтение идёт без прав администратора.", changes)
+            : "Состояние системы по реальным данным. Чтение идёт без прав администратора.", changes, navigator)
     {
+        OpenSectionCommand = new RelayCommand(p => { if (p is string title) Navigator?.Open(title); });
         _startup = startup;
         _journal = journal;
         _services = services;
@@ -65,6 +67,9 @@ public sealed class OverviewViewModel : StatefulPageViewModel
     public bool ShowWelcome { get => _showWelcome; private set => SetProperty(ref _showWelcome, value); }
 
     public RelayCommand DismissWelcomeCommand { get; }
+
+    /// <summary>Плитка-ссылка: открыть раздел по заголовку (параметр — строка).</summary>
+    public RelayCommand OpenSectionCommand { get; }
 
     private void DismissWelcome()
     {

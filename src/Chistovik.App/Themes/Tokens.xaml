@@ -39,6 +39,41 @@
     <SolidColorBrush x:Key="WarnLineBrush" Color="#66FFC247"/>
     <SolidColorBrush x:Key="DangerLineBrush" Color="#66FF6B6B"/>
 
+    <!--
+        Цвета разделов. Лайм остаётся главным акцентом (действия, фокус, активное), остальные оттенки различают
+        разделы и группы находок: значок, пилюля, полоса сверху карточки. Все на тёмной поверхности держат контраст не ниже 4,5:1.
+        Для каждого оттенка три кисти: Hue<Имя>Brush (линия и текст), Hue<Имя>TintBrush (заливка 15 %), Hue<Имя>LineBrush (рамка 40 %).
+        Имена используются конвертером HueConverter по ключу из NavItem.Hue.
+    -->
+    <SolidColorBrush x:Key="HueLimeBrush" Color="#D7FF3C"/>
+    <SolidColorBrush x:Key="HueLimeTintBrush" Color="#26D7FF3C"/>
+    <SolidColorBrush x:Key="HueLimeLineBrush" Color="#66D7FF3C"/>
+    <SolidColorBrush x:Key="HueBlueBrush" Color="#6EA8FF"/>
+    <SolidColorBrush x:Key="HueBlueTintBrush" Color="#266EA8FF"/>
+    <SolidColorBrush x:Key="HueBlueLineBrush" Color="#666EA8FF"/>
+    <SolidColorBrush x:Key="HueOrangeBrush" Color="#FF9F5A"/>
+    <SolidColorBrush x:Key="HueOrangeTintBrush" Color="#26FF9F5A"/>
+    <SolidColorBrush x:Key="HueOrangeLineBrush" Color="#66FF9F5A"/>
+    <SolidColorBrush x:Key="HueCyanBrush" Color="#4FD8FF"/>
+    <SolidColorBrush x:Key="HueCyanTintBrush" Color="#264FD8FF"/>
+    <SolidColorBrush x:Key="HueCyanLineBrush" Color="#664FD8FF"/>
+    <SolidColorBrush x:Key="HueVioletBrush" Color="#B79CFF"/>
+    <SolidColorBrush x:Key="HueVioletTintBrush" Color="#26B79CFF"/>
+    <SolidColorBrush x:Key="HueVioletLineBrush" Color="#66B79CFF"/>
+    <SolidColorBrush x:Key="HueMintBrush" Color="#5CF2B5"/>
+    <SolidColorBrush x:Key="HueMintTintBrush" Color="#265CF2B5"/>
+    <SolidColorBrush x:Key="HueMintLineBrush" Color="#665CF2B5"/>
+    <SolidColorBrush x:Key="HuePinkBrush" Color="#FF7ADB"/>
+    <SolidColorBrush x:Key="HuePinkTintBrush" Color="#26FF7ADB"/>
+    <SolidColorBrush x:Key="HuePinkLineBrush" Color="#66FF7ADB"/>
+    <SolidColorBrush x:Key="HueSlateBrush" Color="#C8CCD8"/>
+    <SolidColorBrush x:Key="HueSlateTintBrush" Color="#26C8CCD8"/>
+    <SolidColorBrush x:Key="HueSlateLineBrush" Color="#66C8CCD8"/>
+
+    <!-- Подсветка под курсором и тонкая светлая кромка карточек -->
+    <SolidColorBrush x:Key="HoverVeilBrush" Color="#0DFFFFFF"/>
+    <SolidColorBrush x:Key="EdgeLightBrush" Color="#14FFFFFF"/>
+
     <!-- Радиусы -->
     <CornerRadius x:Key="RadiusSm">6</CornerRadius>
     <CornerRadius x:Key="RadiusMd">10</CornerRadius>
@@ -55,14 +90,15 @@
     <FontFamily x:Key="FontDisplay">pack://application:,,,/Fonts/#Unbounded, Segoe UI Variable Display, Segoe UI</FontFamily>
     <FontFamily x:Key="FontText">pack://application:,,,/Fonts/#Onest, Segoe UI Variable Text, Segoe UI</FontFamily>
     <FontFamily x:Key="FontMono">pack://application:,,,/Fonts/#JetBrains Mono, Cascadia Mono, Consolas</FontFamily>
-    <FontFamily x:Key="FontIcons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
-    <!-- Типографика -->
+    <!-- Типографика: шкала с шагом около 1,25. Заголовки и числа — Unbounded, текст — Onest, цифры и пути — JetBrains Mono -->
     <sys:Double x:Key="FsXs">12</sys:Double>
-    <sys:Double x:Key="FsSm">13</sys:Double>
+    <sys:Double x:Key="FsSm">13.5</sys:Double>
     <sys:Double x:Key="FsBase">15</sys:Double>
-    <sys:Double x:Key="FsLg">18</sys:Double>
-    <sys:Double x:Key="FsXl">26</sys:Double>
+    <sys:Double x:Key="FsMd">17</sys:Double>
+    <sys:Double x:Key="FsLg">20</sys:Double>
+    <sys:Double x:Key="FsXl">28</sys:Double>
+    <sys:Double x:Key="FsXxl">38</sys:Double>
     <sys:Double x:Key="FsHero">56</sys:Double>
 
     <!-- Движение -->

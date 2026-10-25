@@ -5,6 +5,7 @@
     <!-- Токены подключены в App.xaml; здесь везде DynamicResource -->
     <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     <ctl:InverseBoolToVisibilityConverter x:Key="InvBoolToVis"/>
+    <ctl:HueConverter x:Key="Hue"/>
 
     <!-- Фокус-кольцо для клавиатуры -->
     <Style x:Key="FocusRing">
@@ -26,6 +27,18 @@
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
+    <!-- Крупный заголовок экрана -->
+    <Style x:Key="HeroTitle" TargetType="TextBlock" BasedOn="{StaticResource PageTitle}">
+        <Setter Property="FontSize" Value="{DynamicResource FsXxl}"/>
+        <Setter Property="LineHeight" Value="46"/>
+    </Style>
+    <!-- Надпись над заголовком: моноширинная, прописными; цвет задаёт оттенок раздела -->
+    <Style x:Key="Eyebrow" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource FontMono}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FsXs}"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+    </Style>
     <Style x:Key="Subtle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         <Setter Property="FontSize" Value="{DynamicResource FsSm}"/>
@@ -43,7 +56,7 @@
     <Style x:Key="BigNumber" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource FontDisplay}"/>
         <Setter Property="FontWeight" Value="ExtraBold"/>
-        <Setter Property="FontSize" Value="34"/>
+        <Setter Property="FontSize" Value="36"/>
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
     </Style>
 
@@ -60,24 +73,73 @@
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
         <Setter Property="Template">
             <Setter.Value>
+                <!-- Кнопка: при наведении слегка вырастает и светится цветом своей рамки, при нажатии проседает.
+                     Свечение — отдельный слой позади: эффект на самой кнопке размыл бы текст. -->
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{DynamicResource RadiusMd}" Padding="{TemplateBinding Padding}"
-                            SnapsToDevicePixels="True">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          RecognizesAccessKey="True" TextElement.Foreground="{TemplateBinding Foreground}"/>
-                    </Border>
+                    <Grid x:Name="Root" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform>
+                            <ScaleTransform x:Name="Scale" ScaleX="1" ScaleY="1"/>
+                        </Grid.RenderTransform>
+                        <Border x:Name="Glow" Margin="3,7,3,-3" Opacity="0" IsHitTestVisible="False"
+                                CornerRadius="{DynamicResource RadiusMd}" Background="{TemplateBinding BorderBrush}">
+                            <Border.Effect>
+                                <BlurEffect Radius="18" RenderingBias="Performance"/>
+                            </Border.Effect>
+                        </Border>
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource RadiusMd}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <Border x:Name="Veil" Opacity="0" IsHitTestVisible="False" CornerRadius="{DynamicResource RadiusMd}"
+                                Background="{DynamicResource HoverVeilBrush}"/>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Opacity" Value="0.88"/>
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="1.025" Duration="{StaticResource DurFast}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="1.025" Duration="{StaticResource DurFast}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity" To="0.5" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Veil" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource DurFast}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="1" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="1" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Veil" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource DurBase}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Opacity" Value="0.7"/>
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="0.97" Duration="{StaticResource DurFast}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="0.97" Duration="{StaticResource DurFast}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleX" To="1.025" Duration="{StaticResource DurFast}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Scale" Storyboard.TargetProperty="ScaleY" To="1.025" Duration="{StaticResource DurFast}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="Bd" Property="Opacity" Value="0.4"/>
+                            <Setter TargetName="Root" Property="Opacity" Value="0.4"/>
+                            <Setter TargetName="Glow" Property="Visibility" Value="Collapsed"/>
                             <Setter Property="Cursor" Value="Arrow"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -104,6 +166,30 @@
         <Setter Property="Padding" Value="8,4"/>
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="FontSize" Value="{DynamicResource FsSm}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            CornerRadius="{DynamicResource RadiusSm}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          RecognizesAccessKey="True" TextElement.Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface2Brush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface3Brush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.4"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- Кнопка-подсказка в строке состояния: переключатель всплывающего окна -->
@@ -230,6 +316,96 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}"/>
         <Setter Property="Padding" Value="20"/>
+    </Style>
+
+    <!--
+        Плитка-ссылка (Button): карточка с оттенком раздела. Ключ оттенка — в Tag («Violet»). При наведении всплывает
+        на 3 px, заливается тонировкой оттенка, рамка и свечение берут его цвет. Недоступная плитка («Скоро») не реагирует.
+    -->
+    <Style x:Key="HubTile" TargetType="Button">
+        <Setter Property="Tag" Value="Lime"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Padding" Value="20,18"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="Root">
+                        <Grid.RenderTransform>
+                            <TranslateTransform x:Name="Lift" Y="0"/>
+                        </Grid.RenderTransform>
+                        <Border x:Name="Glow" Margin="10,16,10,-8" Opacity="0" IsHitTestVisible="False"
+                                CornerRadius="{DynamicResource RadiusLg}"
+                                Background="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource Hue}, ConverterParameter=Line}">
+                            <Border.Effect>
+                                <BlurEffect Radius="30" RenderingBias="Performance"/>
+                            </Border.Effect>
+                        </Border>
+                        <Border x:Name="Bd" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1" CornerRadius="{DynamicResource RadiusLg}">
+                            <Grid>
+                                <Border x:Name="Tint" Opacity="0" CornerRadius="15"
+                                        Background="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource Hue}, ConverterParameter=Tint}"/>
+                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
+                            </Grid>
+                        </Border>
+                        <Border x:Name="Edge" Opacity="0" IsHitTestVisible="False" BorderThickness="1"
+                                CornerRadius="{DynamicResource RadiusLg}"
+                                BorderBrush="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource Hue}, ConverterParameter=Line}"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Lift" Storyboard.TargetProperty="Y" To="-3" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Tint" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Edge" Storyboard.TargetProperty="Opacity" To="1" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity" To="0.35" Duration="{StaticResource DurBase}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Lift" Storyboard.TargetProperty="Y" To="0" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Tint" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Edge" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource DurBase}"/>
+                                        <DoubleAnimation Storyboard.TargetName="Glow" Storyboard.TargetProperty="Opacity" To="0" Duration="{StaticResource DurBase}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Lift" Storyboard.TargetProperty="Y" To="-1" Duration="{StaticResource DurFast}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Lift" Storyboard.TargetProperty="Y" To="-3" Duration="{StaticResource DurFast}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Root" Property="Opacity" Value="0.6"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- Скелетон загрузки: мерцание отключается вместе с анимациями Windows (DurSkeleton/SkeletonRepeat в App) -->
@@ -373,9 +549,8 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="&#xE721;" FontFamily="{DynamicResource FontIcons}" FontSize="14"
-                                       Foreground="{DynamicResource TextMutedBrush}" Margin="12,0,0,0"
-                                       VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <ctl:Icon Kind="search" Size="16" Foreground="{DynamicResource TextMutedBrush}" Margin="12,0,0,0"
+                                      VerticalAlignment="Center"/>
                             <ScrollViewer x:Name="PART_ContentHost" Grid.Column="1" Margin="10,0,12,0"
                                           VerticalAlignment="Center" Focusable="False"/>
                             <TextBlock x:Name="Hint" Grid.Column="1" Text="{TemplateBinding Tag}" Margin="12,0,12,0"

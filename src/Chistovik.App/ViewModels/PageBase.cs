@@ -239,7 +239,7 @@ public abstract class StatefulPageViewModel : PageViewModel
     private Guid? _resultOperation;
     private string _resultCounts = "";
     private IReadOnlyList<string> _resultProblems = Array.Empty<string>();
-    private string _resultGlyph = "";
+    private string _resultIcon = "";
 
     /// <summary>Откатывает операцию, о которой сообщает итог (кнопка «Откатить» рядом с итогом).</summary>
     public RelayCommand UndoResultCommand => _undoResultCommand ??= new RelayCommand(() => ResultUndoTask = UndoResultAsync(), () => CanUndoResult);
@@ -261,8 +261,8 @@ public abstract class StatefulPageViewModel : PageViewModel
     public bool HasResultCounts => ResultCounts.Length > 0;
     public bool HasResultProblems => ResultProblems.Count > 0;
 
-    /// <summary>Значок итога: форма различает исход без опоры на цвет.</summary>
-    public string ResultGlyph { get => _resultGlyph; private set => SetProperty(ref _resultGlyph, value); }
+    /// <summary>Имя векторного значка итога: форма различает исход без опоры на цвет.</summary>
+    public string ResultIcon { get => _resultIcon; private set => SetProperty(ref _resultIcon, value); }
 
     private async Task UndoResultAsync()
     {
@@ -296,12 +296,12 @@ public abstract class StatefulPageViewModel : PageViewModel
         _resultOperation = null;
         ResultCounts = "";
         ResultProblems = Array.Empty<string>();
-        ResultGlyph = kind switch
+        ResultIcon = kind switch
         {
-            ResultKind.Success => "\uE73E",   // галочка
-            ResultKind.Info => "\uE946",      // «i»
-            ResultKind.Warning => "\uE7BA",   // треугольник
-            ResultKind.Error => "\uE711",     // крест
+            ResultKind.Success => "check-circle",
+            ResultKind.Info => "info",
+            ResultKind.Warning => "alert",
+            ResultKind.Error => "x-circle",
             _ => "",
         };
         OnPropertyChanged(nameof(HasResult));

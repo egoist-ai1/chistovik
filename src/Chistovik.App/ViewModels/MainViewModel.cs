@@ -6,13 +6,21 @@ namespace Chistovik.App.ViewModels;
 
 public sealed class NavItem
 {
-    public NavItem(string title, string group, bool groupStart, Func<PageViewModel> factory)
+    public NavItem(string title, string group, bool groupStart, Func<PageViewModel> factory, string icon = "home", string hue = "Lime")
     {
         Title = title;
         Group = group;
         GroupStart = groupStart && group.Length > 0;
         Factory = factory;
+        Icon = icon;
+        Hue = hue;
     }
+
+    /// <summary>Имя значка из Themes/Icons.xaml (без «Ico.»).</summary>
+    public string Icon { get; }
+
+    /// <summary>Оттенок раздела: ключ из Themes/Tokens.xaml (Lime, Blue, Orange, Cyan, Violet, Mint, Pink, Slate).</summary>
+    public string Hue { get; }
 
     public string Title { get; }
     public string Group { get; }
@@ -32,6 +40,29 @@ public sealed class MainViewModel : ObservableObject, INavigator
         "Обзор", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат",
     };
 
+    /// <summary>Значок и оттенок каждого раздела: имена из Themes/Icons.xaml и Themes/Tokens.xaml.</summary>
+    public static readonly IReadOnlyDictionary<string, (string Icon, string Hue)> Looks = new Dictionary<string, (string, string)>
+    {
+        ["Обзор"] = ("home", "Lime"),
+        ["Инвентарь"] = ("package", "Pink"),
+        ["Предпросмотр"] = ("eye", "Pink"),
+        ["Выполнение"] = ("play", "Pink"),
+        ["Карантин"] = ("archive", "Pink"),
+        ["Очистка диска"] = ("drive", "Mint"),
+        ["Режимы"] = ("layers", "Blue"),
+        ["Питание"] = ("zap", "Orange"),
+        ["Автозагрузка"] = ("login", "Cyan"),
+        ["Службы"] = ("server", "Violet"),
+        ["Задачи"] = ("clock", "Mint"),
+        ["Твики"] = ("sliders", "Pink"),
+        ["Журнал и откат"] = ("history", "Slate"),
+        ["Эффекты"] = ("sparkles", "Violet"),
+        ["Окна"] = ("layout", "Blue"),
+        ["Мониторинг"] = ("activity", "Cyan"),
+        ["Доверие"] = ("shield-check", "Slate"),
+        ["Настройки"] = ("settings", "Slate"),
+    };
+
     private NavItem? _selectedNav;
     private PageViewModel? _current;
     private readonly IAgentClient _agent;
@@ -46,7 +77,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         {
             OnPropertyChanged(nameof(AgentStatusText));
             OnPropertyChanged(nameof(AgentStatusDetail));
-            OnPropertyChanged(nameof(AgentStatusGlyph));
+            OnPropertyChanged(nameof(AgentStatusIcon));
             OnPropertyChanged(nameof(AgentStatusKind));
         });
         ReloadCurrentCommand = new RelayCommand(() => (Current as StatefulPageViewModel)?.ReloadCommand.Execute(null));
@@ -55,7 +86,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
 
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
-            ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings)),
+            ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings, this)),
             ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),
@@ -85,9 +116,10 @@ public sealed class MainViewModel : ObservableObject, INavigator
         string prev = "\0";
         foreach (var (title, group, f) in items)
         {
-            all.Add(new NavItem(title, group, false, f));
+            var (icon, hue) = Looks.TryGetValue(title, out var look) ? look : ("home", "Lime");
+            all.Add(new NavItem(title, group, false, f, icon, hue));
             if (!ReleaseSections.Contains(title)) continue;
-            nav.Add(new NavItem(title, group, group != prev, f));
+            nav.Add(new NavItem(title, group, group != prev, f, icon, hue));
             prev = group;
         }
         NavItems = nav;
@@ -135,13 +167,13 @@ public sealed class MainViewModel : ObservableObject, INavigator
         _ => "Запустится при первом изменении: Windows покажет окно UAC.",
     };
 
-    /// <summary>Значок Segoe MDL2: у каждого состояния своя форма, а не только цвет.</summary>
-    public string AgentStatusGlyph => _agent.Access switch
+    /// <summary>Имя векторного значка: у каждого состояния своя форма, а не только цвет.</summary>
+    public string AgentStatusIcon => _agent.Access switch
     {
-        AgentAccess.Connected => "\uE73E",
-        AgentAccess.ViewOnly => "\uE7B3",
-        AgentAccess.Lost => "\uE7BA",
-        _ => "\uE946",
+        AgentAccess.Connected => "shield-check",
+        AgentAccess.ViewOnly => "eye",
+        AgentAccess.Lost => "alert",
+        _ => "info",
     };
 
     /// <summary>ok / warn / info: цвет значка.</summary>

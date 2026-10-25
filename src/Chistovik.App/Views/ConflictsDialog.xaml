@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Width="620" SizeToContent="Height" MaxHeight="760" ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner" Title="Откат: значения изменились"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Ideal"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
         FontFamily="{DynamicResource FontText}" FontSize="{DynamicResource FsBase}">
     <StackPanel Margin="28">

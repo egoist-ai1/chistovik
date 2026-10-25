@@ -1,12 +1,28 @@
 <UserControl x:Class="Chistovik.App.Views.OverviewView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ctl="clr-namespace:Chistovik.App.Controls"
              xmlns:views="clr-namespace:Chistovik.App.Views">
+    <UserControl.Resources>
+        <!-- Подпись раздела над плитками: моноширинная, прописными -->
+        <Style x:Key="SectionLabel" TargetType="TextBlock" BasedOn="{StaticResource Eyebrow}">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Margin" Value="0,8,0,12"/>
+        </Style>
+        <!-- Плашка со значком раздела на плитке -->
+        <Style x:Key="TileChip" TargetType="Border">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+    </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
         <StackPanel Margin="{DynamicResource PageMargin}">
-            <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}"
+            <TextBlock Text="ОБЩАЯ КАРТИНА" Style="{StaticResource Eyebrow}" Margin="0,0,0,8"/>
+            <TextBlock Text="{Binding Title}" Style="{StaticResource HeroTitle}"
                        AutomationProperties.HeadingLevel="Level1"/>
-            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Subtle}" Margin="0,6,0,24"/>
+            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Subtle}" Margin="0,10,0,24"/>
             <views:PageBanner/>
 
             <Border Style="{StaticResource Card}" Margin="0,0,0,16" Padding="22,18"
@@ -41,26 +57,31 @@
                 </Grid>
             </Border>
 
-            <Border Style="{StaticResource Card}" Padding="16,10" Margin="0,0,0,16" AutomationProperties.Name="Права">
+            <Border Style="{StaticResource Card}" Padding="16,10" Margin="0,0,0,20" AutomationProperties.Name="Права">
                 <Grid>
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding RightsTitle}" FontFamily="{DynamicResource FontDisplay}"
+                    <ctl:Icon Kind="lock" Size="18" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,10,0"
+                              VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding RightsTitle}" FontFamily="{DynamicResource FontDisplay}"
                                FontWeight="ExtraBold" FontSize="{DynamicResource FsBase}"
                                Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="1" Text="{Binding RightsText}" Style="{StaticResource Subtle}"
+                    <TextBlock Grid.Column="2" Text="{Binding RightsText}" Style="{StaticResource Subtle}"
                                Margin="16,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
-                    <Button Grid.Column="2" Style="{StaticResource SecondaryButton}" Content="Запросить права"
+                    <Button Grid.Column="3" Style="{StaticResource SecondaryButton}" Content="Запросить права"
                             Command="{Binding RequestRightsCommand}" Margin="16,0,0,0" MinHeight="32" Padding="14,5"
                             Visibility="{Binding ViewOnly, Converter={StaticResource BoolToVis}}"
                             AutomationProperties.Name="Запросить права администратора снова"/>
                 </Grid>
             </Border>
 
-            <Grid Margin="0,0,0,16">
+            <!-- Хаб: каждая плитка — раздел с живой цифрой. Клик открывает раздел. -->
+            <TextBlock Text="РАЗДЕЛЫ" Style="{StaticResource SectionLabel}"/>
+            <Grid Margin="0,0,0,24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="16"/>
@@ -73,48 +94,150 @@
                     <RowDefinition Height="16"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource Card}" AutomationProperties.Name="Автозагрузка">
+
+                <Button Grid.Column="0" Grid.Row="0" Style="{StaticResource HubTile}" Tag="Cyan" ctl:Reveal.Order="0"
+                        Command="{Binding OpenSectionCommand}" CommandParameter="Автозагрузка">
                     <StackPanel>
-                        <TextBlock Text="Автозагрузка" Style="{StaticResource CardLabel}"/>
-                        <TextBlock Text="{Binding StartupText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding StartupHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                        <Grid>
+                            <Border Style="{StaticResource TileChip}" Background="{DynamicResource HueCyanTintBrush}">
+                                <ctl:Icon Kind="login" Size="22" Foreground="{DynamicResource HueCyanBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ctl:Icon Kind="arrow-right" Size="18" Foreground="{DynamicResource TextMutedBrush}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <TextBlock Text="Автозагрузка" Style="{StaticResource CardLabel}" Margin="0,16,0,0"/>
+                        <TextBlock Text="{Binding StartupText}" Style="{StaticResource BigNumber}" Margin="0,4,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding StartupHint}" Style="{StaticResource Subtle}"/>
                     </StackPanel>
-                </Border>
-                <Border Grid.Column="2" Grid.Row="0" Style="{StaticResource Card}" AutomationProperties.Name="Службы">
+                </Button>
+                <Button Grid.Column="2" Grid.Row="0" Style="{StaticResource HubTile}" Tag="Violet" ctl:Reveal.Order="1"
+                        Command="{Binding OpenSectionCommand}" CommandParameter="Службы">
                     <StackPanel>
-                        <TextBlock Text="Службы" Style="{StaticResource CardLabel}"/>
-                        <TextBlock Text="{Binding ServicesText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding ServicesHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                        <Grid>
+                            <Border Style="{StaticResource TileChip}" Background="{DynamicResource HueVioletTintBrush}">
+                                <ctl:Icon Kind="server" Size="22" Foreground="{DynamicResource HueVioletBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ctl:Icon Kind="arrow-right" Size="18" Foreground="{DynamicResource TextMutedBrush}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <TextBlock Text="Службы" Style="{StaticResource CardLabel}" Margin="0,16,0,0"/>
+                        <TextBlock Text="{Binding ServicesText}" Style="{StaticResource BigNumber}" Margin="0,4,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding ServicesHint}" Style="{StaticResource Subtle}"/>
                     </StackPanel>
-                </Border>
-                <Border Grid.Column="4" Grid.Row="0" Style="{StaticResource Card}" AutomationProperties.Name="Задачи планировщика">
+                </Button>
+                <Button Grid.Column="4" Grid.Row="0" Style="{StaticResource HubTile}" Tag="Mint" ctl:Reveal.Order="2"
+                        Command="{Binding OpenSectionCommand}" CommandParameter="Задачи">
                     <StackPanel>
-                        <TextBlock Text="Задачи планировщика" Style="{StaticResource CardLabel}"/>
-                        <TextBlock Text="{Binding TasksText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding TasksHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                        <Grid>
+                            <Border Style="{StaticResource TileChip}" Background="{DynamicResource HueMintTintBrush}">
+                                <ctl:Icon Kind="clock" Size="22" Foreground="{DynamicResource HueMintBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ctl:Icon Kind="arrow-right" Size="18" Foreground="{DynamicResource TextMutedBrush}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <TextBlock Text="Задачи планировщика" Style="{StaticResource CardLabel}" Margin="0,16,0,0"/>
+                        <TextBlock Text="{Binding TasksText}" Style="{StaticResource BigNumber}" Margin="0,4,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding TasksHint}" Style="{StaticResource Subtle}"/>
                     </StackPanel>
-                </Border>
-                <Border Grid.Column="0" Grid.Row="2" Style="{StaticResource Card}" AutomationProperties.Name="Твики">
+                </Button>
+                <Button Grid.Column="0" Grid.Row="2" Style="{StaticResource HubTile}" Tag="Pink" ctl:Reveal.Order="3"
+                        Command="{Binding OpenSectionCommand}" CommandParameter="Твики">
                     <StackPanel>
-                        <TextBlock Text="Твики" Style="{StaticResource CardLabel}"/>
-                        <TextBlock Text="{Binding TweaksText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding TweaksHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                        <Grid>
+                            <Border Style="{StaticResource TileChip}" Background="{DynamicResource HuePinkTintBrush}">
+                                <ctl:Icon Kind="sliders" Size="22" Foreground="{DynamicResource HuePinkBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ctl:Icon Kind="arrow-right" Size="18" Foreground="{DynamicResource TextMutedBrush}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <TextBlock Text="Твики" Style="{StaticResource CardLabel}" Margin="0,16,0,0"/>
+                        <TextBlock Text="{Binding TweaksText}" Style="{StaticResource BigNumber}" Margin="0,4,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding TweaksHint}" Style="{StaticResource Subtle}"/>
                     </StackPanel>
-                </Border>
-                <Border Grid.Column="2" Grid.Row="2" Style="{StaticResource Card}" AutomationProperties.Name="Режим">
+                </Button>
+                <Button Grid.Column="2" Grid.Row="2" Style="{StaticResource HubTile}" Tag="Blue" ctl:Reveal.Order="4"
+                        Command="{Binding OpenSectionCommand}" CommandParameter="Режимы">
                     <StackPanel>
-                        <TextBlock Text="Режим" Style="{StaticResource CardLabel}"/>
-                        <TextBlock Text="{Binding ModeText}" Style="{StaticResource BigNumber}" FontSize="26" Margin="0,16,0,6" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding ModeHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                        <Grid>
+                            <Border Style="{StaticResource TileChip}" Background="{DynamicResource HueBlueTintBrush}">
+                                <ctl:Icon Kind="layers" Size="22" Foreground="{DynamicResource HueBlueBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ctl:Icon Kind="arrow-right" Size="18" Foreground="{DynamicResource TextMutedBrush}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <TextBlock Text="Режим" Style="{StaticResource CardLabel}" Margin="0,16,0,0"/>
+                        <TextBlock Text="{Binding ModeText}" Style="{StaticResource BigNumber}" FontSize="{DynamicResource FsXl}"
+                                   Margin="0,9,0,9" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding ModeHint}" Style="{StaticResource Subtle}"/>
                     </StackPanel>
-                </Border>
-                <Border Grid.Column="4" Grid.Row="2" Style="{StaticResource Card}" AutomationProperties.Name="Операции">
+                </Button>
+                <Button Grid.Column="4" Grid.Row="2" Style="{StaticResource HubTile}" Tag="Slate" ctl:Reveal.Order="5"
+                        Command="{Binding OpenSectionCommand}" CommandParameter="Журнал и откат">
                     <StackPanel>
-                        <TextBlock Text="Операции" Style="{StaticResource CardLabel}"/>
-                        <TextBlock Text="{Binding JournalText}" Style="{StaticResource BigNumber}" Margin="0,8,0,4" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding JournalHint}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                        <Grid>
+                            <Border Style="{StaticResource TileChip}" Background="{DynamicResource HueSlateTintBrush}">
+                                <ctl:Icon Kind="history" Size="22" Foreground="{DynamicResource HueSlateBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ctl:Icon Kind="arrow-right" Size="18" Foreground="{DynamicResource TextMutedBrush}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <TextBlock Text="Операции" Style="{StaticResource CardLabel}" Margin="0,16,0,0"/>
+                        <TextBlock Text="{Binding JournalText}" Style="{StaticResource BigNumber}" Margin="0,4,0,4" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding JournalHint}" Style="{StaticResource Subtle}"/>
                     </StackPanel>
-                </Border>
+                </Button>
+            </Grid>
+
+            <!-- Что готовится: плитки недоступны и честно подписаны, ничего не обещают сверх написанного -->
+            <TextBlock Text="СКОРО" Style="{StaticResource SectionLabel}"/>
+            <Grid Margin="0,0,0,24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Style="{StaticResource HubTile}" Tag="Pink" IsEnabled="False" Padding="16,14"
+                        AutomationProperties.Name="Удаление программ: скоро">
+                    <StackPanel>
+                        <ctl:Icon Kind="package" Size="22" Foreground="{DynamicResource HuePinkBrush}" HorizontalAlignment="Left"/>
+                        <TextBlock Text="Удаление программ" Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold" Margin="0,12,0,2" TextWrapping="Wrap"/>
+                        <TextBlock Text="с остатками и пакетами" Style="{StaticResource Subtle}"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="2" Style="{StaticResource HubTile}" Tag="Mint" IsEnabled="False" Padding="16,14"
+                        AutomationProperties.Name="Очистка диска: скоро">
+                    <StackPanel>
+                        <ctl:Icon Kind="drive" Size="22" Foreground="{DynamicResource HueMintBrush}" HorizontalAlignment="Left"/>
+                        <TextBlock Text="Очистка диска" Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold" Margin="0,12,0,2" TextWrapping="Wrap"/>
+                        <TextBlock Text="кэши и мусор с пояснением" Style="{StaticResource Subtle}"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="4" Style="{StaticResource HubTile}" Tag="Violet" IsEnabled="False" Padding="16,14"
+                        AutomationProperties.Name="Сироты реестра: скоро">
+                    <StackPanel>
+                        <ctl:Icon Kind="database" Size="22" Foreground="{DynamicResource HueVioletBrush}" HorizontalAlignment="Left"/>
+                        <TextBlock Text="Сироты реестра" Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold" Margin="0,12,0,2" TextWrapping="Wrap"/>
+                        <TextBlock Text="только с доказательством" Style="{StaticResource Subtle}"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="6" Style="{StaticResource HubTile}" Tag="Cyan" IsEnabled="False" Padding="16,14"
+                        AutomationProperties.Name="Приватность и телеметрия: скоро">
+                    <StackPanel>
+                        <ctl:Icon Kind="eye-off" Size="22" Foreground="{DynamicResource HueCyanBrush}" HorizontalAlignment="Left"/>
+                        <TextBlock Text="Приватность" Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold" Margin="0,12,0,2" TextWrapping="Wrap"/>
+                        <TextBlock Text="телеметрия и следы" Style="{StaticResource Subtle}"/>
+                    </StackPanel>
+                </Button>
             </Grid>
 
             <Border Style="{StaticResource Card}" Margin="0,0,0,16" AutomationProperties.Name="Последние операции">
@@ -154,8 +277,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource AccentBrush}"
-                                             Margin="0,7,12,0" VerticalAlignment="Top"/>
+                                    <ctl:Icon Kind="info" Size="16" Foreground="{DynamicResource AccentBrush}"
+                                              Margin="0,2,12,0" VerticalAlignment="Top"/>
                                     <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap"
                                                Foreground="{DynamicResource TextBrush}"/>
                                 </Grid>

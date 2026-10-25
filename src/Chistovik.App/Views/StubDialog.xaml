@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Width="460" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterOwner" UseLayoutRounding="True" TextOptions.TextFormattingMode="Ideal"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
         FontFamily="{DynamicResource FontText}" FontSize="{DynamicResource FsBase}">
     <StackPanel Margin="28">

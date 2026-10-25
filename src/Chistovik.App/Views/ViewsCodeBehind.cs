@@ -76,8 +76,8 @@ public partial class ConfirmDialog : Window
             CancelButton.IsDefault = true;
             KindText.Text = "Изменение системы";
             Badge.SetResourceReference(Border.BackgroundProperty, "WarnTintBrush");
-            BadgeGlyph.Text = "\uE7BA";
-            BadgeGlyph.SetResourceReference(TextBlock.ForegroundProperty, "WarnBrush");
+            BadgeIcon.Kind = "alert";
+            BadgeIcon.SetResourceReference(Control.ForegroundProperty, "WarnBrush");
         }
         Loaded += (_, _) => WindowStyling.FadeIn(Root);
     }

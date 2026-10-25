@@ -46,12 +46,15 @@ public static class Motion
         };
     }
 
-    private static readonly string[] BrushKeys =
+    private static readonly string[] HueNames = { "Lime", "Blue", "Orange", "Cyan", "Violet", "Mint", "Pink", "Slate" };
+
+    private static readonly string[] BrushKeys = new[]
     {
         "BgBrush", "SurfaceBrush", "Surface2Brush", "Surface3Brush", "BorderBrush", "BorderStrongBrush", "TextBrush",
         "TextMutedBrush", "AccentBrush", "AccentHoverBrush", "OnAccentBrush", "DangerBrush", "WarnBrush", "AccentTintBrush",
         "DangerTintBrush", "WarnTintBrush", "AccentLineBrush", "WarnLineBrush", "DangerLineBrush", "SkeletonBrush",
-    };
+        "HoverVeilBrush", "EdgeLightBrush",
+    }.Concat(HueNames.SelectMany(h => new[] { $"Hue{h}Brush", $"Hue{h}TintBrush", $"Hue{h}LineBrush" })).ToArray();
 
     private static void ApplyHighContrast(Application app)
     {
@@ -72,6 +75,15 @@ public static class Motion
             ["WarnTintBrush"] = window, ["AccentLineBrush"] = text, ["WarnLineBrush"] = text, ["DangerLineBrush"] = text,
             ["SkeletonBrush"] = gray,
         };
+        // Оттенки разделов в высоком контрасте теряют цвет: значок и текст берут системный цвет текста, заливки — фон окна.
+        foreach (var h in HueNames)
+        {
+            map[$"Hue{h}Brush"] = text;
+            map[$"Hue{h}TintBrush"] = window;
+            map[$"Hue{h}LineBrush"] = text;
+        }
+        map["HoverVeilBrush"] = control;
+        map["EdgeLightBrush"] = text;
         foreach (var key in BrushKeys) app.Resources[key] = map[key];
     }
 
