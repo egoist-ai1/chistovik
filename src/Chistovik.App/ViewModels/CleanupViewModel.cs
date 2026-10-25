@@ -1,5 +1,6 @@
 using Chistovik.App.Mvvm;
 using Chistovik.App.Services;
+using Chistovik.App.Services.Changes;
 using Chistovik.Core.Findings;
 using Chistovik.Core.Policy;
 
@@ -102,11 +103,17 @@ public sealed class FindingRowViewModel : ObservableObject
         _ => "Данных мало",
     };
 
-    /// <summary>Что Чистовик может сделать с объектом сейчас. В этой версии экран только показывает.</summary>
+    /// <summary>Программу можно удалить через агента: политика пометила её изменяемой, а запись это программа компьютера.</summary>
+    public bool CanUninstall => Finding.Area == FindingArea.Programs && Finding.Class == ChangeClass.Modifiable
+        && Finding.Id.StartsWith("arp:machine:", StringComparison.Ordinal);
+
+    /// <summary>Что Чистовик может сделать с объектом сейчас.</summary>
     public string ClassText => Finding.Class switch
     {
         ChangeClass.Forbidden => "Windows и политика Чистовика не разрешают менять этот объект.",
-        ChangeClass.ReadOnly when Finding.OpenIn.Length == 0 => "Здесь только просмотр. Удаление программ в Чистовике пока недоступно.",
+        ChangeClass.Modifiable when CanUninstall => "Эту программу можно удалить прямо здесь: агент запустит её штатный деинсталлятор без окон.",
+        ChangeClass.ReadOnly when Finding.Area == FindingArea.Programs => "Удалить эту программу отсюда нельзя, причина указана выше.",
+        ChangeClass.ReadOnly when Finding.OpenIn.Length == 0 => "Здесь только просмотр.",
         ChangeClass.ReadOnly => "Только просмотр: этот объект Чистовик не меняет.",
         _ => Finding.OpenIn.Length == 0 ? "Здесь только просмотр." : $"Здесь только просмотр. Менять можно в разделе «{Finding.OpenIn}».",
     };
@@ -131,9 +138,9 @@ public sealed record ReasonLine(string Text, string Evidence)
 }
 
 /// <summary>
-/// Экран «Чистка»: что в системе можно убрать и что лучше оставить, с объяснением по каждому объекту. Только чтение:
-/// действий, галочек и счётчиков «найдено проблем» нет, ничего не выбрано заранее. Изменения идут через разделы
-/// «Автозагрузка», «Службы» и «Задачи».
+/// Экран «Чистка»: что в системе можно убрать и что лучше оставить, с объяснением по каждому объекту. Галочек и счётчиков
+/// «найдено проблем» нет, ничего не выбрано заранее. Единственное действие здесь это удаление одной выбранной программы
+/// через агента, с подтверждением; остальные изменения идут через разделы «Автозагрузка», «Службы» и «Задачи».
 /// </summary>
 public sealed class CleanupViewModel : StatefulPageViewModel
 {
@@ -148,12 +155,18 @@ public sealed class CleanupViewModel : StatefulPageViewModel
     private string _area = "all";
     private string _verdict = "all";
 
-    public CleanupViewModel(ICleanupScanner scanner, INavigator? navigator = null)
+    private readonly IDialogService? _dialogs;
+
+    public CleanupViewModel(ICleanupScanner scanner, INavigator? navigator = null, IChangeService? changes = null,
+        IDialogService? dialogs = null)
         : base("Чистка",
-            "Что в системе можно убрать и что лучше оставить, с объяснением по каждому объекту. Здесь только просмотр: ничего не меняется и не выбирается заранее.",
-            null, navigator)
+            "Что в системе можно убрать и что лучше оставить, с объяснением по каждому объекту. Ничего не выбирается заранее: программу можно удалить только по вашей кнопке и после подтверждения.",
+            changes, navigator)
     {
         _scanner = scanner;
+        _dialogs = dialogs;
+        UninstallCommand = new RelayCommand(() => LastUninstall = UninstallSelectedAsync(),
+            () => CanApply && _dialogs is not null && Selected is { CanUninstall: true });
         AreaChips = new[]
         {
             new FilterChip("all", "Всё", true), new FilterChip("Programs", "Программы"), new FilterChip("Startup", "Автозагрузка"),
@@ -170,6 +183,40 @@ public sealed class CleanupViewModel : StatefulPageViewModel
     }
 
     public Task Loaded { get; }
+
+    /// <summary>Удаление выбранной программы (кнопка в подробностях).</summary>
+    public RelayCommand UninstallCommand { get; }
+
+    /// <summary>Последнее удаление (для тестов и ожидания).</summary>
+    public Task LastUninstall { get; private set; } = Task.CompletedTask;
+
+    protected override void OnCanApplyChanged() => UninstallCommand.RaiseCanExecuteChanged();
+
+    private async Task UninstallSelectedAsync()
+    {
+        var row = Selected;
+        if (Changes is null || _dialogs is null || row is not { CanUninstall: true }) return;
+        var f = row.Finding;
+
+        var confirmed = _dialogs.Confirm(new ConfirmContent(
+            $"Удалить «{f.Title}»?",
+            "Агент с правами администратора запустит штатный деинсталлятор программы без окон. " +
+            "Вернуть программу откатом из журнала нельзя: только установить заново. " +
+            "Личные файлы деинсталлятор обычно не трогает, но настройки программы могут пропасть.",
+            "Удалить", Danger: true));
+        if (!confirmed) return;
+
+        IsBusy = true;
+        try
+        {
+            var outcome = await Changes.UninstallAsync(f.Id);
+            ShowOutcome(outcome, undoable: false);
+        }
+        finally { IsBusy = false; }
+
+        // Список перечитывается всегда: при таймауте или обрыве связи программа могла всё же удалиться.
+        OnShown();
+    }
 
     public IReadOnlyList<FilterChip> AreaChips { get; }
     public IReadOnlyList<FilterChip> VerdictChips { get; }
@@ -190,6 +237,7 @@ public sealed class CleanupViewModel : StatefulPageViewModel
             if (!SetProperty(ref _selected, value)) return;
             OnPropertyChanged(nameof(HasSelection));
             OnPropertyChanged(nameof(NoSelection));
+            UninstallCommand.RaiseCanExecuteChanged();
         }
     }
 

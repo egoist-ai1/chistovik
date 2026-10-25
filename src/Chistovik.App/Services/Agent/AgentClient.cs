@@ -13,6 +13,9 @@ public sealed class AgentClientOptions
     /// <summary>Сколько ждать ответа на обычный запрос (откат режима и твиков может быть долгим).</summary>
     public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(90);
 
+    /// <summary>Удаление программы: деинсталлятор может работать долго (на стороне агента срок запуска 10 минут).</summary>
+    public TimeSpan UninstallTimeout { get; init; } = TimeSpan.FromMinutes(15);
+
     public TimeSpan HeartbeatTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>Ожидание канала после запуска агента (UAC уже пройден).</summary>
@@ -23,7 +26,7 @@ public sealed class AgentClientOptions
 
     public string UserSid { get; init; } = CurrentSid();
     public int ParentPid { get; init; } = Environment.ProcessId;
-    public string AppPath { get; init; } = Environment.ProcessPath ?? "";
+    public string AppPath { get; init; } = Chistovik.Native.Ipc.ClientProbe.SelfImagePath();
 
     static string CurrentSid()
     {
@@ -101,13 +104,14 @@ public sealed class AgentClient : IAgentClient, IDisposable
             var prepared = await EnsureConnectedAsync(request, ct).ConfigureAwait(false);
             if (prepared is not null) return prepared;
 
-            var result = await ExchangeAsync(request, _opt.RequestTimeout, ct).ConfigureAwait(false);
+            var timeout = request is UninstallRequest ? _opt.UninstallTimeout : _opt.RequestTimeout;
+            var result = await ExchangeAsync(request, timeout, ct).ConfigureAwait(false);
             if (result.Retry)
             {
                 // Обрыв до ответа: повтор с тем же Id безопасен, агент вернёт сохранённый результат (DESIGN-0.1 §3).
                 prepared = await EnsureConnectedAsync(request, ct).ConfigureAwait(false);
                 if (prepared is not null) return prepared;
-                result = await ExchangeAsync(request, _opt.RequestTimeout, ct, allowRetry: false).ConfigureAwait(false);
+                result = await ExchangeAsync(request, timeout, ct, allowRetry: false).ConfigureAwait(false);
             }
             return result.Response!;
         }

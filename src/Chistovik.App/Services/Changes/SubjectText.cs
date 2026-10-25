@@ -19,6 +19,10 @@ public static class SubjectText
             && StartupEntryId.TryParse(subject, out var id, out _))
             return id.Name;
 
+        // Удаление программы: тема это идентификатор записи («arp:machine:x64:ключ»); человеку нужен ключ записи.
+        if (kind == OperationKind.Uninstall && ArpId.TryParse(subject, out _, out _, out var arpKey))
+            return arpKey;
+
         var catalog = TweakCatalog.Shared;
         if (kind is OperationKind.Tweaks or OperationKind.Undo)
         {

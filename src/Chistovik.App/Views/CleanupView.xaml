@@ -224,6 +224,15 @@
                                             AutomationProperties.Name="Открыть раздел, где этот объект можно менять"/>
                                 </Grid>
                             </Border>
+
+                            <!-- Удаление программы: кнопка видна только там, где политика агента разрешает; подтверждение и итог на странице -->
+                            <StackPanel Margin="0,14,0,0" Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVis}}">
+                                <Button Style="{StaticResource DangerButton}" Content="Удалить программу" HorizontalAlignment="Left"
+                                        Command="{Binding DataContext.UninstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        AutomationProperties.Name="Удалить выбранную программу через агента"/>
+                                <TextBlock Text="Вернуть программу откатом из журнала нельзя: только установкой заново."
+                                           Style="{StaticResource Subtle}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

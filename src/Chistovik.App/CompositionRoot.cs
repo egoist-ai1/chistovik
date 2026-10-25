@@ -10,6 +10,7 @@ using Chistovik.Core.Journal;
 using Chistovik.Core.Policy;
 using Chistovik.Core.Ports;
 using Chistovik.Native.Services;
+using Chistovik.Native.Setup;
 using Chistovik.Native.Tasks;
 using Chistovik.Native.Trust;
 
@@ -65,7 +66,8 @@ public static class CompositionRoot
 
         return new AppServices
         {
-            Programs = new InventoryProgramsSource(registry),
+            // Подсказка «можно удалить» считается той же политикой, что у агента; файлы проверяются только на чтение.
+            Programs = new InventoryProgramsSource(registry, new PackagePolicy(ctx, new WindowsFileSecurity())),
             Startup = new RegistryStartupSource(registry, new DirectoryFileSystem(),
                 Environment.GetFolderPath(Environment.SpecialFolder.Startup),
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup),

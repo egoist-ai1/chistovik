@@ -2,8 +2,13 @@ using Chistovik.Core.Ports;
 
 namespace Chistovik.App.Models;
 
+/// <summary>
+/// Установленная программа. Id (arp:machine:x64:ключ) и Class это подсказка по PackagePolicy (той же, что у агента):
+/// удалить через агента можно только Modifiable; окончательное решение агент принимает сам.
+/// </summary>
 public sealed record ProgramInfo(
-    string Name, string Publisher, string Version, long SizeBytes, DateTime? InstalledOn, string Source);
+    string Name, string Publisher, string Version, long SizeBytes, DateTime? InstalledOn, string Source,
+    string Id = "", Changeability Class = Changeability.ReadOnly, string Rule = "", string? ReadOnlyReason = null);
 
 /// <summary>
 /// Запись автозагрузки. EntryId в формате протокола (run:hklm64:Имя, folder:user:файл) или пусто, если менять нельзя.

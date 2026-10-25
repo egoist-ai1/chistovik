@@ -14,6 +14,36 @@ public static class ResponseText
 
     public static ChangeOutcome ForUndo(AgentResponse r) => Map(r, undo: true);
 
+    /// <summary>
+    /// Удаление программы: один шаг. Успех это «удалена» (код win32:3010 добавляет просьбу о перезагрузке); неудача шага
+    /// объясняется его кодом (занят установщик, срок вышел, программа осталась). Откат удаления не предлагается.
+    /// </summary>
+    public static ChangeOutcome ForUninstall(AgentResponse r)
+    {
+        var o = Map(r, undo: false);
+        var step = r.Steps?.FirstOrDefault();
+        var why = step?.Code is { Length: > 0 } c ? StepCodeName(c) : "";
+        switch (r.Code)
+        {
+            case ResponseCodes.Ok:
+                return o with
+                {
+                    Message = "Программа удалена. Вернуть её можно только установкой заново.",
+                    RestartHint = step?.Code == "win32:3010" ? "Чтобы удаление завершилось, перезагрузите компьютер." : null,
+                };
+            case ResponseCodes.NoChange:
+                return o with { Message = "Программа уже удалена: в списке она осталась по ошибке, обновите его." };
+            case ResponseCodes.Partial:
+                return o with
+                {
+                    Kind = OutcomeKind.Unavailable,
+                    Message = "Программа не удалена" + (why.Length > 0 ? ": " + why.TrimEnd('.') + "." : ". Подробности в журнале."),
+                };
+            default:
+                return o;
+        }
+    }
+
     static ChangeOutcome Map(AgentResponse r, bool undo)
     {
         var (done, total) = Count(r.Steps);
@@ -41,6 +71,8 @@ public static class ResponseText
                 return Make(OutcomeKind.Denied, "Объект не найден в системе. Ничего не изменено." + Tail(r.Message));
             case ResponseCodes.UnknownOperation:
                 return Make(OutcomeKind.Denied, "Такой операции нет в журнале.");
+            case ResponseCodes.NotRevertible:
+                return Make(OutcomeKind.Denied, "Эту операцию откатить нельзя: удалённую программу можно вернуть только установкой заново.");
             case ResponseCodes.BadRequest:
                 return Make(OutcomeKind.Denied, "Запрос отклонён проверкой." + Tail(r.Message));
             case ResponseCodes.Busy:
@@ -103,6 +135,7 @@ public static class ResponseText
         OperationKind.PowerScheme => "Схема питания",
         OperationKind.PowerSetting => "Параметр питания",
         OperationKind.Undo => "Откат",
+        OperationKind.Uninstall => "Удаление программы",
         _ => k.ToString(),
     };
 
@@ -142,6 +175,8 @@ public static class ResponseText
         "recovered-done" => "восстановлено после сбоя: выполнено",
         "recovered-not-applied" => "восстановлено после сбоя: не применялось",
         "already-reverted" => "уже возвращено",
+        "win32:3010" => "программа удалена, нужна перезагрузка компьютера",
+        "win32:1603" => "установщик сообщил о неустранимой ошибке (1603)",
         _ when code.StartsWith("win32:", StringComparison.Ordinal) => "ошибка Windows " + code[6..],
         _ when Models.ReasonTexts.IsKnown(code) => Models.ReasonTexts.Explain(code),
         _ => code,
@@ -156,6 +191,7 @@ public static class ResponseText
         StepKind.PowerActiveScheme => "Активная схема питания",
         StepKind.PowerSetting => "Параметр питания",
         StepKind.PowerSchemeCreate => "Создание схемы питания",
+        StepKind.UninstallRun => "Удаление программы",
         _ => k.ToString(),
     };
 }

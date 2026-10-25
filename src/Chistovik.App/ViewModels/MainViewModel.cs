@@ -88,7 +88,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
             ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings, this)),
-            ("Чистка", "", () => new CleanupViewModel(new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this)),
+            ("Чистка", "", () => new CleanupViewModel(new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this, s.Changes, s.Dialogs)),
             ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),

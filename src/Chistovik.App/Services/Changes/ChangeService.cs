@@ -53,6 +53,9 @@ public interface IChangeService
     Task<ChangeOutcome> SetPowerSchemeAsync(PowerPlan plan, CancellationToken ct = default);
     Task<ChangeOutcome> SetPowerSettingAsync(string settingId, uint? ac, uint? dc, CancellationToken ct = default);
     Task<ChangeOutcome> UndoAsync(Guid operationId, IReadOnlyList<UndoResolution>? resolutions, CancellationToken ct = default);
+
+    /// <summary>Удаляет программу компьютера (arp:machine:...) штатным деинсталлятором через агента. Вернуть её откатом нельзя.</summary>
+    Task<ChangeOutcome> UninstallAsync(string programId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -105,6 +108,9 @@ public sealed class ChangeService : IChangeService
 
     public Task<ChangeOutcome> UndoAsync(Guid operationId, IReadOnlyList<UndoResolution>? resolutions, CancellationToken ct = default)
         => RunAsync(new UndoRequest { Id = _newId(), OperationId = operationId, Resolutions = resolutions }, ResponseText.ForUndo, null, ct);
+
+    public Task<ChangeOutcome> UninstallAsync(string programId, CancellationToken ct = default)
+        => RunAsync(new UninstallRequest { Id = _newId(), FindingId = programId }, ResponseText.ForUninstall, null, ct);
 
     async Task<ChangeOutcome> RunAsync(AgentRequest request, Func<AgentResponse, ChangeOutcome> map,
         IReadOnlyList<string>? ids, CancellationToken ct)

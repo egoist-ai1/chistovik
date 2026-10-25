@@ -51,5 +51,5 @@ public sealed class CleanupScanner(IProgramsSource programs, IStartupSource star
 
     internal static TaskSubject ToSubject(TaskInfo t) => new(t.Path, t.Name, t.Summary, Map(t.Class), t.Reason);
 
-    internal static ProgramSubject ToSubject(ProgramInfo p) => new(p.Name, p.Publisher, p.Version, p.SizeBytes, p.Source);
+    internal static ProgramSubject ToSubject(ProgramInfo p) => new(p.Name, p.Publisher, p.Version, p.SizeBytes, p.Source, p.Id, Map(p.Class), p.ReadOnlyReason ?? "");
 }

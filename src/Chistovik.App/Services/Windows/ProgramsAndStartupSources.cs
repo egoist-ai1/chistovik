@@ -8,19 +8,51 @@ using System.Text.Json;
 
 namespace Chistovik.App.Services.Windows;
 
-public sealed class InventoryProgramsSource(IRegistryReader reader) : IProgramsSource
+/// <summary>
+/// Программы из «Программ и компонентов». Без <paramref name="policy"/> все записи только для просмотра; с политикой каждая
+/// получает подсказку «можно удалить через агента» (тот же <see cref="PackagePolicy"/>, что у агента, который всё равно сам перепроверяет).
+/// </summary>
+public sealed class InventoryProgramsSource(IRegistryReader reader, PackagePolicy? policy = null) : IProgramsSource
 {
     public Task<IReadOnlyList<ProgramInfo>> GetProgramsAsync() => Task.Run(() =>
     {
-        IReadOnlyList<ProgramInfo> list = Read(reader).Select(p => new ProgramInfo(
+        IReadOnlyList<ProgramInfo> list = Read(reader).Select(Make).ToList();
+        return list;
+    });
+
+    ProgramInfo Make(InstalledProgram p)
+    {
+        var (cls, rule, reason) = Classify(p);
+        return new ProgramInfo(
             p.DisplayName,
             string.IsNullOrWhiteSpace(p.Publisher) ? "Не указан" : p.Publisher,
             p.DisplayVersion,
             (p.EstimatedSizeKb ?? 0) * 1024,
             p.InstallDate is { } d ? d.ToDateTime(TimeOnly.MinValue) : null,
-            SourceName(p.Source))).ToList();
-        return list;
-    });
+            SourceName(p.Source),
+            p.Id, cls, rule, reason);
+    }
+
+    (Changeability Class, string Rule, string? Reason) Classify(InstalledProgram p)
+    {
+        if (p.Source == ProgramSource.UninstallHkcu)
+            return (Changeability.ReadOnly, "hkcu-scope", ReasonTexts.Explain("hkcu-scope"));
+        if (policy is null) return (Changeability.ReadOnly, "", null);
+        try
+        {
+            var facts = new PackageFacts(p.DisplayName, p.Publisher, p.IsSystemComponent, p.ParentKeyName, null, p.IsMsi,
+                p.UninstallString, p.QuietUninstallString);
+            var c = policy.Classify(p.Id, facts);
+            if (c.IsModifiable) return (Changeability.Modifiable, c.Rule, null);
+            var cls = c.Class == Chistovik.Core.Policy.ChangeClass.Forbidden ? Changeability.Forbidden : Changeability.ReadOnly;
+            return (cls, c.Rule, ReasonTexts.Explain(c.Rule));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // Файл не удалось проверить: безопаснее показать только просмотр.
+            return (Changeability.ReadOnly, "uninstall-unparsed", ReasonTexts.Explain("uninstall-unparsed"));
+        }
+    }
 
     public static IReadOnlyList<InstalledProgram> Read(IRegistryReader reader)
         => new UninstallInventory(reader).Read().Where(p => !p.IsUpdate && !p.IsSystemComponent).ToList();
