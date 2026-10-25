@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 
 namespace Chistovik.Core.Policy;
@@ -29,7 +30,8 @@ public sealed record ServiceFacts(
     StartMode CurrentStart,
     bool RegisteredSecurityProduct = false,
     string? InstallLocation = null,
-    string? NativeImagePath = null);
+    string? NativeImagePath = null,
+    int TriggerCount = 0);
 
 /// <summary>
 /// Классификатор служб (раздел 2.1 плана). Единственное правило: «неизвестное» никогда не получает класс Modifiable.
@@ -50,6 +52,16 @@ public sealed partial class ServicePolicy
         "BcastDVRUserService", "CaptureService", "ConsentUxUserSvc", "DevicesFlowUserSvc", "MessagingService",
         "PrintWorkflowUserSvc", "NPSMSvc", "webthreatdefusersvc",
     };
+
+    /// <summary>
+    /// Именованное исключение владельца (26.10.2026): службы каталога Чистовика, которые можно отключать, хотя они
+    /// живут в svchost или в каталоге Windows. Точные имена; суффиксы и пробелы не совпадают. Остальные запреты
+    /// (hardlist, PPL, продукт безопасности, драйвер) выше и не ослабляются.
+    /// </summary>
+    public static readonly FrozenSet<string> CarveOut = new[]
+    {
+        "DiagTrack", "dmwappushservice", "RetailDemo", "WMPNetworkSvc", "RemoteRegistry", "Fax", "WerSvc", "MapsBroker", "lfsvc", "wisvc", "SCardSvr",
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     readonly string _windowsDir;
     readonly string[] _systemOwnedRoots;
@@ -140,6 +152,17 @@ public sealed partial class ServicePolicy
         return true;
     }
 
+    bool IsExpectedCarveOutImage(string name, string exe)
+    {
+        var sys32 = _windowsDir + @"\System32\";
+        if (name.Equals("Fax", StringComparison.OrdinalIgnoreCase))
+            return exe.Equals(sys32 + "fxssvc.exe", StringComparison.OrdinalIgnoreCase);
+        if (name.Equals("WMPNetworkSvc", StringComparison.OrdinalIgnoreCase))
+            return exe.Equals(sys32 + "wmpnetwk.exe", StringComparison.OrdinalIgnoreCase)
+                   || _programFilesRoots.Any(r => exe.Equals(r + @"\Windows Media Player\wmpnetwk.exe", StringComparison.OrdinalIgnoreCase));
+        return exe.Equals(sys32 + "svchost.exe", StringComparison.OrdinalIgnoreCase);
+    }
+
     public (ServiceClass Class, string Reason, string Rule) Classify(ServiceFacts f)
     {
         if (!ValidName().IsMatch(f.Name) || f.Name != f.Name.Trim())
@@ -152,6 +175,20 @@ public sealed partial class ServicePolicy
             return (ServiceClass.Forbidden, "Служба зарегистрирована как продукт безопасности (антивирус, брандмауэр)", "service-security-product");
         if (f.Type is ServiceType.KernelDriver or ServiceType.FileSystemDriver)
             return (ServiceClass.Forbidden, "Драйвер ядра", "service-driver");
+        if (CarveOut.Contains(f.Name))
+        {
+            if (f.Type is not (ServiceType.OwnProcess or ServiceType.ShareProcess))
+                return (ServiceClass.ReadOnly, "Неизвестный тип службы", "service-carveout-unknown-type");
+            if (f.DependentCount > 0)
+                return (ServiceClass.ReadOnly, "От службы зависят другие службы", "service-carveout-has-dependents");
+            if (!f.MicrosoftSigned)
+                return (ServiceClass.ReadOnly, "Файл службы не подписан Microsoft", "service-carveout-unsigned");
+            // Подпись svchost.exe ничего не доказывает про саму службу: образ должен быть ожидаемым файлом Windows.
+            var carveExes = ImageExes(f);
+            if (carveExes.Count == 0 || !carveExes.All(e => IsExpectedCarveOutImage(f.Name, e)))
+                return (ServiceClass.ReadOnly, "Файл службы не совпадает с ожидаемым файлом Windows", "service-carveout-unexpected-image");
+            return (ServiceClass.Modifiable, "Служба Windows из каталога Чистовика", "service-catalog-carveout");
+        }
         if (f.Type == ServiceType.ShareProcess)
             return (ServiceClass.Forbidden, "Служба в общем процессе svchost", "service-shared");
         if (f.Type != ServiceType.OwnProcess)
@@ -231,8 +268,15 @@ public sealed partial class ServicePolicy
         if (target is StartMode.Boot or StartMode.System)
             return PolicyDecision.Deny("Загрузочные режимы запуска не назначаем", "service-boot-start").WithTarget(obj);
 
+        var carve = rule == "service-catalog-carveout";
+        if (carve && !isRevertOfOwnStep && target is StartMode.Automatic or StartMode.AutomaticDelayed)
+            return PolicyDecision.Deny("Службы из каталога Чистовика не включаем в автозапуск, только откатом", "service-carveout-target").WithTarget(obj);
+
         if (Rank(target) > Rank(f.CurrentStart) && !isRevertOfOwnStep)
         {
+            // Службы-исключения лежат в каталоге Windows: повышение запуска напрямую не разрешаем никогда.
+            if (carve)
+                return PolicyDecision.Deny("Повысить запуск службы из каталога Чистовика можно только откатом собственного шага", "service-elevate-outside-program-files").WithTarget(obj);
             var exes = ImageExes(f);
             var inProgramFiles = exes.Count > 0 && exes.All(e => _programFilesRoots.Any(r => PathNormalizer.IsEqualOrUnder(e, r) && !e.Equals(r, StringComparison.OrdinalIgnoreCase)));
             if (!inProgramFiles)

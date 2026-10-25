@@ -285,7 +285,7 @@ public sealed class StepGate
         var exe = _service.ResolveImagePath(raw.ImagePath);
         var sig = exe is null ? new SignatureFacts(false, false) : _trust.GetSignature(exe);
         return new ServiceFacts(raw.Name, MapType(raw.TypeFlags), raw.ImagePath, sig.Valid, sig.MicrosoftSigned, raw.LaunchProtected,
-            raw.DependentCount, false, current);
+            raw.DependentCount, false, current, TriggerCount: raw.TriggerCount);
     }
 
     static ServiceType MapType(uint flags)

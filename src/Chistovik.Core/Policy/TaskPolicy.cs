@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Chistovik.Core.Ports;
 
 namespace Chistovik.Core.Policy;
@@ -9,6 +10,21 @@ namespace Chistovik.Core.Policy;
 public sealed class TaskPolicy
 {
     static readonly string[] ForbiddenRoots = ["Microsoft", "Chistovik"];
+    /// <summary>Задачи Windows каталога Чистовика, которые можно выключать (именованное исключение владельца).</summary>
+    public static readonly FrozenSet<string> CarveOutTasks = new[]
+    {
+        @"\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+        @"\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+        @"\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+        @"\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
+        @"\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
+        @"\Microsoft\Windows\Feedback\Siuf\DmClient",
+        @"\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload",
+        @"\Microsoft\Windows\Windows Error Reporting\QueueReporting",
+        @"\Microsoft\Windows\Autochk\Proxy",
+        @"\Microsoft\Windows\Maps\MapsUpdateTask",
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
     static readonly char[] BadPathChars = ['/', ':', '*', '?', '"', '<', '>', '|'];
 
     // Учётные записи, под которыми задача получает больше прав обычного пользователя.
@@ -67,6 +83,10 @@ public sealed class TaskPolicy
     {
         if (!TryParsePath(t.Path, out var seg))
             return (ChangeClass.Forbidden, "Недопустимый путь задачи", "task-bad-path");
+        // Именованное исключение владельца (26.10.2026): выключить можно, включить только откатом. Точный путь, без подпутей.
+        // Только ASCII: сравнение без учёта регистра сворачивает «ı» (U+0131), «ſ» (U+017F) и т. п. в латинские буквы.
+        if (t.Path!.All(char.IsAscii) && CarveOutTasks.Contains(t.Path))
+            return (ChangeClass.RevertOnly, "Задача Windows из каталога: выключение и откат", "task-catalog-carveout");
         foreach (var root in ForbiddenRoots)
             if (seg[0].Equals(root, StringComparison.OrdinalIgnoreCase))
                 return (ChangeClass.Forbidden, root == "Chistovik" ? "Задачи Чистовика не изменяются" : "Задачи Microsoft не изменяются", "task-protected-tree");
