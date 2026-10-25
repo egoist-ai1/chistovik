@@ -34,6 +34,9 @@ public sealed class AppServices
     public required TweakCatalog Tweaks { get; init; }
     public required PowerCatalog PowerCatalog { get; init; }
 
+    /// <summary>Настоящие значки программ и файлов для списков. null — везде общие значки.</summary>
+    public IIconService? Icons { get; init; }
+
     /// <summary>Сканер экрана «Чистка» (инвентарь, диск, реестр). null — только инвентарь из четырёх источников.</summary>
     public ICleanupScanner? Scanner { get; init; }
 
@@ -70,7 +73,7 @@ public static class CompositionRoot
         IReadOnlyList<InstalledProgram> Installed() => installed ??= InventoryProgramsSource.Read(registry);
 
         // Подсказка «можно удалить» считается той же политикой, что у агента; файлы проверяются только на чтение.
-        var programs = new InventoryProgramsSource(registry, new PackagePolicy(ctx, new WindowsFileSecurity()));
+        var programs = new InventoryProgramsSource(registry, new PackagePolicy(ctx, new WindowsFileSecurity()), new DiskIconProbe());
         var startup = new RegistryStartupSource(registry, new DirectoryFileSystem(),
             Environment.GetFolderPath(Environment.SpecialFolder.Startup),
             Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup),
@@ -94,6 +97,7 @@ public static class CompositionRoot
             Dialogs = dialogs,
             Tweaks = tweaks,
             PowerCatalog = power,
+            Icons = new IconService(),
             UiSettings = new FileUiSettingsStore(FileUiSettingsStore.DefaultPath),
         };
     }
@@ -123,6 +127,7 @@ public static class CompositionRoot
             Dialogs = dialogs,
             Tweaks = tweaks,
             PowerCatalog = PowerCatalog.Shared,
+            Icons = new DemoIconService(),
             IsDemo = true,
         };
     }

@@ -24,10 +24,11 @@ public sealed class InventoryFindingScanner(IProgramsSource programs, IStartupSo
         ct.ThrowIfCancellationRequested();
 
         var all = new List<Finding>();
-        all.AddRange(startupTask.Result.Select(x => _classifier.Startup(CleanupScanner.ToSubject(x))));
-        all.AddRange(servicesTask.Result.Select(x => _classifier.Service(CleanupScanner.ToSubject(x))));
-        all.AddRange(tasksTask.Result.Select(x => _classifier.Task(CleanupScanner.ToSubject(x))));
-        all.AddRange(programsTask.Result.Select(x => _classifier.Program(CleanupScanner.ToSubject(x))));
+        // Источник значка берётся из той же записи, что и находка: файл программы, команда автозагрузки, образ службы, действие задачи.
+        all.AddRange(startupTask.Result.Select(x => _classifier.Startup(CleanupScanner.ToSubject(x)) with { IconSource = x.IconSource ?? x.ExePath ?? x.Command }));
+        all.AddRange(servicesTask.Result.Select(x => _classifier.Service(CleanupScanner.ToSubject(x)) with { IconSource = x.IconSource ?? x.ImagePath }));
+        all.AddRange(tasksTask.Result.Select(x => _classifier.Task(CleanupScanner.ToSubject(x)) with { IconSource = x.IconSource }));
+        all.AddRange(programsTask.Result.Select(x => _classifier.Program(CleanupScanner.ToSubject(x)) with { IconSource = x.IconSource }));
         return all;
     }
 }

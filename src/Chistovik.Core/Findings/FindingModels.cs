@@ -49,4 +49,5 @@ public sealed record Finding(
     Verdict Verdict,
     Explanation Explanation,
     ChangeClass Class,
-    string OpenIn);
+    string OpenIn,
+    string? IconSource = null);

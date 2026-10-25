@@ -87,17 +87,17 @@ public sealed class MainViewModel : ObservableObject, INavigator
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
             ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings, this)),
-            ("Чистка", "", () => new CleanupViewModel(s.Scanner ?? new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this, s.Changes, s.Dialogs)),
+            ("Чистка", "", () => new CleanupViewModel(s.Scanner ?? new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this, s.Changes, s.Dialogs, s.Icons)),
             // Единственный видимый пункт бывшей группы «Программы»: заголовок группы не нужен, пункт так и называется.
-            ("Программы", "", () => new ProgramsViewModel(s.Programs, s.Dialogs, s.Changes, this)),
+            ("Программы", "", () => new ProgramsViewModel(s.Programs, s.Dialogs, s.Changes, this, s.Icons)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),
             ("Карантин", "Программы", () => Ph("Карантин", "Удалённое ждёт здесь. Срок виден на каждой операции.")),
             ("Режимы", "Система", () => new ModesViewModel(s.Tweaks, s.PowerCatalog, s.Changes, s.Dialogs, this)),
             ("Питание", "Система", () => new PowerViewModel(s.PowerCatalog, s.Power, s.Changes, s.Dialogs, this)),
-            ("Автозагрузка", "Система", () => new StartupViewModel(s.Startup, s.Changes, this, s.Dialogs)),
-            ("Службы", "Система", () => new ServicesViewModel(s.Services, s.Changes, s.Dialogs, this)),
-            ("Задачи", "Система", () => new TasksViewModel(s.Tasks, s.Changes, s.Dialogs, this)),
+            ("Автозагрузка", "Система", () => new StartupViewModel(s.Startup, s.Changes, this, s.Dialogs, s.Icons)),
+            ("Службы", "Система", () => new ServicesViewModel(s.Services, s.Changes, s.Dialogs, this, s.Icons)),
+            ("Задачи", "Система", () => new TasksViewModel(s.Tasks, s.Changes, s.Dialogs, this, s.Icons)),
             ("Твики", "Система", () => new TweaksViewModel("Твики",
                 "Проверенные настройки Windows. Текущее значение читается из реестра; применение идёт через агента с записью в журнал.",
                 "tw", s.Tweaks, s.TweakState, s.Changes, s.Dialogs, s.Effects, this)),

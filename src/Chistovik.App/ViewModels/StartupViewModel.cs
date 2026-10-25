@@ -12,9 +12,11 @@ public sealed class StartupRowViewModel : ObservableObject, IListRow
     private bool _isEnabled;
     private bool _silent;
 
-    public StartupRowViewModel(StartupInfo model, Action<StartupRowViewModel, bool> toggled, Func<bool> canApply)
+    public StartupRowViewModel(StartupInfo model, Action<StartupRowViewModel, bool> toggled, Func<bool> canApply,
+        IIconService? icons = null)
     {
         Model = model;
+        AppIcon = new IconSlot(icons, model.IconSource ?? model.ExePath ?? model.Command);
         _toggled = toggled;
         _canApply = canApply;
         _isEnabled = model.Enabled;
@@ -22,6 +24,7 @@ public sealed class StartupRowViewModel : ObservableObject, IListRow
     }
 
     public StartupInfo Model { get; }
+    public IconSlot AppIcon { get; }
     public string Name => Model.Name;
     public string Command => Model.Command;
     public string Origin => Model.Origin;
@@ -89,16 +92,19 @@ public sealed class StartupRowViewModel : ObservableObject, IListRow
 public sealed class StartupViewModel : ListPageViewModel<StartupRowViewModel>
 {
     private readonly IStartupSource _source;
+    private readonly IIconService? _icons;
 
     private static readonly SortOption[] Sorts =
     {
         new("name", "По названию"), new("state", "Сначала включённые"), new("origin", "По источнику"), new("class", "Сначала те, что можно менять"),
     };
 
-    public StartupViewModel(IStartupSource source, IChangeService? changes = null, INavigator? navigator = null, IDialogService? dialogs = null)
+    public StartupViewModel(IStartupSource source, IChangeService? changes = null, INavigator? navigator = null, IDialogService? dialogs = null,
+        IIconService? icons = null)
         : base("Автозагрузка", "Что запускается при входе в Windows. Переключатель меняет запись через агента, любое изменение можно откатить в журнале.", Sorts, changes, navigator)
     {
         _source = source;
+        _icons = icons;
         UndoDialogs = dialogs;
         Loaded = ReloadAsync();
     }
@@ -142,7 +148,7 @@ public sealed class StartupViewModel : ListPageViewModel<StartupRowViewModel>
     {
         var data = await _source.GetStartupAsync(ct);
         ct.ThrowIfCancellationRequested();
-        SetRows(data.Select(x => new StartupRowViewModel(x, OnToggled, () => CanApply)));
+        SetRows(data.Select(x => new StartupRowViewModel(x, OnToggled, () => CanApply, _icons)));
         OnPropertyChanged(nameof(SummaryText));
         return AllRows.Count;
     }, "В автозагрузке ничего нет.");

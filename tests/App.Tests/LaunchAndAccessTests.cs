@@ -15,7 +15,14 @@ public class LaunchAndAccessTests
         public bool IsInAdministratorsRole => admin;
     }
 
-    static AgentClientOptions Opts(bool canElevate = true) => new()
+    /// <summary>Мьютекс агента на фейковом порту: <c>held(n)</c> отвечает на n-й опрос (с 1).</summary>
+    sealed class FakeProbe(Func<int, bool> held) : IAgentInstanceProbe
+    {
+        public int Polls { get; private set; }
+        public bool IsHeld() => held(++Polls);
+    }
+
+    static AgentClientOptions Opts(bool canElevate = true, IAgentInstanceProbe? probe = null) => new()
     {
         CanElevate = canElevate,
         UserSid = "S-1-5-21-test",
@@ -23,7 +30,9 @@ public class LaunchAndAccessTests
         AppPath = @"C:\app\Chistovik.App.exe",
         ConnectTimeout = TimeSpan.FromSeconds(1),
         ReconnectTimeout = TimeSpan.FromMilliseconds(100),
-        RelaunchDelay = TimeSpan.FromMilliseconds(20),
+        MutexPollInterval = TimeSpan.FromMilliseconds(5),
+        MutexPollTimeout = TimeSpan.FromMilliseconds(100),
+        InstanceProbe = probe ?? new FakeProbe(_ => false),
         HeartbeatInterval = TimeSpan.FromMinutes(10),
     };
 
@@ -80,7 +89,12 @@ public class LaunchAndAccessTests
     {
         Assert.Equal("Имя службы Чистовика занято другой программой. Перезапустите компьютер или обратитесь к администратору.",
             LaunchMessages.ForAgentExit(6));
-        Assert.Contains("Подробности в журнале агента", LaunchMessages.ForAgentExit(7));
+        // Коды, после которых файла журнала гарантированно нет, на журнал не ссылаются.
+        Assert.DoesNotContain("журнал", LaunchMessages.ForAgentExit(7));
+        Assert.DoesNotContain("журнал", LaunchMessages.ForAgentExit(5));
+        Assert.DoesNotContain("журнал", LaunchMessages.ForAgentExit(6));
+        Assert.DoesNotContain("журнал", LaunchMessages.ForAgentExit(2));
+        Assert.DoesNotContain("журнал", LaunchMessages.ForAgentExit(3));
         Assert.Contains("(код 42)", LaunchMessages.ForAgentExit(42));
         Assert.Equal("Служба Чистовика завершилась с ошибкой (код 42). Подробности в журнале агента.", LaunchMessages.ForAgentExit(42));
     }
@@ -128,6 +142,54 @@ public class LaunchAndAccessTests
         Assert.True(r.Ok);
         Assert.Equal(2, launcher.Calls.Count);
         Assert.Equal(AgentAccess.Connected, client.Access);
+    }
+
+    [Fact]
+    public async Task Exit_code_3_relaunches_once_after_the_mutex_disappears_on_the_second_poll()
+    {
+        var probe = new FakeProbe(n => n < 2);
+        var launcher = new FakeLauncher();
+        launcher.ExitedSequence.Enqueue(Task.FromResult(3));
+        launcher.ExitedSequence.Enqueue(null);
+        var host = new FakeAgentHost { FailConnect = attempt => attempt == 1 };
+        using var client = new AgentClient(launcher, host, Opts(probe: probe), () => "Chistovik.test");
+
+        var r = await client.SendAsync(Change());
+
+        Assert.True(r.Ok);
+        Assert.Equal(2, launcher.Calls.Count);
+        Assert.Equal(2, probe.Polls);
+    }
+
+    [Fact]
+    public async Task Exit_code_3_with_a_mutex_that_never_goes_away_shows_the_message_without_a_second_launch()
+    {
+        var probe = new FakeProbe(_ => true);
+        var launcher = new FakeLauncher { Exited = Task.FromResult(3) };
+        var host = new FakeAgentHost { FailConnect = _ => true };
+        using var client = new AgentClient(launcher, host, Opts(probe: probe), () => "Chistovik.test");
+
+        var r = await client.SendAsync(Change()).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(ClientCodes.AlreadyRunning, r.Code);
+        Assert.Equal(LaunchMessages.AlreadyRunning, r.Message);
+        Assert.Single(launcher.Calls);
+        Assert.True(probe.Polls >= 2); // опрашивали, а не сдались сразу
+    }
+
+    [Fact]
+    public async Task Second_exit_code_3_after_the_relaunch_does_not_loop()
+    {
+        var probe = new FakeProbe(_ => false);
+        var launcher = new FakeLauncher { Exited = Task.FromResult(3) };
+        var host = new FakeAgentHost { FailConnect = _ => true };
+        using var client = new AgentClient(launcher, host, Opts(probe: probe), () => "Chistovik.test");
+
+        var r = await client.SendAsync(Change()).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(ClientCodes.AlreadyRunning, r.Code);
+        Assert.Equal(2, launcher.Calls.Count);
+        Assert.Equal(1, probe.Polls); // второй раз опроса нет: повтор только один
     }
 
     /// <summary>Транспорт, который не подключается, пока его не отменят (процесс агента уже вышел, канала нет).</summary>

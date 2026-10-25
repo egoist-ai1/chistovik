@@ -187,7 +187,8 @@ public sealed class SchedulerTaskSource(ITaskScheduler scheduler, TaskPolicy pol
             ChangeClass.RevertOnly when rule == "task-catalog-carveout" => Changeability.Modifiable,
             _ => Changeability.ReadOnly, // ReadOnly и остальной RevertOnly: напрямую задачу не меняем
         };
-        return new TaskInfo(path, name, raw.Enabled, mapped, ReasonTexts.ExplainOrKeep(mapped, rule, policyReason), Summary(raw), rule);
+        return new TaskInfo(path, name, raw.Enabled, mapped, ReasonTexts.ExplainOrKeep(mapped, rule, policyReason), Summary(raw), rule,
+            IconSource: raw.Actions.FirstOrDefault(a => string.Equals(a.Kind, "Exec", StringComparison.OrdinalIgnoreCase))?.Path);
     }
 
     static string Summary(TaskRaw raw)

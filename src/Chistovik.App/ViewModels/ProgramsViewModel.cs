@@ -11,16 +11,18 @@ public sealed class ProgramRowViewModel : ObservableObject
     private readonly Action _changed;
     private bool _isChecked;
 
-    public ProgramRowViewModel(ProgramInfo model, Action changed)
+    public ProgramRowViewModel(ProgramInfo model, Action changed, IIconService? icons = null)
     {
         Model = model;
         _changed = changed;
+        AppIcon = new IconSlot(icons, model.IconSource);
         SizeText = model.SizeBytes > 0 ? Fmt.Size(model.SizeBytes) : "—";
         DateText = Fmt.Date(model.InstalledOn);
         AutomationName = $"{model.Name}, {model.Publisher}, {SizeText}";
     }
 
     public ProgramInfo Model { get; }
+    public IconSlot AppIcon { get; }
     public string Name => Model.Name;
     public string Publisher => Model.Publisher;
     public string Version => Model.Version;
@@ -44,6 +46,7 @@ public sealed class ProgramsViewModel : StatefulPageViewModel
 {
     private readonly IDialogService _dialogs;
     private readonly IProgramsSource _source;
+    private readonly IIconService? _icons;
     private List<ProgramRowViewModel> _all = new();
     private IReadOnlyList<ProgramRowViewModel> _items = Array.Empty<ProgramRowViewModel>();
     private string _search = "";
@@ -53,13 +56,15 @@ public sealed class ProgramsViewModel : StatefulPageViewModel
     private string _selectedSize = "";
     private bool _suppress;
 
-    public ProgramsViewModel(IProgramsSource source, IDialogService dialogs, IChangeService? changes = null, INavigator? navigator = null)
+    public ProgramsViewModel(IProgramsSource source, IDialogService dialogs, IChangeService? changes = null, INavigator? navigator = null,
+        IIconService? icons = null)
         : base("Программы",
             "Всё, что установлено на этом компьютере. Список читается из реестра без прав администратора; удалить можно программы, которые разрешает политика Чистовика.",
             changes, navigator)
     {
         _dialogs = dialogs;
         _source = source;
+        _icons = icons;
         SortCommand = new RelayCommand(p => SortBy(p as string ?? "Name"));
         DeleteCommand = new RelayCommand(() => LastDelete = DeleteAsync(), () => SelectedCount > 0 && !IsBusy);
         ClearSelectionCommand = new RelayCommand(ClearSelection, () => SelectedCount > 0);
@@ -97,7 +102,7 @@ public sealed class ProgramsViewModel : StatefulPageViewModel
     public override Task ReloadAsync() => LoadAsync(async () =>
     {
         var data = await _source.GetProgramsAsync();
-        _all = data.Select(x => new ProgramRowViewModel(x, OnSelectionChanged)).ToList();
+        _all = data.Select(x => new ProgramRowViewModel(x, OnSelectionChanged, _icons)).ToList();
         Apply();
         return _all.Count;
     }, "Программы не найдены: в реестре нет записей об установленных программах.");

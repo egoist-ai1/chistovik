@@ -122,6 +122,7 @@ internal static class SnapshotServices
         Dialogs = s.Dialogs,
         Tweaks = s.Tweaks,
         PowerCatalog = s.PowerCatalog,
+        Icons = s.Icons,
         UiSettings = ui ?? s.UiSettings,
         IsDemo = true,
     };

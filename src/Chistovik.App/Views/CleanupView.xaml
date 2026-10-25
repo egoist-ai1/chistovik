@@ -110,8 +110,10 @@
                                     </CheckBox>
                                     <Border Grid.Column="1" Width="34" Height="34" CornerRadius="10" Margin="0,0,12,0" VerticalAlignment="Center"
                                             Background="{Binding VerdictHue, Converter={StaticResource Hue}, ConverterParameter=Tint}">
-                                        <ctl:Icon Kind="{Binding VerdictIcon}" Size="18" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                  Foreground="{Binding VerdictHue, Converter={StaticResource Hue}}"/>
+                                        <!-- Настоящий значок объекта; нет значка: прежний значок совета -->
+                                        <ctl:AppIconTile Slot="{Binding AppIcon}" Glyph="{Binding VerdictIcon}" GlyphSize="18"
+                                                         ImageSize="24" Width="34" Height="34" CornerRadius="10"
+                                                         GlyphBrush="{Binding VerdictHue, Converter={StaticResource Hue}}"/>
                                     </Border>
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" FontWeight="Medium"
@@ -146,8 +148,9 @@
                                 </Grid.ColumnDefinitions>
                                 <Border Width="48" Height="48" CornerRadius="14" Margin="0,0,16,0" VerticalAlignment="Top"
                                         Background="{Binding VerdictHue, Converter={StaticResource Hue}, ConverterParameter=Tint}">
-                                    <ctl:Icon Kind="{Binding VerdictIcon}" Size="26" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              Foreground="{Binding VerdictHue, Converter={StaticResource Hue}}"/>
+                                    <ctl:AppIconTile Slot="{Binding AppIconLarge}" Glyph="{Binding VerdictIcon}" GlyphSize="26"
+                                                     ImageSize="40" Width="48" Height="48" CornerRadius="14"
+                                                     GlyphBrush="{Binding VerdictHue, Converter={StaticResource Hue}}"/>
                                 </Border>
                                 <StackPanel Grid.Column="1">
                                     <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" FontSize="{DynamicResource FsLg}"

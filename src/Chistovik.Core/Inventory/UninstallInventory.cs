@@ -60,6 +60,7 @@ public sealed class UninstallInventory
                 DisplayVersion = Str(values, "DisplayVersion"),
                 Publisher = Str(values, "Publisher"),
                 InstallLocation = Str(values, "InstallLocation"),
+                DisplayIcon = Str(values, "DisplayIcon"),
                 UninstallString = Str(values, "UninstallString"),
                 QuietUninstallString = Str(values, "QuietUninstallString"),
                 IsMsi = msi,

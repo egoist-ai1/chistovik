@@ -27,8 +27,14 @@ public sealed class AgentClientOptions
     /// <summary>Ожидание канала после запуска агента (UAC уже пройден).</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
-    /// <summary>Пауза перед единственным повтором запуска, если агент вышел с кодом 3 («уже запущен»).</summary>
-    public TimeSpan RelaunchDelay { get; init; } = TimeSpan.FromSeconds(1);
+    /// <summary>Шаг опроса мьютекса агента после кода выхода 3 («уже запущен»).</summary>
+    public TimeSpan MutexPollInterval { get; init; } = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>Сколько ждать, пока прежний агент отпустит мьютекс; не отпустил, повторный запуск (и UAC) не делается.</summary>
+    public TimeSpan MutexPollTimeout { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>Проверка машинного мьютекса агента без прав администратора.</summary>
+    public IAgentInstanceProbe InstanceProbe { get; init; } = new MutexAgentInstanceProbe();
 
     /// <summary>Быстрая попытка вернуться в тот же канал, прежде чем просить UAC заново.</summary>
     public TimeSpan ReconnectTimeout { get; init; } = TimeSpan.FromSeconds(2);
@@ -201,7 +207,7 @@ public sealed class AgentClient : IAgentClient, IDisposable
             catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException or UnauthorizedAccessException) { }
         }
 
-        // Код 3 (другой агент ещё живёт, например дорабатывает операцию после потери связи) повторяем один раз через RelaunchDelay.
+        // Код 3 (другой агент ещё живёт, например дорабатывает операцию после потери связи) повторяем один раз, когда мьютекс агента освободится.
         for (var attempt = 0; ; attempt++)
         {
             var pipe = _pipeNameFactory();
@@ -234,11 +240,9 @@ public sealed class AgentClient : IAgentClient, IDisposable
                 _pipeName = null;
                 if (e.Code == Chistovik.Native.Ipc.AgentExitCodes.AlreadyRunning)
                 {
-                    if (attempt == 0)
-                    {
-                        await Task.Delay(_opt.RelaunchDelay, ct).ConfigureAwait(false);
+                    // Прежний агент дорабатывает запрос и новых подключений не принимает: второй UAC нужен только когда мьютекс уже свободен.
+                    if (attempt == 0 && await WaitForInstanceReleaseAsync(ct).ConfigureAwait(false))
                         continue;
-                    }
                     return Fail(request, ClientCodes.AlreadyRunning, LaunchMessages.AlreadyRunning);
                 }
                 return Fail(request, ClientCodes.LaunchFailed, e.Message);
@@ -256,6 +260,18 @@ public sealed class AgentClient : IAgentClient, IDisposable
             SetConnected();
             return null;
         }
+    }
+
+    /// <summary>true — мьютекса агента больше нет (можно запускать повторно); false — держится дольше <see cref="AgentClientOptions.MutexPollTimeout"/>.</summary>
+    async Task<bool> WaitForInstanceReleaseAsync(CancellationToken ct)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (_opt.InstanceProbe.IsHeld())
+        {
+            if (clock.Elapsed >= _opt.MutexPollTimeout) return false;
+            await Task.Delay(_opt.MutexPollInterval, ct).ConfigureAwait(false);
+        }
+        return true;
     }
 
     /// <summary>Процесс агента завершился до подключения; <see cref="Exception.Message"/> это готовый русский текст.</summary>

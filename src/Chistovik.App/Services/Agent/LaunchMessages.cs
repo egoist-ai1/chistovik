@@ -13,9 +13,9 @@ public static class LaunchMessages
 
     public const string AlreadyRunning = "Служба Чистовика уже запущена, возможно в другом сеансе Windows. Закройте её там или подождите несколько секунд и повторите.";
     public const string InstanceNameTaken = "Имя службы Чистовика занято другой программой. Перезапустите компьютер или обратитесь к администратору.";
-    public const string InstanceLockError = "Служба Чистовика не смогла занять своё имя в системе. Подробности в журнале агента.";
+    public const string InstanceLockError = "Служба Чистовика не смогла занять своё имя в системе.";
     public const string BadArguments = "Служба Чистовика не приняла параметры запуска. Переустановите Чистовик.";
-    public const string BadEnvironment = "Служба Чистовика не запустилась: системные каталоги заданы неверно. Подробности в журнале агента.";
+    public const string BadEnvironment = "Служба Чистовика не запустилась: системные каталоги заданы неверно.";
     public static string UnknownExit(int code) => $"Служба Чистовика завершилась с ошибкой (код {code}). Подробности в журнале агента.";
     public const string AccessDenied = "Windows отклонила запрос прав администратора (возможно, действует политика организации).";
     public const string ElevationRequired = "Для запуска нужны права администратора.";

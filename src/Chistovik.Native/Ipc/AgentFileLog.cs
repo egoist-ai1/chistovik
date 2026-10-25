@@ -41,17 +41,28 @@ public sealed partial class AgentFileLog
     internal static string Scrub(string message)
     {
         var s = (message ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ');
+        // Консервативно: путь с пробелами (имя пользователя, «Program Files») вырезается до кавычки, <, >, | или конца строки,
+        // лучше потерять хвост сообщения, чем оставить имя пользователя.
+        s = QuotedPath().Replace(s, "<path>");
         s = DrivePath().Replace(s, "<path>");
         s = UncPath().Replace(s, "<path>");
+        s = EnvPath().Replace(s, "<path>");
         s = Sid().Replace(s, "<sid>");
         return s.Length > MaxLineChars ? s[..MaxLineChars] + "..." : s;
     }
 
-    [GeneratedRegex(@"[A-Za-z]:[\\/][^\s""'<>|]*", RegexOptions.CultureInvariant)]
+    // Путь в одинарных кавычках: до закрывающей кавычки, чтобы не резать на апострофе внутри имени (O'Brien) и сохранить текст после пути.
+    [GeneratedRegex(@"(?<=')(?:[A-Za-z]:[\\/]|\\\\|%[A-Za-z_][A-Za-z0-9_]*%)[^'""<>|]*", RegexOptions.CultureInvariant)]
+    private static partial Regex QuotedPath();
+
+    [GeneratedRegex(@"(?<![A-Za-z0-9])[A-Za-z]:[\\/][^""<>|]*", RegexOptions.CultureInvariant)]
     private static partial Regex DrivePath();
 
-    [GeneratedRegex(@"\\\\[^\s""'<>|]+", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\\\\[^""<>|]+", RegexOptions.CultureInvariant)]
     private static partial Regex UncPath();
+
+    [GeneratedRegex(@"%[A-Za-z_][A-Za-z0-9_]*%(?:[\\/][^""<>|]*)?", RegexOptions.CultureInvariant)]
+    private static partial Regex EnvPath();
 
     [GeneratedRegex(@"S-1-[0-9]+(-[0-9]+)+", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex Sid();

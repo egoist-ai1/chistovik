@@ -49,10 +49,64 @@ public class AgentInstanceLockTests
         Assert.NotNull(first);
         Assert.Equal(InstanceLockOutcome.Acquired, o1);
 
-        var second = AgentInstanceLock.TryAcquire(name, AllowCurrentUser(), out var o2);
+        // Владелец мьютекса зависит от токена раннера, поэтому «доверенность» владельца задаётся явно.
+        var second = AgentInstanceLock.TryAcquire(name, AllowCurrentUser(), _ => true, out var o2, out _);
 
         Assert.Null(second);
         Assert.Equal(InstanceLockOutcome.Busy, o2);
+    }
+
+    [Fact]
+    public void Existing_mutex_created_by_a_non_admin_owner_is_a_foreign_name_not_busy()
+    {
+        var name = UniqueName();
+        using var first = AgentInstanceLock.TryAcquire(name, AllowCurrentUser(), out _);
+        Assert.NotNull(first);
+        SecurityIdentifier? seen = null;
+
+        var second = AgentInstanceLock.TryAcquire(name, AllowCurrentUser(), owner => { seen = owner; return false; }, out var outcome, out _);
+
+        Assert.Null(second);
+        Assert.NotNull(seen); // владелец действительно прочитан из дескриптора
+        Assert.Equal(InstanceLockOutcome.NameTaken, outcome);
+    }
+
+    [Fact]
+    public void Only_administrators_and_system_are_trusted_owners()
+    {
+        Assert.True(AgentInstanceLock.IsTrustedOwner(new SecurityIdentifier("S-1-5-32-544")));
+        Assert.True(AgentInstanceLock.IsTrustedOwner(new SecurityIdentifier("S-1-5-18")));
+        Assert.False(AgentInstanceLock.IsTrustedOwner(new SecurityIdentifier("S-1-1-0")));           // Everyone
+        Assert.False(AgentInstanceLock.IsTrustedOwner(new SecurityIdentifier("S-1-5-21-1-2-3-1001"))); // обычный пользователь
+        Assert.False(AgentInstanceLock.IsTrustedOwner(new SecurityIdentifier("S-1-5-32-545")));        // Users
+    }
+
+    [Fact]
+    public void Our_own_repeated_acquire_with_default_check_is_busy_only_when_the_owner_is_trusted()
+    {
+        var name = UniqueName();
+        using var first = AgentInstanceLock.TryAcquire(name, AllowCurrentUser(), out _);
+        Assert.NotNull(first);
+        var owner = (SecurityIdentifier?)null;
+        AgentInstanceLock.TryAcquire(name, AllowCurrentUser(), o => { owner = o; return true; }, out _, out _);
+
+        // Полный путь без шва: исход определяется тем же правилом, что и IsTrustedOwner.
+        var real = AgentInstanceLock.TryAcquire(name, AllowCurrentUser(), null, out var outcome, out _);
+
+        Assert.Null(real);
+        Assert.Equal(AgentInstanceLock.IsTrustedOwner(owner!) ? InstanceLockOutcome.Busy : InstanceLockOutcome.NameTaken, outcome);
+    }
+
+    [Fact]
+    public void Lock_error_detail_is_only_the_exception_type_name()
+    {
+        var ours = AgentInstanceLock.TryAcquire(@"Local\no\such\namespace", out var outcome, out var detail);
+
+        Assert.Null(ours);
+        Assert.Equal(InstanceLockOutcome.Error, outcome);
+        Assert.False(string.IsNullOrEmpty(detail));
+        Assert.DoesNotContain('\\', detail!);
+        Assert.DoesNotContain(' ', detail!);
     }
 
     [Fact]

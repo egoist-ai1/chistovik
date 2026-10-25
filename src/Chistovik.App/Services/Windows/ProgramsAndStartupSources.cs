@@ -12,7 +12,7 @@ namespace Chistovik.App.Services.Windows;
 /// Программы из «Программ и компонентов». Без <paramref name="policy"/> все записи только для просмотра; с политикой каждая
 /// получает подсказку «можно удалить через агента» (тот же <see cref="PackagePolicy"/>, что у агента, который всё равно сам перепроверяет).
 /// </summary>
-public sealed class InventoryProgramsSource(IRegistryReader reader, PackagePolicy? policy = null) : IProgramsSource
+public sealed class InventoryProgramsSource(IRegistryReader reader, PackagePolicy? policy = null, IconSources.IProbe? iconProbe = null) : IProgramsSource
 {
     public Task<IReadOnlyList<ProgramInfo>> GetProgramsAsync() => Task.Run(() =>
     {
@@ -30,7 +30,8 @@ public sealed class InventoryProgramsSource(IRegistryReader reader, PackagePolic
             (p.EstimatedSizeKb ?? 0) * 1024,
             p.InstallDate is { } d ? d.ToDateTime(TimeOnly.MinValue) : null,
             SourceName(p.Source),
-            p.Id, cls, rule, reason);
+            p.Id, cls, rule, reason,
+            iconProbe is null ? null : IconSources.ForProgram(p, iconProbe));
     }
 
     (Changeability Class, string Rule, string? Reason) Classify(InstalledProgram p)

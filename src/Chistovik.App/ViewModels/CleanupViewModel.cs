@@ -36,10 +36,12 @@ public sealed class FindingRowViewModel : ObservableObject
     private readonly Action? _changed;
     private bool _isChecked;
 
-    public FindingRowViewModel(Finding finding, Action<string>? open, Action? changed = null)
+    public FindingRowViewModel(Finding finding, Action<string>? open, Action? changed = null, IIconService? icons = null)
     {
         Finding = finding;
         _changed = changed;
+        AppIcon = new IconSlot(icons, finding.IconSource, IconSize.Row);
+        AppIconLarge = new IconSlot(icons, finding.IconSource, IconSize.Detail);
         // В поиск входит и идентификатор: службу и задачу ищут по системному имени, а не только по понятному названию.
         SearchText = $"{finding.Title} {finding.Detail} {finding.Id} {AreaText} {finding.Verdict.Headline}";
         Reasons = finding.Verdict.Reasons.Select(r => new ReasonLine(r.Text, r.Evidence ?? "")).ToList();
@@ -47,6 +49,10 @@ public sealed class FindingRowViewModel : ObservableObject
     }
 
     public Finding Finding { get; }
+
+    /// <summary>Настоящий значок программы или файла: в списке и (крупнее) в подробностях. Нет значка: общий AreaIcon.</summary>
+    public IconSlot AppIcon { get; }
+    public IconSlot AppIconLarge { get; }
     public string SearchText { get; }
     public RelayCommand OpenCommand { get; }
 
@@ -228,14 +234,16 @@ public sealed class CleanupViewModel : StatefulPageViewModel
     private string _verdict = "all";
 
     private readonly IDialogService? _dialogs;
+    private readonly IIconService? _icons;
 
     public CleanupViewModel(ICleanupScanner scanner, INavigator? navigator = null, IChangeService? changes = null,
-        IDialogService? dialogs = null)
+        IDialogService? dialogs = null, IIconService? icons = null)
         : base("Чистка",
             "Что в системе можно убрать и что лучше оставить, с объяснением по каждому объекту. Ничего не выбирается заранее: удалить, очистить или убрать запись можно только по вашей кнопке и после подтверждения.",
             changes, navigator)
     {
         _scanner = scanner;
+        _icons = icons;
         _dialogs = dialogs;
         UndoDialogs = dialogs;
         UninstallCommand = new RelayCommand(() => LastUninstall = UninstallSelectedAsync(),
@@ -649,7 +657,7 @@ public sealed class CleanupViewModel : StatefulPageViewModel
             .OrderBy(f => Array.IndexOf(Order, f.Verdict.Kind))
             .ThenBy(f => f.Area)
             .ThenBy(f => f.Title, StringComparer.CurrentCultureIgnoreCase)
-            .Select(f => new FindingRowViewModel(f, title => Navigator?.Open(title), OnRowChecked))
+            .Select(f => new FindingRowViewModel(f, title => Navigator?.Open(title), OnRowChecked, _icons))
             .ToList();
         Recount();
         Refilter();

@@ -51,6 +51,40 @@ public class AgentFileLogTests : IDisposable
         Assert.Contains("journal-open-failed:IOException", text);
     }
 
+    [Theory]
+    [InlineData(@"open C:\Users\Ivan Petrov\x.db failed", "Petrov")]
+    [InlineData(@"open C:\Users\Иван Петров\Документы\x.db failed", "Петров")]
+    [InlineData("open \"C:\\Users\\Ivan Petrov\\x.db\" failed", "Petrov")]
+    [InlineData(@"open 'C:\Users\Ivan Petrov\x.db' failed", "Petrov")]
+    [InlineData(@"open C:\Users\O'Brien Smith\x.db", "Brien")]
+    [InlineData(@"open \\srv one\share name\f.txt now", "share")]
+    [InlineData(@"open \\fileserver\Ivan Petrov$\f.txt now", "Petrov")]
+    [InlineData(@"open %USERPROFILE%\My Docs\x", "Docs")]
+    [InlineData("open c:/Users/Ivan Petrov/x", "Petrov")]
+    public void Paths_with_spaces_are_removed_whole(string input, string leaked)
+    {
+        var s = AgentFileLog.Scrub(input);
+
+        Assert.DoesNotContain(leaked, s);
+        Assert.Contains("<path>", s);
+        Assert.StartsWith("open ", s);
+    }
+
+    [Fact]
+    public void Quoted_paths_keep_the_text_after_the_closing_quote()
+    {
+        Assert.Equal("open \"<path>\" failed", AgentFileLog.Scrub("open \"C:\\Users\\Ivan Petrov\\x.db\" failed"));
+        Assert.Equal("open '<path>' failed", AgentFileLog.Scrub(@"open 'C:\Users\Ivan Petrov\x.db' failed"));
+    }
+
+    [Fact]
+    public void Sids_are_replaced_and_plain_text_is_untouched()
+    {
+        Assert.Equal("user <sid> denied", AgentFileLog.Scrub("user S-1-5-21-111-222-333-1001 denied"));
+        const string plain = "[agent] client-rejected:pid, ratio 3:4, http://host/a b, key=value";
+        Assert.Equal(plain, AgentFileLog.Scrub(plain));
+    }
+
     [Fact]
     public void Size_is_bounded_and_trimmed_on_a_line_boundary_without_breaking_utf8()
     {

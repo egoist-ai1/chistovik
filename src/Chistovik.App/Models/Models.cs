@@ -8,7 +8,8 @@ namespace Chistovik.App.Models;
 /// </summary>
 public sealed record ProgramInfo(
     string Name, string Publisher, string Version, long SizeBytes, DateTime? InstalledOn, string Source,
-    string Id = "", Changeability Class = Changeability.ReadOnly, string Rule = "", string? ReadOnlyReason = null);
+    string Id = "", Changeability Class = Changeability.ReadOnly, string Rule = "", string? ReadOnlyReason = null,
+    string? IconSource = null);
 
 /// <summary>
 /// Запись автозагрузки. EntryId в формате протокола (run:hklm64:Имя, folder:user:файл) или пусто, если менять нельзя.
@@ -17,14 +18,15 @@ public sealed record ProgramInfo(
 public sealed record StartupInfo(
     string EntryId, string Name, string Command, string Origin, bool Enabled, bool CanToggle, string? ReadOnlyReason,
     Changeability Class = Changeability.Modifiable, string Rule = "",
-    string? ExePath = null, bool? FileMissing = null, bool? SignatureValid = null, bool? MicrosoftSigned = null);
+    string? ExePath = null, bool? FileMissing = null, bool? SignatureValid = null, bool? MicrosoftSigned = null,
+    string? IconSource = null);
 
 /// <summary>Класс объекта для интерфейса: подсказка App, окончательное решение принимает агент.</summary>
 public enum Changeability { Modifiable, ReadOnly, Forbidden }
 
 public sealed record ServiceInfo(
     string Name, string DisplayName, StartMode? Start, Changeability Class, string Reason, string ImagePath,
-    string Rule = "", bool NoAccess = false, int TriggerCount = 0)
+    string Rule = "", bool NoAccess = false, int TriggerCount = 0, string? IconSource = null)
 {
     /// <summary>Служба из перечня исключений владельца: только «Отключить» или понижение с автозапуска на «Вручную».</summary>
     public bool CarveOut => Rule == "service-catalog-carveout";
@@ -32,7 +34,7 @@ public sealed record ServiceInfo(
 
 public sealed record TaskInfo(
     string Path, string Name, bool Enabled, Changeability Class, string Reason, string Summary,
-    string Rule = "", bool NoAccess = false)
+    string Rule = "", bool NoAccess = false, string? IconSource = null)
 {
     /// <summary>Задача из перечня исключений владельца: выключить можно, включить только откатом из журнала.</summary>
     public bool DisableOnly => Rule == "task-catalog-carveout";

@@ -18,6 +18,8 @@ public sealed record InstalledProgram
     public string DisplayVersion { get; init; } = "";
     public string Publisher { get; init; } = "";
     public string InstallLocation { get; init; } = "";
+    /// <summary>Значение DisplayIcon как в реестре: «путь[,индекс]», возможно в кавычках и с переменными среды. Только для показа значка.</summary>
+    public string DisplayIcon { get; init; } = "";
     public string UninstallString { get; init; } = "";
     public string QuietUninstallString { get; init; } = "";
     public bool IsMsi { get; init; }

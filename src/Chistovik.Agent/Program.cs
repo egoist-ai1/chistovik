@@ -30,16 +30,19 @@ public static class Program
         }
 
         // Один агент на компьютер (не на пользователя): второй выходит до восстановления журнала и любых записей.
-        using var instance = AgentInstanceLock.TryAcquire(AgentInstanceLock.MachineName, out var lockOutcome);
+        // Строки ранних выходов (коды 2, 3, 5, 6, 7) копятся в памяти AgentFileLog и уходят в файл только при Attach; до проверки каталога
+        // журнала файла нет и не будет, поэтому тексты этих кодов в приложении на журнал не ссылаются. Тип исключения идёт в stderr.
+        using var instance = AgentInstanceLock.TryAcquire(AgentInstanceLock.MachineName, out var lockOutcome, out var lockDetail);
         if (instance is null)
         {
+            var suffix = lockDetail is null ? string.Empty : ":" + lockDetail;
             switch (lockOutcome)
             {
                 case InstanceLockOutcome.NameTaken:
-                    Log("[agent] instance-name-taken");
+                    Log("[agent] instance-name-taken" + suffix);
                     return ExitNameTaken;
                 case InstanceLockOutcome.Error:
-                    Log("[agent] instance-lock-error");
+                    Log("[agent] instance-lock-error" + suffix);
                     return ExitLockError;
                 default:
                     Log("[agent] already-running");

@@ -74,9 +74,11 @@ public static partial class PerUser
     public const string Marker = " (для пользователя)";
 }
 
-public sealed class ServiceRowViewModel(ServiceInfo model, bool perUser = false) : IListRow
+public sealed class ServiceRowViewModel(ServiceInfo model, bool perUser = false, IIconService? icons = null) : IListRow
 {
     public ServiceInfo Model { get; } = model;
+    /// <summary>Значок файла службы (ImagePath разбирается как командная строка); без значка остаётся общий.</summary>
+    public IconSlot AppIcon { get; } = new(icons, model.IconSource ?? model.ImagePath);
     public string Name => Model.Name;
     /// <summary>Строка стоит за пользовательские копии службы (имя_xxxxx): показываем одну запись с пометкой.</summary>
     public bool IsPerUser { get; } = perUser || PerUser.TemplateName(model.Name) is not null;
@@ -99,6 +101,7 @@ public sealed class ServicesViewModel : ListPageViewModel<ServiceRowViewModel>
 {
     private readonly IServiceSource _source;
     private readonly IDialogService _dialogs;
+    private readonly IIconService? _icons;
     private ServiceRowViewModel? _selected;
 
     private static readonly SortOption[] Sorts =
@@ -106,9 +109,11 @@ public sealed class ServicesViewModel : ListPageViewModel<ServiceRowViewModel>
         new("name", "По названию"), new("start", "По типу запуска"), new("class", "Сначала те, что можно менять"),
     };
 
-    public ServicesViewModel(IServiceSource source, IChangeService? changes, IDialogService dialogs, INavigator? navigator = null)
+    public ServicesViewModel(IServiceSource source, IChangeService? changes, IDialogService dialogs, INavigator? navigator = null,
+        IIconService? icons = null)
         : base("Службы", "Тип запуска служб программ. Защищённые и системные службы заблокированы, их можно только смотреть.", Sorts, changes, navigator)
     {
+        _icons = icons;
         _source = source;
         _dialogs = dialogs;
         UndoDialogs = dialogs;
@@ -194,7 +199,7 @@ public sealed class ServicesViewModel : ListPageViewModel<ServiceRowViewModel>
         var data = await _source.GetServicesAsync(ct);
         ct.ThrowIfCancellationRequested();
         var templates = PerUser.TemplatesWithInstances(data);
-        SetRows(PerUser.CollapseInstances(data).Select(x => new ServiceRowViewModel(x, templates.Contains(x.Name))));
+        SetRows(PerUser.CollapseInstances(data).Select(x => new ServiceRowViewModel(x, templates.Contains(x.Name), _icons)));
         return AllRows.Count;
     }, "Службы не найдены.");
 
@@ -252,9 +257,10 @@ public sealed class ServicesViewModel : ListPageViewModel<ServiceRowViewModel>
     }
 }
 
-public sealed class TaskRowViewModel(TaskInfo model) : IListRow
+public sealed class TaskRowViewModel(TaskInfo model, IIconService? icons = null) : IListRow
 {
     public TaskInfo Model { get; } = model;
+    public IconSlot AppIcon { get; } = new(icons, model.IconSource);
     public string Path => Model.Path;
     public string Name => Model.Name;
     public bool Enabled => Model.Enabled;
@@ -276,6 +282,7 @@ public sealed class TasksViewModel : ListPageViewModel<TaskRowViewModel>
 {
     private readonly ITaskSource _source;
     private readonly IDialogService _dialogs;
+    private readonly IIconService? _icons;
     private TaskRowViewModel? _selected;
 
     private static readonly SortOption[] Sorts =
@@ -283,9 +290,11 @@ public sealed class TasksViewModel : ListPageViewModel<TaskRowViewModel>
         new("name", "По названию"), new("path", "По пути"), new("state", "Сначала включённые"), new("class", "Сначала те, что можно менять"),
     };
 
-    public TasksViewModel(ITaskSource source, IChangeService? changes, IDialogService dialogs, INavigator? navigator = null)
+    public TasksViewModel(ITaskSource source, IChangeService? changes, IDialogService dialogs, INavigator? navigator = null,
+        IIconService? icons = null)
         : base("Задачи", "Задачи планировщика Windows. Служебные задачи заблокированы; задачи сторонних программ можно включать и выключать, остальные только смотреть.", Sorts, changes, navigator)
     {
+        _icons = icons;
         _source = source;
         _dialogs = dialogs;
         UndoDialogs = dialogs;
@@ -353,7 +362,7 @@ public sealed class TasksViewModel : ListPageViewModel<TaskRowViewModel>
     {
         var data = await _source.GetTasksAsync(ct);
         ct.ThrowIfCancellationRequested();
-        SetRows(data.Select(x => new TaskRowViewModel(x)));
+        SetRows(data.Select(x => new TaskRowViewModel(x, _icons)));
         return AllRows.Count;
     }, "Задачи не найдены или нет доступа к планировщику.");
 

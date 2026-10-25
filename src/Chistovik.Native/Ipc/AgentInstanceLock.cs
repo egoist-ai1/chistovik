@@ -23,9 +23,9 @@ public enum InstanceLockOutcome
 {
     /// <summary>Место занято нами.</summary>
     Acquired,
-    /// <summary>Мьютекс уже существует и доступен нам: работает другой агент.</summary>
+    /// <summary>Мьютекс уже существует, доступен нам и создан администратором или SYSTEM: работает другой агент.</summary>
     Busy,
-    /// <summary>Мьютекс с этим именем есть, но открыть его нельзя (чужой DACL или объект другого типа).</summary>
+    /// <summary>Мьютекс с этим именем есть, но открыть его нельзя (чужой DACL или объект другого типа) либо его создал не администратор и не SYSTEM.</summary>
     NameTaken,
     /// <summary>Создать мьютекс не удалось (IOException и подобное).</summary>
     Error,
@@ -55,8 +55,22 @@ public sealed class AgentInstanceLock : IDisposable
 
     /// <summary>Шов для тестов: <paramref name="securityOverride"/> заменяет DACL (по умолчанию администраторы и SYSTEM).</summary>
     internal static AgentInstanceLock? TryAcquire(string name, MutexSecurity? securityOverride, out InstanceLockOutcome outcome)
+        => TryAcquire(name, securityOverride, null, out outcome, out _);
+
+    /// <summary>Как первая перегрузка, но ещё отдаёт <paramref name="detail"/>: только имя типа исключения (без сообщения и путей) для журнала.</summary>
+    public static AgentInstanceLock? TryAcquire(string name, out InstanceLockOutcome outcome, out string? detail)
+        => TryAcquire(name, null, null, out outcome, out detail);
+
+    /// <summary>Доверенный владелец существующего мьютекса: администраторы или SYSTEM (создатель мьютекса агента всегда повышен).</summary>
+    internal static bool IsTrustedOwner(SecurityIdentifier owner)
+        => owner.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid) || owner.IsWellKnown(WellKnownSidType.LocalSystemSid);
+
+    /// <summary>Шов для тестов: <paramref name="trustedOwner"/> заменяет проверку владельца существующего мьютекса (по умолчанию <see cref="IsTrustedOwner"/>).</summary>
+    internal static AgentInstanceLock? TryAcquire(string name, MutexSecurity? securityOverride, Func<SecurityIdentifier, bool>? trustedOwner,
+        out InstanceLockOutcome outcome, out string? detail)
     {
         var security = securityOverride ?? DefaultSecurity();
+        detail = null;
         try
         {
             // Владение не берём: мьютекс служит именем-замком, а не блокировкой потока (Main агента асинхронный).
@@ -66,20 +80,35 @@ public sealed class AgentInstanceLock : IDisposable
                 outcome = InstanceLockOutcome.Acquired;
                 return new AgentInstanceLock(mutex);
             }
+
+            // Мьютекс уже есть и открыт. Global\-имя мог создать обычный пользователь с DACL Everyone:Full: «уже запущен» это
+            // только если создатель администратор или SYSTEM, иначе имя занято чужим.
+            var trusted = false;
+            try
+            {
+                trusted = mutex.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) is SecurityIdentifier owner
+                    && (trustedOwner ?? IsTrustedOwner)(owner);
+            }
+            catch (Exception e) when (e is UnauthorizedAccessException or InvalidOperationException or IdentityNotMappedException)
+            {
+                detail = e.GetType().Name;
+            }
             mutex.Dispose();
-            outcome = InstanceLockOutcome.Busy;
+            outcome = trusted ? InstanceLockOutcome.Busy : InstanceLockOutcome.NameTaken;
             return null;
         }
         catch (Exception e) when (e is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
         {
             // Имя в Global\ может создать кто угодно, поэтому «нет доступа» означает чужой мьютекс (или токен без прав): стартовать нельзя.
             outcome = InstanceLockOutcome.NameTaken;
+            detail = e.GetType().Name;
             return null;
         }
         catch (Exception e) when (e is IOException or ArgumentException or NotSupportedException)
         {
             // MutexAcl.Create документированно бросает IOException (в том числе DirectoryNotFoundException) и ArgumentException.
             outcome = InstanceLockOutcome.Error;
+            detail = e.GetType().Name;
             return null;
         }
     }
