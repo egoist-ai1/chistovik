@@ -81,6 +81,7 @@ public sealed class TweakRowViewModel : ObservableObject
     public string RiskText => IsCareful ? "Осторожно" : "Безопасно";
     public string ScopeText => IsMachineWide ? "Для всех пользователей" : "Только для вас";
     public string AutomationName { get; }
+    public override string ToString() => AutomationName;
 
     public string StateText => Current switch
     {
@@ -115,6 +116,7 @@ public sealed class TweakGroupViewModel(string name, IReadOnlyList<TweakRowViewM
 {
     public string Name { get; } = name;
     public IReadOnlyList<TweakRowViewModel> Items { get; } = items;
+    public override string ToString() => Name;
 }
 
 /// <summary>Твики реестра из каталога (area «tw») или визуальные эффекты (area «fx»): один класс, разный фильтр.</summary>

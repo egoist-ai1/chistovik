@@ -28,6 +28,7 @@ public sealed class ProgramRowViewModel : ObservableObject
     public string SizeText { get; }
     public string DateText { get; }
     public string AutomationName { get; }
+    public override string ToString() => AutomationName;
 
     public bool IsChecked
     {

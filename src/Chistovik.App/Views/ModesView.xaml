@@ -20,7 +20,14 @@
             <Button Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,0,0,12"
                     Content="{Binding UndoLastText}" Command="{Binding UndoLastCommand}"
                     Visibility="{Binding CanUndoLast, Converter={StaticResource BoolToVis}}"
-                    AutomationProperties.Name="Откатить последний применённый режим целиком"/>
+                    AutomationProperties.Name="Откатить последний применённый режим целиком">
+                <!-- Имя режима показываем TextBlock-ом: в ContentPresenter «_» читался бы как мнемоника и пропадал. -->
+                <Button.ContentTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}"/>
+                    </DataTemplate>
+                </Button.ContentTemplate>
+            </Button>
         </StackPanel>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False"

@@ -34,6 +34,7 @@ public sealed class JournalOperationViewModel
     public string WhenText { get; }
     public bool CanRollback => Model.Reversible;
     public string AutomationName { get; }
+    public override string ToString() => AutomationName;
     public bool IsGood => Model.State is OperationState.Done or OperationState.Undone;
     public bool IsWarn => Model.State is OperationState.Partial or OperationState.PartiallyUndone;
     public bool IsBad => Model.State is OperationState.Failed or OperationState.Denied or OperationState.Interrupted;

@@ -140,6 +140,8 @@ public sealed class ConflictRowViewModel : ObservableObject
 
     public string ChoiceText => Overwrite ? "перезаписать" : "оставить как есть";
 
+    public override string ToString() => $"{Title}, {Current}, {ChoiceText}";
+
     public UndoResolution ToResolution() => new()
     {
         StepId = Info.StepId,

@@ -27,6 +27,7 @@ public sealed class FilterChip : ObservableObject
     public string AutomationName => IsActive ? Label + ", выбрано" : Label;
 
     internal void Refresh() => OnPropertyChanged(nameof(AutomationName));
+    public override string ToString() => AutomationName;
 }
 
 /// <summary>Одна строка списка «Чистки» и панель подробностей: четыре фразы, причины, риск, обратимость.</summary>
@@ -182,6 +183,7 @@ public sealed class FindingRowViewModel : ObservableObject
 
     /// <summary>«{название}, {область}, {совет}, {размер}»; размер есть только у находок диска.</summary>
     public string AutomationName => $"{Title}, {AreaText}, {VerdictText}" + (SizeText.Length > 0 ? ", " + SizeText : "");
+    public override string ToString() => AutomationName;
 
     public static string AreaName(FindingArea area) => area switch
     {
@@ -197,6 +199,7 @@ public sealed class FindingRowViewModel : ObservableObject
 public sealed record ReasonLine(string Text, string Evidence)
 {
     public bool HasEvidence => Evidence.Length > 0;
+    public override string ToString() => HasEvidence ? Text + ": " + Evidence : Text;
 }
 
 /// <summary>

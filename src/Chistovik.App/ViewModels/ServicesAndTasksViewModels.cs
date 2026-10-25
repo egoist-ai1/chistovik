@@ -62,13 +62,25 @@ public static partial class PerUser
         var names = new HashSet<string>(services.Select(s => s.Name), StringComparer.OrdinalIgnoreCase);
         return services.Where(s => TemplateName(s.Name) is not { } t || !names.Contains(t)).ToList();
     }
+
+    /// <summary>Имена служб-шаблонов, у которых в списке есть пользовательские экземпляры: такая строка стоит за все копии.</summary>
+    public static ISet<string> TemplatesWithInstances(IReadOnlyList<ServiceInfo> services)
+    {
+        var names = new HashSet<string>(services.Select(s => s.Name), StringComparer.OrdinalIgnoreCase);
+        return services.Select(s => TemplateName(s.Name)).OfType<string>()
+            .Where(names.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public const string Marker = " (для пользователя)";
 }
 
-public sealed class ServiceRowViewModel(ServiceInfo model) : IListRow
+public sealed class ServiceRowViewModel(ServiceInfo model, bool perUser = false) : IListRow
 {
     public ServiceInfo Model { get; } = model;
     public string Name => Model.Name;
-    public string DisplayName => PerUser.CleanDisplayName(Model.Name, Model.DisplayName);
+    /// <summary>Строка стоит за пользовательские копии службы (имя_xxxxx): показываем одну запись с пометкой.</summary>
+    public bool IsPerUser { get; } = perUser || PerUser.TemplateName(model.Name) is not null;
+    public string DisplayName => PerUser.CleanDisplayName(Model.Name, Model.DisplayName) + (IsPerUser ? PerUser.Marker : "");
     public string ClassText => Model.NoAccess ? "Нет доступа" : ChangeabilityText.Name(Model.Class);
     public string StartText => Model.NoAccess ? "Нет доступа" : ChangeabilityText.StartName(Model.Start);
     public Changeability Class => Model.Class;
@@ -76,6 +88,7 @@ public sealed class ServiceRowViewModel(ServiceInfo model) : IListRow
     public bool CarveOut => Model.CarveOut;
     public string ImagePath => Model.ImagePath;
     public string AutomationName => $"{DisplayName}, {StartText}, {ClassText}";
+    public override string ToString() => AutomationName;
     public string SearchText { get; } = $"{PerUser.CleanDisplayName(model.Name, model.DisplayName)} {model.Name} {model.ImagePath}";
 
     /// <summary>Почему службу нельзя менять; пусто для изменяемых.</summary>
@@ -180,7 +193,8 @@ public sealed class ServicesViewModel : ListPageViewModel<ServiceRowViewModel>
     {
         var data = await _source.GetServicesAsync(ct);
         ct.ThrowIfCancellationRequested();
-        SetRows(PerUser.CollapseInstances(data).Select(x => new ServiceRowViewModel(x)));
+        var templates = PerUser.TemplatesWithInstances(data);
+        SetRows(PerUser.CollapseInstances(data).Select(x => new ServiceRowViewModel(x, templates.Contains(x.Name))));
         return AllRows.Count;
     }, "Службы не найдены.");
 
@@ -251,6 +265,7 @@ public sealed class TaskRowViewModel(TaskInfo model) : IListRow
     public bool DisableOnly => Model.DisableOnly;
     public string Summary => Model.Summary;
     public string AutomationName => $"{Name}, {EnabledText}, {ClassText}";
+    public override string ToString() => AutomationName;
     public string SearchText { get; } = $"{model.Path} {model.Summary}";
 
     /// <summary>Почему задачу нельзя менять; пусто для изменяемых.</summary>

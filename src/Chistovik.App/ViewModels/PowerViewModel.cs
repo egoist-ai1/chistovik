@@ -25,6 +25,7 @@ public sealed class PowerSchemeRowViewModel : ObservableObject
     public bool IsUnverified => !Entry.GuidVerified;
     public bool CreatesCopy => !Entry.BuiltIn;
     public RelayCommand ApplyCommand { get; }
+    public override string ToString() => Title;
 
     public bool IsActive
     {
@@ -55,6 +56,7 @@ public sealed class PowerSettingRowViewModel : ObservableObject
     public string Title => Entry.Title;
     public string Description => Entry.Description;
     public RelayCommand ApplyCommand { get; }
+    public override string ToString() => Title;
 
     public string UnitText => Entry.Unit switch
     {

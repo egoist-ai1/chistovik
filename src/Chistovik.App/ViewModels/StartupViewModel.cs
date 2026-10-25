@@ -35,6 +35,8 @@ public sealed class StartupRowViewModel : ObservableObject, IListRow
     public string AutomationName =>
         $"{Name}, {(IsEnabled ? "включена" : "выключена")}, {Origin}, {ClassText.ToLowerInvariant()}";
 
+    public override string ToString() => AutomationName;
+
     /// <summary>Переключатель доступен: запись можно менять и нет режима просмотра.</summary>
     public bool CanChange => Model.CanToggle && _canApply();
 

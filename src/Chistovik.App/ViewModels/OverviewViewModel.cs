@@ -12,6 +12,7 @@ namespace Chistovik.App.ViewModels;
 public sealed record RecentOperationRow(string Title, string WhenText, string StateText)
 {
     public string AutomationName => $"{Title}, {WhenText}, {StateText}";
+    public override string ToString() => AutomationName;
 }
 
 /// <summary>

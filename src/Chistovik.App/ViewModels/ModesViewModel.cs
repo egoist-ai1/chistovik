@@ -27,6 +27,7 @@ public sealed class ModeRowViewModel : ObservableObject
     public string TweaksText { get; }
     public bool TouchesMachine => Mode.RequiresAdmin;
     public RelayCommand ApplyCommand { get; }
+    public override string ToString() => Name;
 
     public bool CanApply
     {
