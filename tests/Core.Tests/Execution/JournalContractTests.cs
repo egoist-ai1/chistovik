@@ -19,6 +19,7 @@ public class JournalContractTests
         {
             Registry = t.Registry, Services = t.Services, Tasks = t.Tasks, Power = t.Power, Folders = t.Folders, Files = t.Files,
             Security = t.Security, Uninstaller = t.Uninstaller,
+            Cleanup = t.Cleanup, RecycleBin = t.RecycleBin, Processes = t.Processes, RegistryTree = t.RegistryTree,
             Clock = t.Clock, Ids = t.Ids, Journal = journal,
             Gate = new StepGate(TweakCatalog.Shared, PowerCatalog.Shared, PolicyContext.Fixed, t.Trust),
             AgentVersion = "0.1-test", CatalogSha256 = "test",

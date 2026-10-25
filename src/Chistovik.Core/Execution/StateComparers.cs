@@ -10,6 +10,9 @@ public static class StateComparers
     [
         new RegistryStateComparer(), new StartupStateComparer(), new ServiceStateComparer(), new TaskStateComparer(),
         new PowerActiveStateComparer(), new PowerSettingStateComparer(), new PowerSchemeStateComparer(), new UninstallStateComparer(),
+        new CleanupStateComparer(StepKind.CleanupCategory), new CleanupStateComparer(StepKind.RecycleBinEmpty),
+        new RegKeyStateComparer(),
+        new RegistryValueRemoveComparer(StepKind.StartupRemove), new RegistryValueRemoveComparer(StepKind.SharedDllRemove),
     ];
 
     public static IStateComparer For(StepKind kind)
@@ -165,4 +168,56 @@ public sealed class UninstallStateComparer : IStateComparer
     public bool IsSame(string a, string b) => StateJson.ParseUninstall(a).Installed == StateJson.ParseUninstall(b).Installed;
 
     public bool IsNoChange(string a, string b) => IsSame(a, b);
+}
+
+/// <summary>Разбор payload'ов C2/C3 с тем же контрактом ошибок, что у StateJson: невалидный JSON даёт InvalidDataException.</summary>
+internal static class C2C3Json
+{
+    public static T Parse<T>(string json, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info) where T : class
+    {
+        try { return System.Text.Json.JsonSerializer.Deserialize(json, info) ?? throw new InvalidDataException("Пустое состояние"); }
+        catch (System.Text.Json.JsonException e) { throw new InvalidDataException("Недопустимое состояние", e); }
+    }
+}
+
+/// <summary>
+/// CleanupCategory и RecycleBinEmpty. IsSame: совпадает флаг Done. IsNoChange(текущее, желаемое): в категории не осталось файлов
+/// (Files == 0) либо корзина пуста (Bytes == 0).
+/// </summary>
+public sealed class CleanupStateComparer(StepKind kind) : IStateComparer
+{
+    public StepKind Kind => kind;
+
+    public bool IsSame(string a, string b)
+        => C2C3Json.Parse(a, JournalJson.Default.CleanupState).Done == C2C3Json.Parse(b, JournalJson.Default.CleanupState).Done;
+
+    public bool IsNoChange(string current, string desired)
+    {
+        var cur = C2C3Json.Parse(current, JournalJson.Default.CleanupState);
+        _ = C2C3Json.Parse(desired, JournalJson.Default.CleanupState);
+        return cur.Done || (kind == StepKind.RecycleBinEmpty ? cur.Bytes == 0 : cur.Files == 0);
+    }
+}
+
+/// <summary>RegistryKeyDelete: сравнивается только «ключ есть / нет».</summary>
+public sealed class RegKeyStateComparer : IStateComparer
+{
+    public StepKind Kind => StepKind.RegistryKeyDelete;
+
+    public bool IsSame(string a, string b)
+        => C2C3Json.Parse(a, JournalJson.Default.RegKeyState).Exists == C2C3Json.Parse(b, JournalJson.Default.RegKeyState).Exists;
+
+    public bool IsNoChange(string a, string b) => IsSame(a, b);
+}
+
+/// <summary>StartupRemove и SharedDllRemove: состояние это значение реестра, сравнение как у RegistryValue.</summary>
+public sealed class RegistryValueRemoveComparer(StepKind kind) : IStateComparer
+{
+    static readonly RegistryStateComparer Inner = new();
+
+    public StepKind Kind => kind;
+
+    public bool IsSame(string a, string b) => Inner.IsSame(a, b);
+
+    public bool IsNoChange(string a, string b) => Inner.IsNoChange(a, b);
 }

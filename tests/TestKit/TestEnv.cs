@@ -26,6 +26,10 @@ public sealed class TestEnv
     public FakeFileSystem Files { get; } = new();
     public FakeFileSecurity Security { get; } = new();
     public FakeUninstaller Uninstaller { get; } = new();
+    public FakeCleanupFiles Cleanup { get; } = new();
+    public FakeRecycleBin RecycleBin { get; } = new();
+    public FakeProcessList Processes { get; } = new();
+    public FakeRegistryTree RegistryTree { get; } = new();
     public FakeClock Clock { get; } = new();
     public SequentialIdGenerator Ids { get; } = new();
     public InMemoryJournal Journal { get; }
@@ -59,6 +63,10 @@ public sealed class TestEnv
         Files = Files,
         Security = Security,
         Uninstaller = Uninstaller,
+        Cleanup = Cleanup,
+        RecycleBin = RecycleBin,
+        Processes = Processes,
+        RegistryTree = RegistryTree,
         Clock = Clock,
         Ids = Ids,
         Journal = Journal,

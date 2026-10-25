@@ -62,6 +62,20 @@ public sealed class WindowsUserFolders : IUserFolders
 
     public string? CommonStartupFolder() => KnownFolder(FolderCommonStartup);
 
+    /// <summary>Профиль из HKLM\...\ProfileList\&lt;sid&gt;\ProfileImagePath (для любого SID, в том числе текущего). Нет записи — null.</summary>
+    public string? ProfileDir(string userSid)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(userSid);
+        SecurityIdentifier sid;
+        try { sid = new SecurityIdentifier(userSid); }
+        catch (ArgumentException e) { throw new ArgumentException("userSid не является SID.", nameof(userSid), e); }
+
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+            $@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\{sid.Value}", writable: false);
+        var profile = key?.GetValue("ProfileImagePath", null, Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
+        return string.IsNullOrWhiteSpace(profile) ? null : Environment.ExpandEnvironmentVariables(profile);
+    }
+
     private static string? KnownFolder(Guid id)
     {
         var hr = SHGetKnownFolderPath(ref id, 0, IntPtr.Zero, out var p);

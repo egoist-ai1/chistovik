@@ -24,3 +24,31 @@ public interface IRegKeyHandle : IDisposable
     void Write(ApprovedRegistryWrite w);
     IReadOnlyList<string> ValueNames();
 }
+
+/// <summary>Сведения о ключе (RegQueryInfoKey): число подключей и значений.</summary>
+public sealed record RegKeyInfo(int SubKeyCount, int ValueCount);
+
+/// <summary>Обход и удаление поддерева реестра по хэндлам (C3). Ссылки не разыменовываются (REG_OPTION_OPEN_LINK).</summary>
+public interface IRegistryTree
+{
+    /// <summary>null, если ключа нет. KEY_READ|KEY_WOW64_64KEY (+KEY_WRITE|DELETE при forWrite).</summary>
+    IRegTreeHandle? OpenTree(RegLocation loc, bool forWrite);
+}
+
+public interface IRegTreeHandle : IDisposable
+{
+    string ResolvedPath { get; }
+    bool IsSymbolicLink { get; }
+    RegKeyInfo Info();
+    IReadOnlyList<string> SubKeyNames();
+
+    /// <summary>REG_OPTION_OPEN_LINK; null, если подключа нет.</summary>
+    IRegTreeHandle? OpenSub(string name, bool forWrite);
+
+    IReadOnlyList<(string Name, RegType Type, byte[] Raw)> RawValues();
+    IRegTreeHandle CreateSub(string name);
+    void SetRaw(string name, RegType type, byte[] raw);
+
+    /// <summary>NtDeleteKey(handle); нужен DELETE в SAM.</summary>
+    void DeleteSelf();
+}

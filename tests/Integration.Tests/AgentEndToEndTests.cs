@@ -50,7 +50,8 @@ public sealed class AgentEndToEndTests : IDisposable
     }
 
     AgentPorts Ports() => new(_fakes.Registry, _fakes.Services, _fakes.Tasks, _fakes.Power, _fakes.Folders, _fakes.Files,
-        _fakes.Security, _fakes.Uninstaller, _fakes.Trust, _dir, _fakes.Clock, new RandomIds());
+        _fakes.Security, _fakes.Uninstaller, _fakes.Trust, _dir, _fakes.Clock, new RandomIds(),
+        _fakes.Cleanup, _fakes.RecycleBin, _fakes.Processes, _fakes.RegistryTree);
 
     AgentComposition Build(List<string>? log = null)
     {

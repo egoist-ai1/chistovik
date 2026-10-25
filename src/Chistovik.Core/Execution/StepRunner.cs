@@ -178,8 +178,8 @@ internal sealed class StepRunner(ExecEnv env)
             else if (o.End is StepEnd.Failed or StepEnd.Denied)
             {
                 failed = true;
-                failCode = o.Code;
-                break;
+                failCode ??= o.Code;
+                if (!plan.ContinueOnFailure) break;
             }
         }
 

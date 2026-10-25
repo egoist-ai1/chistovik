@@ -66,8 +66,27 @@ public class JournalModelTests
     }
 
     [Fact]
+    public void Cleanup_and_registry_tree_payloads_roundtrip_and_reject_unknown_fields()
+    {
+        RoundTrip(new CleanupTarget(1, "temp-user", "user", "S-1-5-21-1-2-3-1001", [@"C:\Users\T\AppData\Local\Temp"], 24), JournalJson.Default.CleanupTarget);
+        RoundTrip(new CleanupState(1, false, 10, 2), JournalJson.Default.CleanupState);
+        RoundTrip(new CleanupState(1, true, Deleted: 5, FreedBytes: 99, Skipped: new Dictionary<string, int> { ["in-use"] = 1 }, Failed: 0), JournalJson.Default.CleanupState);
+        var ev = new OrphanEvidenceJson("uninstall-orphan", [@"C:\Program Files\X"], null);
+        RoundTrip(new RegKeyDeleteTarget(1, "HKLM", null, "x64", @"SOFTWARE\X", ev, new RegKeyBackup(@"SOFTWARE\Chistovik\Quarantine\a\1", @"a\1.reg"), false, "X"),
+            JournalJson.Default.RegKeyDeleteTarget);
+        RoundTrip(new RegKeyState(1, true, 3, 5, new string('a', 64)), JournalJson.Default.RegKeyState);
+        RoundTrip(new RegKeyState(1, false), JournalJson.Default.RegKeyState);
+        RoundTrip(new ValueRemoveTarget(1, "HKLM", null, "x64", @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", "V", ev), JournalJson.Default.ValueRemoveTarget);
+        Assert.Contains("\"v\":1", JsonSerializer.Serialize(new RegKeyState(1, false), JournalJson.Default.RegKeyState));
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize("""{"v":1,"done":true,"extra":1}""", JournalJson.Default.CleanupState));
+    }
+
+    [Fact]
     public void Step_codes_are_closed()
     {
+        foreach (var c in new[] { "evidence-failed", "reg-tree-too-large", "reg-tree-has-link", "backup-mismatch", "backup-missing", "interrupted" })
+            Assert.True(StepCodes.IsKnown(c), c);
         Assert.True(StepCodes.IsKnown(StepCodes.NoChange));
         Assert.True(StepCodes.IsKnown(StepCodes.Win32(5)));
         Assert.False(StepCodes.IsKnown("win32:"));

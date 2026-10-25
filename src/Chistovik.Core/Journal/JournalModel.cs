@@ -52,6 +52,33 @@ public sealed record UninstallTarget(string Scope, string Arch, string Key, stri
 /// <summary>UninstallRun. Installed: MSI — состояние продукта «установлен»; EXE — ключ ARP существует.</summary>
 public sealed record UninstallState(int V, bool Installed);
 
+/// <summary>CleanupCategory. Scope: machine | user, Sid — SID клиента для user (иначе null), Roots — раскрытые корни на момент плана. DESIGN C2C3 §2.2.</summary>
+public sealed record CleanupTarget(int V, string Category, string Scope, string? Sid, IReadOnlyList<string> Roots, int MinAgeHours);
+
+/// <summary>
+/// CleanupCategory / RecycleBinEmpty. before: Done=false, Bytes, Files. after: Done=true, Deleted, FreedBytes, Skipped (причина → число), Failed.
+/// Необратимо: Undo отвечает not-revertible.
+/// </summary>
+public sealed record CleanupState(
+    int V, bool Done, long? Bytes = null, long? Files = null, long? Deleted = null, long? FreedBytes = null,
+    IReadOnlyDictionary<string, int>? Skipped = null, int? Failed = null);
+
+/// <summary>Доказательство «сирота», найденное агентом заново: Kind uninstall-orphan | msi-unknown | file-missing | command-unresolved.</summary>
+public sealed record OrphanEvidenceJson(string Kind, IReadOnlyList<string> Paths, string? ProductCode);
+
+/// <summary>Копия удаляемого ключа: Key внутри HKLM, File относительно %ProgramData%\Chistovik\quarantine.</summary>
+public sealed record RegKeyBackup(string Key, string File);
+
+/// <summary>RegistryKeyDelete. Root: HKLM | HKU; View: x64 | x86.</summary>
+public sealed record RegKeyDeleteTarget(
+    int V, string Root, string? Sid, string View, string Key, OrphanEvidenceJson Evidence, RegKeyBackup Backup, bool Expert, string? Display);
+
+/// <summary>RegistryKeyDelete. before: Exists=true, Subkeys, Values, TreeSha256. after: Exists=false.</summary>
+public sealed record RegKeyState(int V, bool Exists, int? Subkeys = null, int? Values = null, string? TreeSha256 = null);
+
+/// <summary>StartupRemove / SharedDllRemove. Расположение значения как в RegistryTarget, состояние — RegistryState.</summary>
+public sealed record ValueRemoveTarget(int V, string Root, string? Sid, string View, string Key, string Name, OrphanEvidenceJson Evidence);
+
 /// <summary>Source-generated сериализация payload'ов: без рефлексии, лишние поля запрещены.</summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -75,6 +102,11 @@ public sealed record UninstallState(int V, bool Installed);
 [JsonSerializable(typeof(PowerSchemeState))]
 [JsonSerializable(typeof(UninstallTarget))]
 [JsonSerializable(typeof(UninstallState))]
+[JsonSerializable(typeof(CleanupTarget))]
+[JsonSerializable(typeof(CleanupState))]
+[JsonSerializable(typeof(RegKeyDeleteTarget))]
+[JsonSerializable(typeof(RegKeyState))]
+[JsonSerializable(typeof(ValueRemoveTarget))]
 public sealed partial class JournalJson : JsonSerializerContext
 {
     /// <summary>Версия формата состояний; пишется в "v".</summary>
@@ -100,6 +132,15 @@ public static class StepCodes
     /// <summary>Установщик занят другой установкой (MSI 1618) или программа запущена.</summary>
     public const string InUse = "in-use";
     public const string SkippedByRule = "skipped-by-rule";
+    /// <summary>Агент заново проверил доказательство «сирота» и оно не подтвердилось.</summary>
+    public const string EvidenceFailed = "evidence-failed";
+    public const string RegTreeTooLarge = "reg-tree-too-large";
+    public const string RegTreeHasLink = "reg-tree-has-link";
+    /// <summary>Хэш копии ключа не совпал с оригиналом (или с записанным в журнале).</summary>
+    public const string BackupMismatch = "backup-mismatch";
+    public const string BackupMissing = "backup-missing";
+    /// <summary>Необратимый шаг был прерван перестартом агента.</summary>
+    public const string Interrupted = "interrupted";
 
     public static string Win32(int error) => "win32:" + error;
 
@@ -109,7 +150,8 @@ public static class StepCodes
         if (code.StartsWith("win32:", StringComparison.Ordinal))
             return int.TryParse(code.AsSpan(6), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _);
         return code is NoChange or ExternalChange or PolicyDenied or NotFound or AccessDenied or VerifyMismatch
-            or RecoveredDone or RecoveredNotApplied or AlreadyReverted or NotRevertible or Timeout or InUse or SkippedByRule;
+            or RecoveredDone or RecoveredNotApplied or AlreadyReverted or NotRevertible or Timeout or InUse or SkippedByRule
+            or EvidenceFailed or RegTreeTooLarge or RegTreeHasLink or BackupMismatch or BackupMissing or Interrupted;
     }
 }
 

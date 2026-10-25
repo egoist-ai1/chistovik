@@ -19,6 +19,9 @@ public interface IUserFolders
 {
     string? StartupFolder(string userSid);
     string? CommonStartupFolder();
+
+    /// <summary>Каталог профиля пользователя из ProfileList по SID (не из Shell Folders); null, если профиля нет.</summary>
+    string? ProfileDir(string userSid);
 }
 
 public interface IFileSystem { IReadOnlyList<string> ListFiles(string dir, string pattern); }

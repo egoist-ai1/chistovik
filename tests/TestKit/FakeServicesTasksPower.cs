@@ -290,6 +290,12 @@ public sealed class FakeUserFolders : IUserFolders
     public string? StartupFolder(string userSid) => _user.GetValueOrDefault(userSid);
 
     public string? CommonStartupFolder() => Common;
+
+    readonly Dictionary<string, string> _profiles = new(StringComparer.OrdinalIgnoreCase);
+
+    public void SetProfile(string sid, string dir) => _profiles[sid] = dir;
+
+    public string? ProfileDir(string userSid) => _profiles.GetValueOrDefault(userSid);
 }
 
 public sealed class FakeFileSystem : IFileSystem

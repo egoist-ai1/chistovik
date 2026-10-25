@@ -24,6 +24,8 @@ namespace Chistovik.Core.Ipc;
 [JsonDerivedType(typeof(SetPowerSettingRequest), "SetPowerSetting")]
 [JsonDerivedType(typeof(UndoRequest), "Undo")]
 [JsonDerivedType(typeof(UninstallRequest), "Uninstall")]
+[JsonDerivedType(typeof(CleanCategoriesRequest), "CleanCategories")]
+[JsonDerivedType(typeof(ApplyFindingsRequest), "ApplyFindings")]
 public abstract record AgentRequest
 {
     public required Guid Id { get; init; }
@@ -214,6 +216,68 @@ public sealed record UninstallRequest : AgentRequest
     }
 }
 
+/// <summary>
+/// Очистка диска по идентификаторам категорий из встроенного каталога (C2). Корни берутся из каталога и SID клиента, не из запроса.
+/// MeasureOnly: только измерить, журнал не пишется.
+/// </summary>
+public sealed record CleanCategoriesRequest : AgentRequest
+{
+    public const int MaxCategories = 32;
+
+    public required IReadOnlyList<string> Categories { get; init; }
+    public required bool MeasureOnly { get; init; }
+
+    public override string? Validate()
+    {
+        if (Categories is null || Categories.Count is < 1 or > MaxCategories) return "Categories: нужно от 1 до 32 элементов";
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in Categories)
+        {
+            if (c is null || !Rules.CatalogId.IsMatch(c)) return "Categories: недопустимый формат идентификатора";
+            if (!seen.Add(c)) return "Categories: повтор идентификатора";
+        }
+        return null;
+    }
+}
+
+public enum FindingActionKind { Remove }
+
+public sealed record FindingAction(string FindingId, FindingActionKind Action);
+
+/// <summary>
+/// Действия над находками реестра (C3) по идентификаторам: агент сам перечисляет записи и заново проверяет доказательства.
+/// DryRun: ничего не пишется, ответ dry-run с Facts. ExpertConfirmations: идентификаторы из Items, подтверждённые отдельно (UX-барьер).
+/// </summary>
+public sealed record ApplyFindingsRequest : AgentRequest
+{
+    public const int MaxItems = 256;
+    public const int MaxFindingIdLength = 300;
+
+    public required IReadOnlyList<FindingAction> Items { get; init; }
+    public required bool DryRun { get; init; }
+    public IReadOnlyList<string>? ExpertConfirmations { get; init; }
+
+    public override string? Validate()
+    {
+        if (Items is null || Items.Count is < 1 or > MaxItems) return "Items: нужно от 1 до 256 элементов";
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var it in Items)
+        {
+            if (it is null || it.FindingId is null) return "Items: пустой элемент";
+            if (it.FindingId.Length is < 1 or > MaxFindingIdLength) return "FindingId: длина от 1 до 300";
+            foreach (var ch in it.FindingId)
+                if (ch < ' ' || ch == '\u007f') return "FindingId: управляющие символы недопустимы";
+            if (!Enum.IsDefined(it.Action)) return "Action: недопустимое значение";
+            if (!ids.Add(it.FindingId)) return "Items: повтор FindingId";
+        }
+        if (ExpertConfirmations is null) return null;
+        if (ExpertConfirmations.Count > MaxItems) return "ExpertConfirmations: слишком много";
+        foreach (var e in ExpertConfirmations)
+            if (e is null || !ids.Contains(e)) return "ExpertConfirmations: идентификатор не из Items";
+        return null;
+    }
+}
+
 /// <summary>Правила форматов полей запросов (DESIGN-0.1 §3 и §7).</summary>
 static partial class Rules
 {
@@ -230,6 +294,26 @@ static partial class Rules
     [GeneratedRegex(@"^arp:machine:(x64|x86):[^\\\u0000-\u001f\u007f]{1,255}\z", RegexOptions.CultureInvariant)]
     public static partial Regex ArpMachineIdRegex();
     public static Regex ArpMachineId { get; } = ArpMachineIdRegex();
+
+    /// <summary>Находка «программа пользователя» (R1): HKU клиента, представление x64 или x86.</summary>
+    [GeneratedRegex(@"^arp:user:(x64|x86):[^\\\u0000-\u001f\u007f]{1,255}\z", RegexOptions.CultureInvariant)]
+    public static partial Regex ArpUserIdRegex();
+    public static Regex ArpUserId { get; } = ArpUserIdRegex();
+
+    /// <summary>Находка «App Paths» (R2).</summary>
+    [GeneratedRegex(@"^apppath:(machine|user):(x64|x86):[^\\/:\u0000-\u001f\u007f]{1,255}\z", RegexOptions.CultureInvariant)]
+    public static partial Regex AppPathIdRegex();
+    public static Regex AppPathId { get; } = AppPathIdRegex();
+
+    /// <summary>Находка «RunOnce» (R3); Run описывается <see cref="EntryId"/>.</summary>
+    [GeneratedRegex(@"^runonce:(hklm64|hklm32|hku):[^\r\n]+\z", RegexOptions.CultureInvariant)]
+    public static partial Regex RunOnceIdRegex();
+    public static Regex RunOnceId { get; } = RunOnceIdRegex();
+
+    /// <summary>Находка «SharedDLLs» (R4): SHA-256 имени значения в нижнем регистре, путь в идентификатор не попадает.</summary>
+    [GeneratedRegex(@"^shareddll:(x64|x86):[0-9a-f]{64}\z", RegexOptions.CultureInvariant)]
+    public static partial Regex SharedDllIdRegex();
+    public static Regex SharedDllId { get; } = SharedDllIdRegex();
 
     /// <summary>Имя службы: тот же алфавит и длина 1–256, что в ServicePolicy (ограничение ≤257 из спецификации выполняется).</summary>
     [GeneratedRegex(@"^[A-Za-z0-9_.\-$@ ]{1,256}\z", RegexOptions.CultureInvariant)]
@@ -248,6 +332,35 @@ public sealed record StepResult(long StepId, int Ord, StepKind Kind, StepState S
 /// <summary>Конфликт отката: текущее состояние цели не совпадает ни с before, ни с after.</summary>
 public sealed record ConflictInfo(long StepId, StepKind Kind, string CurrentDisplay, Guid? ChangedByOperationId);
 
+/// <summary>Факт ответа: Key (например cleanup:... или targetKey), Json до 4096 символов.</summary>
+public sealed record FactEntry(string Key, string Json)
+{
+    public const int MaxJsonLength = 4096;
+    public const int MaxEntries = 256;
+
+    /// <summary>null, если запись допустима.</summary>
+    public string? Validate()
+    {
+        if (string.IsNullOrEmpty(Key)) return "Key: пусто";
+        if (Json is null || Json.Length > MaxJsonLength) return "Json: длина больше 4096";
+        return null;
+    }
+
+    /// <summary>null, если список допустим (не больше 256 записей, каждая проверена).</summary>
+    public static string? Validate(IReadOnlyList<FactEntry>? facts)
+    {
+        if (facts is null) return null;
+        if (facts.Count > MaxEntries) return "Facts: больше 256 записей";
+        foreach (var f in facts)
+        {
+            if (f is null) return "Facts: пустой элемент";
+            var p = f.Validate();
+            if (p is not null) return p;
+        }
+        return null;
+    }
+}
+
 public sealed record AgentResponse(
     Guid Id,
     bool Ok,
@@ -255,7 +368,8 @@ public sealed record AgentResponse(
     string? Message = null,
     Guid? OperationId = null,
     IReadOnlyList<StepResult>? Steps = null,
-    IReadOnlyList<ConflictInfo>? Conflicts = null);
+    IReadOnlyList<ConflictInfo>? Conflicts = null,
+    IReadOnlyList<FactEntry>? Facts = null);
 
 /// <summary>Коды ответа агента (DESIGN-0.1 §3). Pong — ответ на Ping.</summary>
 public static class ResponseCodes
@@ -276,6 +390,8 @@ public static class ResponseCodes
     /// <summary>Откат отклонён: в операции есть шаг, который вернуть нельзя (удаление программы).</summary>
     public const string NotRevertible = "not-revertible";
     public const string Internal = "internal";
+    /// <summary>Пробный прогон: Ok, ничего не записано, подробности в Facts.</summary>
+    public const string DryRun = "dry-run";
 }
 
 /// <summary>Проверенный клиент канала (заполняет Native после ClientVerifier).</summary>

@@ -5,6 +5,7 @@ using Chistovik.Core.Ipc;
 using Chistovik.Core.Journal;
 using Chistovik.Core.Policy;
 using Chistovik.Core.Ports;
+using Chistovik.Native.Cleanup;
 using Chistovik.Native.Env;
 using Chistovik.Native.Journal;
 using Chistovik.Native.Power;
@@ -30,7 +31,11 @@ public sealed record AgentPorts(
     IFileTrust Trust,
     IJournalDirectory JournalDirectory,
     IClock Clock,
-    IIdGenerator Ids)
+    IIdGenerator Ids,
+    ICleanupFiles Cleanup,
+    IRecycleBin RecycleBin,
+    IProcessList Processes,
+    IRegistryTree RegistryTree)
 {
     /// <summary>Реальные порты Windows. Создание ничего не читает и не пишет.</summary>
     public static AgentPorts Windows() => new(
@@ -45,7 +50,11 @@ public sealed record AgentPorts(
         new WindowsFileTrust(),
         new WindowsJournalDirectory(),
         new SystemClock(),
-        new GuidGenerator());
+        new GuidGenerator(),
+        new WindowsCleanupFiles(),
+        new WindowsRecycleBin(),
+        new WindowsProcessList(),
+        new WindowsRegistryTree());
 }
 
 /// <summary>Состояние журнала после старта агента (DESIGN-0.1 §1, §4).</summary>
@@ -186,6 +195,10 @@ public sealed class AgentComposition : IDisposable
                 Files = ports.Files,
                 Security = ports.Security,
                 Uninstaller = ports.Uninstaller,
+                Cleanup = ports.Cleanup,
+                RecycleBin = ports.RecycleBin,
+                Processes = ports.Processes,
+                RegistryTree = ports.RegistryTree,
                 Clock = ports.Clock,
                 Ids = ports.Ids,
                 Journal = journal,

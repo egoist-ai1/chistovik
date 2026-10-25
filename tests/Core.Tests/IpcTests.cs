@@ -86,7 +86,7 @@ public class DispatcherTests
             .Where(t => t.IsSubclassOf(typeof(AgentRequest))).Select(t => t.Name).OrderBy(x => x).ToArray();
         Assert.Equal(
             [
-                "ApplyModeRequest", "ApplyTweaksRequest", "PingRequest", "SetPowerSchemeRequest", "SetPowerSettingRequest",
+                "ApplyFindingsRequest", "ApplyModeRequest", "ApplyTweaksRequest", "CleanCategoriesRequest", "PingRequest", "SetPowerSchemeRequest", "SetPowerSettingRequest",
                 "SetServiceStartRequest", "SetStartupEntryRequest", "SetTaskEnabledRequest", "UndoRequest", "UninstallRequest",
             ], types);
     }

@@ -15,6 +15,10 @@ public sealed class ExecEnv
     public required IFileSystem Files { get; init; }
     public required IFileSecurity Security { get; init; }
     public required IUninstaller Uninstaller { get; init; }
+    public required ICleanupFiles Cleanup { get; init; }
+    public required IRecycleBin RecycleBin { get; init; }
+    public required IProcessList Processes { get; init; }
+    public required IRegistryTree RegistryTree { get; init; }
     public required IClock Clock { get; init; }
     public required IIdGenerator Ids { get; init; }
     public required IJournalWriter Journal { get; init; }
@@ -131,6 +135,9 @@ internal sealed class OperationPlan(OperationKind kind, string subject, IReadOnl
     public OperationKind Kind { get; } = kind;
     public string Subject { get; } = subject;
     public IReadOnlyList<PlannedStep> Steps { get; } = steps;
+
+    /// <summary>true: после отказа шага остальные шаги выполняются (очистка диска); итог Done / Partial / Failed.</summary>
+    public bool ContinueOnFailure { get; init; }
 }
 
 /// <summary>Ошибка планирования до записи в журнал (не найдена запись автозагрузки, служба и т. п.).</summary>
