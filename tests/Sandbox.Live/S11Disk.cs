@@ -187,7 +187,8 @@ static class S11Disk
         var werFile = Path.Combine(werDir, "Report.wer");
         var edgeFile = Path.Combine(edgeCache, "s11-old.bin");
         var recycleSrc = Path.Combine(c.WorkDir, "s11-to-bin.txt");
-        var notepad = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "notepad.exe");
+        // Цель ссылки обязана существовать в любой сборке Windows: notepad.exe в новых сборках бывает только приложением Store.
+        var notepad = Path.Combine(Environment.SystemDirectory, "cmd.exe");
 
         var undo = new List<Action>();
         FileStream? hold = null;
@@ -238,11 +239,13 @@ static class S11Disk
             undo.Add(() => RemoveLink(linkFile));
             undo.Add(() => RemoveLink(linkDir));
             c.Report.Check(Sc, "ловушки созданы (junction и две символические ссылки)", linksOk && IsReparse(junction) && IsReparse(linkFile) && IsReparse(linkDir),
-                "junction на System32, ссылки на notepad.exe и System32", $"mklink: {j.Exit} {j.Output.Trim()}");
+                "junction на System32, ссылки на cmd.exe и System32", $"mklink: {j.Exit} {j.Output.Trim()}");
 
             hold = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None);
 
-            var sysFilesBefore = Directory.GetFiles(sys32).Length;
+            // Системные службы Sandbox могут создавать файлы в System32 сами, поэтому сверяем не счёт, а что ничего из прежнего не пропало.
+            var sysNamesBefore = new HashSet<string>(Directory.GetFiles(sys32), StringComparer.OrdinalIgnoreCase);
+            var sysFilesBefore = sysNamesBefore.Count;
 
             // Файл в Корзине (если Корзина работает).
             var binBefore = BinItems();
@@ -289,9 +292,12 @@ static class S11Disk
             c.Report.Check(Sc, "очистка: ссылки не тронуты и не раскрыты",
                 Exists(junction) && Exists(linkFile) && Exists(linkDir) && IsReparse(junction) && IsReparse(linkFile) && IsReparse(linkDir),
                 "junction и символические ссылки на месте", "ссылка удалена или заменена");
-            c.Report.Check(Sc, "очистка: System32 цела", Directory.GetFiles(sys32).Length == sysFilesBefore && File.Exists(notepad) && (!canaryOk || File.Exists(canary)),
-                $"файлов в System32 {sysFilesBefore}, канарейка и notepad.exe целы",
-                $"было {sysFilesBefore}, стало {Directory.GetFiles(sys32).Length}; канарейка {(File.Exists(canary) ? "цела" : "УДАЛЕНА")}");
+            var sysNamesAfter = new HashSet<string>(Directory.GetFiles(sys32), StringComparer.OrdinalIgnoreCase);
+            var sysMissing = sysNamesBefore.Where(n => !sysNamesAfter.Contains(n)).Take(5).ToList();
+            c.Report.Check(Sc, "очистка: System32 цела", sysMissing.Count == 0 && (!canaryOk || File.Exists(canary)),
+                $"файлов в System32 было {sysFilesBefore}, стало {sysNamesAfter.Count}, ничего не пропало, канарейка цела",
+                $"пропало: {string.Join(", ", sysMissing)}; канарейка {(File.Exists(canary) ? "цела" : "УДАЛЕНА")}");
+            c.Report.Check(Sc, "очистка: cmd.exe (цель ссылки) цел", File.Exists(notepad), "cmd.exe на месте", $"нет файла {notepad}");
             c.Report.Check(Sc, "очистка: корни Temp на месте", Directory.Exists(winTemp) && Directory.Exists(userTemp), "корни целы", "корень удалён");
             if (rf is null) c.Report.Fail(Sc, "очистка: факт temp-system", "факта нет: " + s.Describe(r));
             else

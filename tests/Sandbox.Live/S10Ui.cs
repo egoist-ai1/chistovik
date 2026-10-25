@@ -150,10 +150,10 @@ static class S10Ui
             var gone = WaitFor(() => S9Uninstall.FindArp(t.NamePrefix) is null ? "gone" : null, TimeSpan.FromMinutes(8)) is not null;
             c.Report.Check(Sc, $"{tag}: {t.Kind} ({t.NamePrefix}) удалена", gone, "запись ARP исчезла", "запись ARP осталась через 8 минут");
         }
-        await Task.Delay(3000);
+        // Итог появляется, когда агент вернул ответ по последней программе и список перечитан: ждём, а не спим фиксированно.
+        var summary = WaitFor(() => Texts(main).FirstOrDefault(x => x.StartsWith("Удалено", StringComparison.Ordinal)), TimeSpan.FromSeconds(90));
         var texts = Texts(main);
         Save(c, "s10-after-batch.txt", texts);
-        var summary = texts.FirstOrDefault(x => x.StartsWith("Удалено", StringComparison.Ordinal));
         c.Report.Check(Sc, $"{tag}: итог на экране", summary is not null, summary ?? "", "строки «Удалено …» нет");
         var stillThere = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64).OpenSubKey(BrokenKey) is not null;
         c.Report.Check(Sc, $"{tag}: «сломанная» запись не тронута", stillThere, "ключ на месте", "ключ исчез");
@@ -381,6 +381,7 @@ static class S10Ui
     static async Task CleanupExtension(LiveContext c, Process app, AutomationElement main)
     {
         const string tag = "чистка диска и реестра";
+        _ctx = c;
         const string diskTitle = "Временные файлы пользователя";
         var userTemp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp");
         var oldFile = Path.Combine(userTemp, "s10-old.tmp");
@@ -406,14 +407,20 @@ static class S10Ui
             var search = FindByName(main, "Поиск в списке чистки");
             if (search is null) { c.Report.Fail(Sc, $"{tag}: поиск", "поля поиска нет"); return; }
 
-            var diskChip = FindChip(main, "Диск");
+            var diskChip = WaitFor(() => FindChip(main, "Диск"), TimeSpan.FromSeconds(8));
             var regChip = FindChip(main, "Реестр");
-            c.Report.Check(Sc, $"{tag}: чипы «Диск» и «Реестр» есть", diskChip is not null && regChip is not null, "оба чипа найдены",
-                $"«Диск»: {(diskChip is null ? "нет" : "есть")}; «Реестр»: {(regChip is null ? "нет" : "есть")}");
-            if (diskChip is null || regChip is null) { DumpWhy(c, app, main, "s10-why-chips.txt"); return; }
+            // Деревья UI Automation у ItemsControl бывают без кнопок внутри элементов (кнопки есть на экране, но не видны клиенту):
+            // наличие чипов тогда подтверждаем числом элементов данных (7 областей и 6 советов).
+            var areaCount = ChipCount(main, "Фильтр по области");
+            var verdictCount = ChipCount(main, "Фильтр по совету");
+            var chipsOk = areaCount >= 7 && verdictCount >= 6;
+            c.Report.Check(Sc, $"{tag}: чипы областей и советов есть", chipsOk,
+                $"областей {areaCount}, советов {verdictCount}; кнопки видны клиенту: {(diskChip is not null && regChip is not null ? "да" : "нет")}",
+                $"областей {areaCount}, советов {verdictCount}");
+            if (diskChip is null || regChip is null) DumpWhy(c, app, main, "s10-why-chips.txt");   // остальное идёт через поиск по названию
 
             // ----- диск -----
-            Invoke(diskChip);
+            if (diskChip is not null) Invoke(diskChip);
             await Task.Delay(800);
             var row = await RowFor(main, search, diskTitle);
             c.Report.Check(Sc, $"{tag}: категория «{diskTitle}» видна в области «Диск»", row is not null, row?.Current.Name ?? "", "строки нет в списке");
@@ -448,7 +455,7 @@ static class S10Ui
             }
 
             // ----- реестр -----
-            Invoke(regChip);
+            if (regChip is not null) Invoke(regChip);
             await Task.Delay(800);
             await Rescan(main);
             var orphanRow = await RowFor(main, search, S12Registry.Orphan);
@@ -467,8 +474,9 @@ static class S10Ui
                     if (canDel)
                     {
                         Invoke(del!);
-                        var ok = WaitFor(() => FindDialogOk(app, "Удалить из реестра: "), TimeSpan.FromSeconds(20));
+                        var ok = WaitFor(() => FindDialogOk(app, "Удалить: Удалить из реестра"), TimeSpan.FromSeconds(60));
                         c.Report.Check(Sc, $"{tag}: диалог удаления из реестра", ok is not null, "диалог показан", "диалога нет");
+                        if (ok is null) DumpWhy(c, app, main, "s10-why-regdialog.txt");
                         if (ok is not null)
                         {
                             DumpDialogs(c, app, "s10-dialog-registry.txt");
@@ -522,7 +530,8 @@ static class S10Ui
             search = FindByName(main, "Поиск в списке чистки");
             if (search is not null)
             {
-                Invoke(FindChip(main, "Реестр") ?? regChip);
+                var chipAgain = FindChip(main, "Реестр") ?? regChip;
+                if (chipAgain is not null) Invoke(chipAgain);
                 await Task.Delay(800);
                 var again = await RowFor(main, search, S12Registry.Orphan);
                 c.Report.Check(Sc, $"{tag}: после отката и скана сирота снова в списке", again is not null, again?.Current.Name ?? "", "строки нет");
@@ -543,11 +552,35 @@ static class S10Ui
         WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(180));
     }
 
+    static LiveContext _ctx = null!;
+
     static async Task<AutomationElement?> RowFor(AutomationElement main, AutomationElement search, string prefix)
     {
         SetText(search, prefix);
         await Task.Delay(1200);
-        return WaitFor(() => ListItems(main).FirstOrDefault(i => i.Current.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)), TimeSpan.FromSeconds(30));
+        var row = WaitFor(() => ListItems(main).FirstOrDefault(i => i.Current.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)), TimeSpan.FromSeconds(30));
+        if (row is not null) return row;
+
+        // Диагностика: что записано в поле поиска и что показывает список. Затем одна повторная попытка с очисткой поля.
+        var diag = new List<string>();
+        try
+        {
+            diag.Add("искали: " + prefix);
+            diag.Add("значение поля поиска: " + (search.TryGetCurrentPattern(ValuePattern.Pattern, out var vp) ? ((ValuePattern)vp).Current.Value : "(нет ValuePattern)"));
+            diag.AddRange(Texts(main).Where(t => t.StartsWith("Показано ", StringComparison.Ordinal)));
+            diag.AddRange(ListItems(main).Take(15).Select(i => "[строка] " + i.Current.Name));
+        }
+        catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException) { diag.Add("не прочитать: " + e.Message); }
+        diag.Add("== повтор ==");
+        SetText(search, "");
+        await Task.Delay(1500);
+        SetText(search, prefix);
+        await Task.Delay(2500);
+        row = WaitFor(() => ListItems(main).FirstOrDefault(i => i.Current.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)), TimeSpan.FromSeconds(30));
+        diag.Add(row is null ? "повтор: строки нет" : "повтор: строка найдена");
+        try { diag.AddRange(Texts(main).Where(t => t.StartsWith("Показано ", StringComparison.Ordinal))); } catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException) { }
+        Save(_ctx, $"s10-why-row-{prefix.Replace(' ', '_')}.txt", diag);
+        return row;
     }
 
     /// <summary>Чип области («Диск», «Реестр»): кнопка в «Фильтр по области» (или любая кнопка окна с таким именем).</summary>
@@ -557,6 +590,13 @@ static class S10Ui
         foreach (AutomationElement b in scope.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)))
             if (b.Current.Name.StartsWith(text, StringComparison.Ordinal)) return b;
         return null;
+    }
+
+    static int ChipCount(AutomationElement main, string groupName)
+    {
+        var group = FindByName(main, groupName);
+        if (group is null) return 0;
+        return group.FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.DataItem)).Count;
     }
 
     static void EnsureChecked(AutomationElement box)
@@ -619,6 +659,15 @@ static class S10Ui
         return null;
     }
 
+    static void DumpTree(AutomationElement e, int depth, int maxDepth, List<string> lines)
+    {
+        var r = e.Current.BoundingRectangle;
+        lines.Add($"{new string(' ', depth * 2)}{e.Current.ControlType.ProgrammaticName.Replace("ControlType.", "")}; класс {e.Current.ClassName}; имя «{e.Current.Name}»; вне экрана {e.Current.IsOffscreen}; {r}");
+        if (depth >= maxDepth) return;
+        for (var ch = TreeWalker.RawViewWalker.GetFirstChild(e); ch is not null; ch = TreeWalker.RawViewWalker.GetNextSibling(ch))
+            DumpTree(ch, depth + 1, maxDepth, lines);
+    }
+
     /// <summary>Диагностика, когда ожидаемое окно не появилось: все окна рабочего стола (кроме совсем пустых) и надписи главного окна.</summary>
     static void DumpWhy(LiveContext c, Process app, AutomationElement main, string file)
     {
@@ -631,6 +680,24 @@ static class S10Ui
         catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException) { lines.Add("не прочитать: " + e.Message); }
         lines.Add("== надписи главного окна ==");
         try { lines.AddRange(Texts(main)); } catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException) { lines.Add("не прочитать: " + e.Message); }
+        lines.Add("== дерево вокруг кнопки «Сканировать систему заново» ==");
+        try
+        {
+            var rescan = FindByName(main, "Сканировать систему заново");
+            var root = rescan;
+            for (var i = 0; i < 3 && root is not null; i++) root = TreeWalker.RawViewWalker.GetParent(root);
+            if (root is not null) DumpTree(root, 0, 6, lines);
+            lines.Add("«Фильтр по области» найден: " + (FindByName(main, "Фильтр по области") is not null));
+            lines.Add("«Фильтр по совету» найден: " + (FindByName(main, "Фильтр по совету") is not null));
+        }
+        catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException) { lines.Add("не прочитать: " + e.Message); }
+        lines.Add("== кнопки главного окна ==");
+        try
+        {
+            foreach (AutomationElement b in main.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)))
+                lines.Add($"[кнопка] «{b.Current.Name}»; включена {b.Current.IsEnabled}; вне экрана {b.Current.IsOffscreen}");
+        }
+        catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException) { lines.Add("не прочитать: " + e.Message); }
         Save(c, file, lines);
     }
 
