@@ -12,7 +12,14 @@
     <AssemblyName>Sandbox.Live</AssemblyName>
     <IsPackable>false</IsPackable>
     <IsTestProject>false</IsTestProject>
+    <!-- Только ради UIAutomationClient: S10 управляет окном настоящего приложения изнутри Sandbox. -->
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- UseWPF убирает System.IO и System.Net.Http из неявных using; вернём то, что нужно стенду. -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Chistovik.Core\Chistovik.Core.csproj" />
     <ProjectReference Include="..\..\src\Chistovik.Native\Chistovik.Native.csproj" />

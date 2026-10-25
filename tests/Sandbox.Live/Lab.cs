@@ -50,6 +50,8 @@ sealed class LiveContext
     public bool SkipIdle { get; init; }
     /// <summary>Папка с установщиками для S9 (*.msi, *.exe); хост монтирует её на чтение.</summary>
     public string? InstallersDir { get; init; }
+    /// <summary>Папка результатов (общая с хостом): сюда S10 кладёт выписки с экранов приложения.</summary>
+    public string ResultsDir { get; init; } = "";
 }
 
 /// <summary>Заранее заданные GUID (идентификаторы операций и новых схем питания), дальше обычные случайные.</summary>

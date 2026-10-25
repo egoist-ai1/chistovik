@@ -32,9 +32,41 @@ static class S9Uninstall
         if (msi is null) c.Report.Skip(Sc, "MSI", "в папке установщиков нет *.msi");
         else await Case(c, session, "MSI", msi, "msiexec.exe", $"/i \"{msi}\" /qn /norestart", "7-Zip", @"7-Zip\7z.exe");
 
-        var exe = Directory.EnumerateFiles(c.InstallersDir, "*.exe").FirstOrDefault();
-        if (exe is null) c.Report.Skip(Sc, "NSIS", "в папке установщиков нет *.exe");
-        else await Case(c, session, "NSIS", exe, exe, "/S", "Notepad++", @"Notepad++\notepad++.exe");
+        var nsis = Directory.EnumerateFiles(c.InstallersDir, "npp*.exe").FirstOrDefault();
+        if (nsis is null) c.Report.Skip(Sc, "NSIS", "в папке установщиков нет npp*.exe");
+        else await Case(c, session, "NSIS", nsis, nsis, "/S", "Notepad++", @"Notepad++\notepad++.exe");
+
+        var inno = Directory.EnumerateFiles(c.InstallersDir, "Git-*.exe").FirstOrDefault();
+        if (inno is null) c.Report.Skip(Sc, "Inno", "в папке установщиков нет Git-*.exe");
+        else await Case(c, session, "Inno", inno, inno, "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /NOCANCEL /SP-", "Git", @"Git\bin\git.exe");
+
+        var vc = Directory.EnumerateFiles(c.InstallersDir, "vc_redist*.exe").FirstOrDefault();
+        if (vc is not null)
+        {
+            // Код 1638: в образе уже стоит более новая версия — тоже годится, важна запись ARP.
+            var code = RunProcess(vc, "/install /quiet /norestart", TimeSpan.FromMinutes(5));
+            c.Report.Info(Sc, "VC++ Redistributable: установка", $"код {code}");
+        }
+        await Protected(c, session);
+    }
+
+    /// <summary>
+    /// Рантаймы и компоненты платформы, которые есть в образе Sandbox (VC++, WebView2, Edge, .NET), агент удалять не должен:
+    /// отказ, запись ARP остаётся.
+    /// </summary>
+    static async Task Protected(LiveContext c, Session s)
+    {
+        foreach (var prefix in new[] { "Microsoft Visual C++", "Microsoft Edge", "Microsoft .NET", "Microsoft Windows Desktop Runtime", "Microsoft ASP.NET" })
+        {
+            var arp = FindArp(prefix);
+            if (arp is null) { c.Report.Skip(Sc, $"защита «{prefix}»", "такой программы в образе нет"); continue; }
+            var (key, view, name) = arp.Value;
+            var id = $"arp:machine:{(view == RegistryView.Registry64 ? "x64" : "x86")}:{key}";
+            var r = await s.Send(new UninstallRequest { Id = Guid.NewGuid(), FindingId = id });
+            var still = FindArp(prefix) is not null;
+            c.Report.Check(Sc, $"защита «{name}»: удаление отвергнуто, запись на месте", !r.Ok && still, s.Describe(r),
+                $"{s.Describe(r)}; запись {(still ? "осталась" : "ИСЧЕЗЛА")}");
+        }
     }
 
     static async Task Case(LiveContext c, Session s, string kind, string installer, string file, string args, string namePrefix, string probeFile)
@@ -95,7 +127,7 @@ static class S9Uninstall
         }
     }
 
-    static (string Key, RegistryView View, string Name)? FindArp(string namePrefix)
+    internal static (string Key, RegistryView View, string Name)? FindArp(string namePrefix)
     {
         foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
         {
@@ -112,7 +144,7 @@ static class S9Uninstall
         return null;
     }
 
-    static int RunProcess(string file, string args, TimeSpan timeout)
+    internal static int RunProcess(string file, string args, TimeSpan timeout)
     {
         var psi = new ProcessStartInfo(file, args) { UseShellExecute = false, CreateNoWindow = true };
         using var p = Process.Start(psi) ?? throw new InvalidOperationException("установщик не запущен");
