@@ -1,3 +1,4 @@
+using Chistovik.Core.Execution;
 using Chistovik.Core.Ipc;
 using Chistovik.Core.Journal;
 using Chistovik.Core.Ports;
@@ -294,5 +295,161 @@ public class UndoTests
         Assert.Equal(ResponseCodes.PolicyDenied, u.Code);
         Assert.Equal(writes, TotalWrites(t));
         Assert.Equal(0, t.Power.DeleteCount);
+    }
+
+    // ---------- чистка диска и реестра (C2/C3) ----------
+
+    const string Cv = @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion";
+    const string CleanTemp = @"C:\Users\Test\AppData\Local\Temp";
+
+    static TestEnv RegEnv(out string key)
+    {
+        var t = new TestEnv();
+        t.Security.Trust(@"C:\");
+        key = Cv + @"\Uninstall\Foo";
+        t.Registry.SetString(key, "DisplayName", "Foo App");
+        t.Registry.SetString(key, "UninstallString", "\"C:\\Program Files\\Foo\\unins000.exe\" /S");
+        t.Registry.SetString(key + @"\S0", "v", "1");
+        t.Registry.SetString(Cv + @"\Run", "Foo", "\"C:\\Gone\\foo.exe\"");
+        t.Registry.SetDword(Cv + @"\SharedDLLs", @"C:\Gone\a.dll", 3);
+        return t;
+    }
+
+    static readonly string[] Findings =
+    [
+        "arp:machine:x64:Foo", "run:hklm64:Foo", "shareddll:x64:" + OrphanId.SharedDllHash(@"C:\Gone\a.dll"),
+    ];
+
+    [Fact]
+    public void Registry_operation_is_reverted_whole()
+    {
+        var t = RegEnv(out var key);
+        var op = t.Findings(Findings).OperationId!.Value;
+        Assert.False(t.Registry.KeyExists(key));
+        Assert.False(t.Registry.Get(Cv + @"\Run", "Foo").Exists);
+        Assert.False(t.Registry.Get(Cv + @"\SharedDLLs", @"C:\Gone\a.dll").Exists);
+
+        var u = t.Undo(op);
+
+        Assert.True(u.Ok, u.Code + u.Message);
+        Assert.Equal("Foo App", t.Registry.Get(key, "DisplayName").Data);
+        Assert.True(t.Registry.KeyExists(key + @"\S0"));
+        Assert.Equal("\"C:\\Gone\\foo.exe\"", t.Registry.Get(Cv + @"\Run", "Foo").Data);
+        Assert.Equal(3u, t.Registry.Get(Cv + @"\SharedDLLs", @"C:\Gone\a.dll").Data);
+        Assert.All(t.Journal.Get(op)!.Steps, s => Assert.Equal(StepState.Undone, s.State));
+        Assert.Equal(0, t.RegistryTree.OpenHandles);
+    }
+
+    [Fact]
+    public void Registry_operation_second_undo_changes_nothing()
+    {
+        var t = RegEnv(out _);
+        var op = t.Findings(Findings).OperationId!.Value;
+        Assert.True(t.Undo(op).Ok);
+        var created = t.RegistryTree.Created;
+        var sets = t.RegistryTree.SetRawCount;
+        var writes = t.Registry.WriteCount;
+
+        var u = t.Undo(op);
+
+        Assert.True(u.Ok, u.Code);
+        Assert.Equal(ResponseCodes.NoChange, u.Code);
+        Assert.Equal(created, t.RegistryTree.Created);
+        Assert.Equal(sets, t.RegistryTree.SetRawCount);
+        Assert.Equal(writes, t.Registry.WriteCount);
+    }
+
+    [Fact]
+    public void Recreated_key_with_other_content_is_a_conflict_and_nothing_is_written()
+    {
+        var t = RegEnv(out var key);
+        var op = t.Findings("arp:machine:x64:Foo").OperationId!.Value;
+        t.Registry.SetString(key, "DisplayName", "Reinstalled");
+        var created = t.RegistryTree.Created;
+        var sets = t.RegistryTree.SetRawCount;
+        var writes = t.Registry.WriteCount;
+
+        var u = t.Undo(op);
+
+        Assert.False(u.Ok);
+        Assert.Equal(ResponseCodes.Conflict, u.Code);
+        var c = Assert.Single(u.Conflicts!);
+        Assert.Equal(t.Journal.Get(op)!.Steps.Single().Id, c.StepId);
+        Assert.Equal(created, t.RegistryTree.Created);
+        Assert.Equal(sets, t.RegistryTree.SetRawCount);
+        Assert.Equal(writes, t.Registry.WriteCount);
+        Assert.Equal("Reinstalled", t.Registry.Get(key, "DisplayName").Data);
+    }
+
+    [Fact]
+    public void Key_conflict_with_skip_writes_nothing_and_keeps_the_new_key()
+    {
+        var t = RegEnv(out var key);
+        var op = t.Findings("arp:machine:x64:Foo").OperationId!.Value;
+        t.Registry.SetString(key, "DisplayName", "Reinstalled");
+        var stepId = t.Journal.Get(op)!.Steps.Single().Id;
+        var created = t.RegistryTree.Created;
+        var sets = t.RegistryTree.SetRawCount;
+
+        var u = t.Undo(op, (stepId, ConflictAction.Skip));
+
+        Assert.True(u.Ok, u.Code);
+        Assert.Equal(ResponseCodes.NoChange, u.Code);
+        Assert.Equal(created, t.RegistryTree.Created);
+        Assert.Equal(sets, t.RegistryTree.SetRawCount);
+        Assert.Equal("Reinstalled", t.Registry.Get(key, "DisplayName").Data);
+    }
+
+    [Fact]
+    public void Key_conflict_with_overwrite_is_a_bad_request_and_writes_nothing()
+    {
+        var t = RegEnv(out var key);
+        var op = t.Findings("arp:machine:x64:Foo").OperationId!.Value;
+        t.Registry.SetString(key, "DisplayName", "Reinstalled");
+        var stepId = t.Journal.Get(op)!.Steps.Single().Id;
+        var created = t.RegistryTree.Created;
+        var sets = t.RegistryTree.SetRawCount;
+        var deleted = t.RegistryTree.Deleted;
+        var opsBefore = t.Journal.AllOperations.Count;
+
+        var u = t.Undo(op, (stepId, ConflictAction.Overwrite));
+
+        Assert.False(u.Ok);
+        Assert.Equal(ResponseCodes.BadRequest, u.Code);
+        Assert.Equal(created, t.RegistryTree.Created);
+        Assert.Equal(sets, t.RegistryTree.SetRawCount);
+        Assert.Equal(deleted, t.RegistryTree.Deleted);
+        Assert.Equal(opsBefore, t.Journal.AllOperations.Count);
+        Assert.Equal("Reinstalled", t.Registry.Get(key, "DisplayName").Data);
+    }
+
+    [Fact]
+    public void Disk_cleanup_operation_is_not_revertible()
+    {
+        var t = new TestEnv();
+        t.Cleanup.AddFile(CleanTemp + @"\old.tmp", ageHours: 100, length: 1000);
+        var op = t.Clean("temp-user").OperationId!.Value;
+        var opsBefore = t.Journal.AllOperations.Count;
+
+        var u = t.Undo(op);
+
+        Assert.False(u.Ok);
+        Assert.Equal(ResponseCodes.NotRevertible, u.Code);
+        Assert.Equal(opsBefore, t.Journal.AllOperations.Count);
+    }
+
+    [Fact]
+    public void Recycle_bin_operation_is_not_revertible()
+    {
+        var t = new TestEnv();
+        t.RecycleBin.Bytes = 500;
+        var op = t.Clean("recycle-bin").OperationId!.Value;
+        var emptied = t.RecycleBin.EmptyCalls;
+
+        var u = t.Undo(op);
+
+        Assert.False(u.Ok);
+        Assert.Equal(ResponseCodes.NotRevertible, u.Code);
+        Assert.Equal(emptied, t.RecycleBin.EmptyCalls);
     }
 }

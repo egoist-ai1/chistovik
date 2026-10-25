@@ -1,0 +1,115 @@
+{
+  "categories": [
+    {
+      "id": "temp-system", "title": "Временные файлы системы",
+      "description": "Старые файлы в C:\\Windows\\Temp. Программы создают их заново при необходимости.",
+      "scope": "machine", "roots": [ { "base": "windir", "sub": "Temp" } ], "minAgeHours": 24,
+      "mechanism": "files", "risk": "low", "defaultOn": true, "restart": "none"
+    },
+    {
+      "id": "temp-user", "title": "Временные файлы пользователя",
+      "description": "Старые файлы в папке Temp вашего профиля.",
+      "scope": "user", "roots": [ { "base": "userlocal", "sub": "Temp" } ], "minAgeHours": 24,
+      "mechanism": "files", "risk": "low", "defaultOn": true, "restart": "none"
+    },
+    {
+      "id": "wer-system", "title": "Отчёты об ошибках Windows (система)",
+      "description": "Очередь и архив отчётов об ошибках Windows для всех пользователей.",
+      "scope": "machine",
+      "roots": [
+        { "base": "programdata", "sub": "Microsoft\\Windows\\WER\\ReportQueue" },
+        { "base": "programdata", "sub": "Microsoft\\Windows\\WER\\ReportArchive" },
+        { "base": "programdata", "sub": "Microsoft\\Windows\\WER\\Temp" }
+      ],
+      "minAgeHours": 24, "mechanism": "files", "risk": "low", "defaultOn": true, "restart": "none"
+    },
+    {
+      "id": "wer-user", "title": "Отчёты об ошибках Windows (пользователь)",
+      "description": "Очередь и архив отчётов об ошибках вашего профиля.",
+      "scope": "user",
+      "roots": [
+        { "base": "userlocal", "sub": "Microsoft\\Windows\\WER\\ReportQueue" },
+        { "base": "userlocal", "sub": "Microsoft\\Windows\\WER\\ReportArchive" }
+      ],
+      "minAgeHours": 24, "mechanism": "files", "risk": "low", "defaultOn": true, "restart": "none"
+    },
+    {
+      "id": "logs-cbs", "title": "Журналы установки компонентов Windows",
+      "description": "Старые журналы CBS старше семи суток; текущий CBS.log остаётся.",
+      "scope": "machine", "roots": [ { "base": "windir", "sub": "Logs\\CBS" } ], "minAgeHours": 168,
+      "keepNames": [ "CBS.log" ],
+      "mechanism": "files", "risk": "low", "defaultOn": true, "restart": "none"
+    },
+    {
+      "id": "d3d-shader-cache", "title": "Кэш шейдеров DirectX",
+      "description": "Кэш скомпилированных шейдеров; игры и драйвер пересоздают его сами.",
+      "scope": "user", "roots": [ { "base": "userlocal", "sub": "D3DSCache" } ], "minAgeHours": 24,
+      "mechanism": "files", "risk": "low", "defaultOn": true, "restart": "none"
+    },
+    {
+      "id": "thumbcache", "title": "Кэш миниатюр и значков",
+      "description": "Файлы thumbcache и iconcache Проводника. Занятые Проводником файлы пропускаются.",
+      "scope": "user", "roots": [ { "base": "userlocal", "sub": "Microsoft\\Windows\\Explorer" } ], "minAgeHours": 24,
+      "patterns": [ "thumbcache_*.db", "iconcache_*.db" ],
+      "mechanism": "files", "risk": "low", "defaultOn": true, "restart": "explorer"
+    },
+    {
+      "id": "browser-edge", "title": "Кэш Microsoft Edge",
+      "description": "Кэш страниц, кода и графики профиля Default. Если Edge запущен, категория пропускается.",
+      "scope": "user",
+      "roots": [
+        { "base": "userlocal", "sub": "Microsoft\\Edge\\User Data\\Default\\Cache" },
+        { "base": "userlocal", "sub": "Microsoft\\Edge\\User Data\\Default\\Code Cache" },
+        { "base": "userlocal", "sub": "Microsoft\\Edge\\User Data\\Default\\GPUCache" }
+      ],
+      "minAgeHours": 24, "mechanism": "files", "risk": "low", "defaultOn": true, "skipIfRunning": "msedge", "restart": "none"
+    },
+    {
+      "id": "browser-chrome", "title": "Кэш Google Chrome",
+      "description": "Кэш страниц, кода и графики профиля Default. Если Chrome запущен, категория пропускается.",
+      "scope": "user",
+      "roots": [
+        { "base": "userlocal", "sub": "Google\\Chrome\\User Data\\Default\\Cache" },
+        { "base": "userlocal", "sub": "Google\\Chrome\\User Data\\Default\\Code Cache" },
+        { "base": "userlocal", "sub": "Google\\Chrome\\User Data\\Default\\GPUCache" }
+      ],
+      "minAgeHours": 24, "mechanism": "files", "risk": "low", "defaultOn": true, "skipIfRunning": "chrome", "restart": "none"
+    },
+    {
+      "id": "browser-firefox", "title": "Кэш Mozilla Firefox",
+      "description": "Кэш cache2 всех профилей Firefox. Если Firefox запущен, категория пропускается.",
+      "scope": "user", "roots": [ { "base": "userlocal", "sub": "Mozilla\\Firefox\\Profiles\\*\\cache2" } ], "minAgeHours": 24,
+      "mechanism": "files", "risk": "low", "defaultOn": true, "skipIfRunning": "firefox", "restart": "none"
+    },
+    {
+      "id": "recycle-bin", "title": "Корзина",
+      "description": "Все удалённые вами файлы в Корзине. Восстановить их после очистки нельзя.",
+      "scope": "user", "roots": [], "minAgeHours": 0,
+      "mechanism": "recyclebin", "risk": "medium", "defaultOn": false, "restart": "none"
+    },
+    {
+      "id": "minidump", "title": "Мини-дампы сбоев",
+      "description": "Небольшие дампы памяти после синих экранов старше семи суток.",
+      "scope": "machine", "roots": [ { "base": "windir", "sub": "Minidump" } ], "minAgeHours": 168,
+      "mechanism": "files", "risk": "medium", "defaultOn": false, "restart": "none"
+    },
+    {
+      "id": "wu-cleanup", "title": "Очистка обновлений Windows",
+      "description": "Размер неизвестен: очищается штатной очисткой диска Windows.",
+      "scope": "machine", "roots": [], "minAgeHours": 0,
+      "mechanism": "handler", "risk": "medium", "defaultOn": false, "restart": "none"
+    },
+    {
+      "id": "delivery-optimization", "title": "Оптимизация доставки",
+      "description": "Размер неизвестен: очищается штатной очисткой диска Windows.",
+      "scope": "machine", "roots": [], "minAgeHours": 0,
+      "mechanism": "handler", "risk": "low", "defaultOn": false, "restart": "none"
+    },
+    {
+      "id": "driver-packages", "title": "Пакеты драйверов",
+      "description": "Размер неизвестен: очищается штатной очисткой диска Windows.",
+      "scope": "machine", "roots": [], "minAgeHours": 0,
+      "mechanism": "handler", "risk": "medium", "defaultOn": false, "restart": "none"
+    }
+  ]
+}

@@ -34,6 +34,15 @@ public interface IDeletableHandle : IDisposable
     void Delete();
 }
 
+/// <summary>
+/// Журнал очистки: %ProgramData%\Chistovik\cleanup\&lt;opId&gt;.log в каталоге с защищённым ACL. Имя это простое имя файла
+/// (без путей); реализация создаёт каталог и перезаписывает файл целиком.
+/// </summary>
+public interface ICleanupLogStore
+{
+    void Write(string fileName, byte[] content);
+}
+
 public interface IRecycleBin
 {
     long QueryBytes();

@@ -33,6 +33,14 @@ public sealed class RecoveryService(ExecEnv env)
             var sid = view?.UserSid ?? string.Empty;
             var isUndo = p.OpKind == OperationKind.Undo;
 
+            // Очистка диска необратима и не перечитывается: после обрыва состояние «до» уже не восстановить, шаг закрываем как прерванный.
+            if (p.Kind is StepKind.CleanupCategory or StepKind.RecycleBinEmpty)
+            {
+                env.Journal.Complete(p.StepId, StepState.Failed, StepCodes.Interrupted, "recovery: cleanup interrupted");
+                failed++;
+                continue;
+            }
+
             string? cur = null;
             string? failCode = null;
             string? failRule = null;

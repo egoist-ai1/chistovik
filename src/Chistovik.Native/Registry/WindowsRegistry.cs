@@ -51,7 +51,7 @@ public sealed class WindowsRegistry : IRegistry
     internal static string Describe(RegLocation loc) =>
         loc.Root == RegRoot.Machine ? $"HKLM\\{loc.KeyPath}" : $"HKU\\{loc.UserSid}\\{loc.KeyPath}";
 
-    private static (IntPtr Root, string SubKey) Resolve(RegLocation loc)
+    internal static (IntPtr Root, string SubKey) Resolve(RegLocation loc)
     {
         var path = (loc.KeyPath ?? string.Empty).Trim('\\');
         switch (loc.Root)

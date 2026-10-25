@@ -111,6 +111,9 @@ public sealed class AgentComposition : IDisposable
     /// <summary>Сколько операций старше срока удалено при старте.</summary>
     public int PurgedOperations { get; private set; }
 
+    /// <summary>Сколько операций лишилось копий ключей реестра (Quarantine) при старте.</summary>
+    public int PurgedQuarantine { get; private set; }
+
     /// <summary>Причина, по которой Handler это UnavailableOperationHandler (для лога); пусто в режиме Ready.</summary>
     public string Reason { get; private set; } = string.Empty;
 
@@ -185,6 +188,7 @@ public sealed class AgentComposition : IDisposable
         // 3. Граф исполнения, восстановление, очистка. При сбое журнал закрывается, канал не открывается для операций.
         try
         {
+            var quarantine = new WindowsQuarantineStore(Path.Combine(dir, "quarantine"));
             var env = new ExecEnv
             {
                 Registry = ports.Registry,
@@ -198,7 +202,9 @@ public sealed class AgentComposition : IDisposable
                 Cleanup = ports.Cleanup,
                 RecycleBin = ports.RecycleBin,
                 Processes = ports.Processes,
+                CleanupLog = new WindowsCleanupLogStore(Path.Combine(dir, "cleanup")),
                 RegistryTree = ports.RegistryTree,
+                Quarantine = quarantine,
                 Clock = ports.Clock,
                 Ids = ports.Ids,
                 Journal = journal,
@@ -216,10 +222,19 @@ public sealed class AgentComposition : IDisposable
                 log?.Invoke("purge-failed:" + e.GetType().Name); // очистка не обязательна для работы
             }
 
+            // Копии удалённых ключей реестра живут не дольше записей журнала: убираем те, чьих операций уже нет.
+            var purgedCopies = 0;
+            try { purgedCopies = QuarantinePurge.Run(ports.RegistryTree, quarantine, journal); }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                log?.Invoke("quarantine-purge-failed:" + e.GetType().Name);
+            }
+
             return new AgentComposition(JournalMode.Ready, new OperationHandler(env))
             {
                 Recovery = recovery,
                 PurgedOperations = purged,
+                PurgedQuarantine = purgedCopies,
                 _journal = journal,
             };
         }
@@ -244,7 +259,7 @@ public sealed class AgentComposition : IDisposable
     {
         var asm = typeof(TweakCatalog).Assembly;
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (var name in new[] { "catalog/tweaks.json", "catalog/modes.json", "catalog/power.json" })
+        foreach (var name in new[] { "catalog/tweaks.json", "catalog/modes.json", "catalog/power.json", "catalog/cleanup.json" })
         {
             using var s = asm.GetManifestResourceStream(name) ?? throw new InvalidDataException("Ресурс каталога не найден: " + name);
             var buf = new byte[8192];

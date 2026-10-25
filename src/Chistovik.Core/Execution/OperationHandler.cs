@@ -73,6 +73,14 @@ public sealed class OperationHandler : IOperationHandler
                 return Apply(r, sid, OperationKind.PowerSetting, r.SettingId, () => PowerPlanner.PlanSetting(_env, r));
             case UninstallRequest r:
                 return Apply(r, sid, OperationKind.Uninstall, r.FindingId.ToLowerInvariant(), () => UninstallPlanner.Plan(_env, r));
+            case CleanCategoriesRequest { MeasureOnly: true } r:
+                return Measure(r, sid);
+            case CleanCategoriesRequest r:
+                return Apply(r, sid, OperationKind.Cleanup, string.Join(",", r.Categories), () => CleanupPlanner.Plan(_env, r, sid), withFacts: true);
+            case ApplyFindingsRequest { DryRun: true } r:
+                return DryRunFindings(r, sid);
+            case ApplyFindingsRequest r:
+                return Apply(r, sid, OperationKind.Registry, FindingsSubject(r), null, planById: id => FindingsPlanner.Plan(_env, r, sid, id));
             case UndoRequest r:
                 return _undo.Undo(r, client);
             default:
@@ -80,7 +88,58 @@ public sealed class OperationHandler : IOperationHandler
         }
     }
 
-    AgentResponse Apply(AgentRequest request, string sid, OperationKind kind, string subject, Func<OperationPlan> plan)
+    /// <summary>Измерение очистки: в журнал не пишется, идёт под тем же семафором. Факты по категориям в Facts.</summary>
+    AgentResponse Measure(CleanCategoriesRequest r, string sid)
+    {
+        try
+        {
+            return new AgentResponse(r.Id, true, ResponseCodes.Ok, Facts: CleanupPlanner.Measure(_env, r, sid));
+        }
+        catch (PlanException e)
+        {
+            return e.Code == StepCodes.NotFound
+                ? new AgentResponse(r.Id, false, ResponseCodes.NotFound, e.Message)
+                : new AgentResponse(r.Id, false, ResponseCodes.PolicyDenied, e.Message);
+        }
+        catch (Exception e) when (IsUnexpected(e))
+        {
+            return new AgentResponse(r.Id, false, ResponseCodes.Internal, "Измерение не удалось");
+        }
+    }
+
+    static string FindingsSubject(ApplyFindingsRequest r)
+    {
+        if (r.Items.Count == 0) return "findings";
+        var first = r.Items[0].FindingId;
+        var subject = r.Items.Count == 1 ? first : first + " +" + (r.Items.Count - 1);
+        return subject.Length > 300 ? subject[..300] : subject;
+    }
+
+    /// <summary>Пробный прогон чистки реестра: что произойдёт по каждой находке. Ни реестр, ни журнал не меняются.</summary>
+    AgentResponse DryRunFindings(ApplyFindingsRequest r, string sid)
+    {
+        try
+        {
+            return new AgentResponse(r.Id, true, ResponseCodes.DryRun, Facts: FindingsPlanner.DryRun(_env, r, sid));
+        }
+        catch (PlanException e)
+        {
+            return e.Code switch
+            {
+                StepCodes.NotFound => new AgentResponse(r.Id, false, ResponseCodes.NotFound, e.Message),
+                ResponseCodes.BadRequest => new AgentResponse(r.Id, false, ResponseCodes.BadRequest, e.Message),
+                StepCodes.PolicyDenied => new AgentResponse(r.Id, false, ResponseCodes.PolicyDenied, e.Message),
+                _ => new AgentResponse(r.Id, false, ResponseCodes.Internal, e.Message),
+            };
+        }
+        catch (Exception e) when (IsUnexpected(e))
+        {
+            return new AgentResponse(r.Id, false, ResponseCodes.Internal, "Пробный прогон не удался");
+        }
+    }
+
+    AgentResponse Apply(AgentRequest request, string sid, OperationKind kind, string subject, Func<OperationPlan>? plan, bool withFacts = false,
+        Func<Guid, OperationPlan>? planById = null)
     {
         var rec = _env.Journal.BeginOrGet(new NewOperation(_env.Ids.NewGuid(), request.Id, kind, subject, null, sid, _env.AgentVersion, _env.CatalogSha256));
         if (rec.AlreadyExisted) return Stored(request.Id, rec.Id, sid);
@@ -88,12 +147,13 @@ public sealed class OperationHandler : IOperationHandler
         OperationPlan p;
         try
         {
-            p = plan();
+            p = planById is not null ? planById(rec.Id) : plan!();
         }
         catch (PlanException e)
         {
-            if (e.Code is StepCodes.NotFound or StepCodes.PolicyDenied)
-                _env.Journal.Finish(rec.Id, OperationState.Denied, e.Code == StepCodes.NotFound ? ResponseCodes.NotFound : ResponseCodes.PolicyDenied);
+            if (e.Code is StepCodes.NotFound or StepCodes.PolicyDenied or ResponseCodes.BadRequest)
+                _env.Journal.Finish(rec.Id, OperationState.Denied,
+                    e.Code == StepCodes.NotFound ? ResponseCodes.NotFound : e.Code == ResponseCodes.BadRequest ? ResponseCodes.BadRequest : ResponseCodes.PolicyDenied);
             else
                 _env.Journal.Finish(rec.Id, OperationState.Failed, e.Code);
             return Stored(request.Id, rec.Id, sid);
@@ -114,7 +174,10 @@ public sealed class OperationHandler : IOperationHandler
             // Незавершённые (pending) шаги остаются: их закроет RecoveryService при старте агента.
             _env.Journal.Finish(rec.Id, OperationState.Failed, ResponseCodes.Internal);
         }
-        return Stored(request.Id, rec.Id, sid);
+        var response = Stored(request.Id, rec.Id, sid);
+        if (withFacts)
+            response = response with { Facts = CleanupReports.Collect(_env, rec.Id, p) };
+        return response;
     }
 
     /// <summary>Исключения, которые не превращаются в ответ internal: отмена, недоступный журнал (обрабатывается выше) и имитация гибели процесса в тестах.</summary>

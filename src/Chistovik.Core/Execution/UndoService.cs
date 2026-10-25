@@ -19,6 +19,15 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
 
     static bool SameSid(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Оба состояния «ключ есть», но хэши деревьев различаются (или хэш текущего не посчитан): содержимое чужое.</summary>
+    static bool KeyContentDiffers(string current, string before)
+    {
+        var c = RegTreeJson.ParseKeyState(current);
+        var b = RegTreeJson.ParseKeyState(before);
+        if (!c.Exists || !b.Exists) return false;
+        return !string.Equals(c.TreeSha256, b.TreeSha256, StringComparison.OrdinalIgnoreCase);
+    }
+
     static AgentResponse Reject(Guid id, string code, string message) => new(id, false, code, message);
 
     public AgentResponse Undo(UndoRequest req, ClientContext client)
@@ -34,10 +43,18 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
         var resolutions = new Dictionary<long, ConflictAction>();
         foreach (var r in req.Resolutions ?? [])
         {
-            if (view.Steps.All(s => s.Id != r.StepId))
+            var owned = view.Steps.FirstOrDefault(s => s.Id == r.StepId);
+            if (owned is null)
                 return Reject(req.Id, ResponseCodes.BadRequest, "Resolutions: шаг не принадлежит операции");
+            // Ключ реестра, появившийся на месте удалённого, перезаписывать нельзя: потеряются чужие данные. Допустим только Skip.
+            if (owned.Kind == StepKind.RegistryKeyDelete && r.Action != ConflictAction.Skip)
+                return Reject(req.Id, ResponseCodes.BadRequest, "Resolutions: для ключа реестра допустимо только Skip");
             resolutions[r.StepId] = r.Action;
         }
+
+        // Очистка диска необратима целиком (файлы удалены, корзина пуста): откатывать нечего.
+        if (view.Summary.Kind == OperationKind.Cleanup)
+            return Reject(req.Id, ResponseCodes.NotRevertible, "Очистку диска вернуть нельзя: удалённые файлы не восстанавливаются");
 
         // Удаление программы возвращается только установкой заново: любой выполненный необратимый шаг закрывает откат всей операции.
         // Для удаления это верно и при неудаче: незавершённая попытка могла что-то удалить, откатывать нечем.
@@ -91,6 +108,8 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
                 if (cmp.IsNoChange(cur, s.BeforeJson!)) plan = Plan.Already;
                 else if (cmp.IsSame(cur, s.AfterJson)) plan = Plan.Revert;
                 else plan = Plan.Conflict;
+                // Ключ на месте, но это не наша копия (программу поставили заново): конфликт, а не «уже откатано». Решение только Skip.
+                if (plan == Plan.Already && s.Kind == StepKind.RegistryKeyDelete && KeyContentDiffers(cur, s.BeforeJson!)) plan = Plan.Conflict;
             }
             catch (InvalidDataException)
             {

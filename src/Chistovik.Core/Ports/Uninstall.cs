@@ -3,8 +3,10 @@ namespace Chistovik.Core.Ports;
 /// <summary>
 /// Факты о файле или каталоге для политики пакетов. FinalPath это путь после GetFinalPathNameByHandle (ссылки раскрыты);
 /// владелец и ACE собирает Native, решение принимает PackagePolicy. Exists=false: путь не открылся.
+/// RequestedVolume (только очистка диска): том запрошенной буквы диска в виде «\\?\Volume{guid}» (без хвостового «\»), по которому
+/// CleanupPolicy сверяет том финального пути. null: том не сообщён (пакеты, старые тесты), сверка пропускается.
 /// </summary>
-public sealed record FileFacts(bool Exists, bool IsReparse, string? FinalPath, string? OwnerSid, IReadOnlyList<DirAce> Aces);
+public sealed record FileFacts(bool Exists, bool IsReparse, string? FinalPath, string? OwnerSid, IReadOnlyList<DirAce> Aces, string? RequestedVolume = null);
 
 public interface IFileSecurity
 {

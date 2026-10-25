@@ -199,13 +199,23 @@ public sealed class CleanupStateComparer(StepKind kind) : IStateComparer
     }
 }
 
-/// <summary>RegistryKeyDelete: сравнивается только «ключ есть / нет».</summary>
+/// <summary>
+/// RegistryKeyDelete: «ключ есть / нет»; если ключ есть у обоих, дополнительно совпадает хэш дерева. Иначе ключ, выпотрошенный сбоем
+/// удаления или поставленный заново с другим содержимым, считался бы тем же самым (NoChange / NotApplied в восстановлении).
+/// Хэш неизвестен (null) хотя бы у одного: состояния не равны.
+/// </summary>
 public sealed class RegKeyStateComparer : IStateComparer
 {
     public StepKind Kind => StepKind.RegistryKeyDelete;
 
     public bool IsSame(string a, string b)
-        => C2C3Json.Parse(a, JournalJson.Default.RegKeyState).Exists == C2C3Json.Parse(b, JournalJson.Default.RegKeyState).Exists;
+    {
+        var x = C2C3Json.Parse(a, JournalJson.Default.RegKeyState);
+        var y = C2C3Json.Parse(b, JournalJson.Default.RegKeyState);
+        if (x.Exists != y.Exists) return false;
+        if (!x.Exists) return true;
+        return x.TreeSha256 is not null && string.Equals(x.TreeSha256, y.TreeSha256, StringComparison.OrdinalIgnoreCase);
+    }
 
     public bool IsNoChange(string a, string b) => IsSame(a, b);
 }

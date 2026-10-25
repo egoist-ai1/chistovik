@@ -30,6 +30,17 @@ public static class ReasonCodes
     public const string WuMayRevert = "wu-may-revert";
     public const string ImpactUnknown = "impact-unknown";
 
+    // C2 и C3: очистка диска и записи реестра без файлов.
+    public const string CacheRegenerable = "cache-regenerable";
+    public const string EvidenceInstallDirMissing = "evidence-install-dir-missing";
+    public const string EvidenceUninstallerMissing = "evidence-uninstaller-missing";
+    public const string EvidenceMsiUnknown = "evidence-msi-unknown";
+    public const string EvidenceFileMissing = "evidence-file-missing";
+    public const string DriveMissing = "drive-missing";
+    public const string KeyTooLarge = "key-too-large";
+    public const string BrowserRunning = "browser-running";
+    public const string SizeNeedsAgent = "size-needs-agent";
+
     static readonly Dictionary<string, string> Texts = new(StringComparer.Ordinal)
     {
         [ClassForbidden] = "Объект защищён: программа не позволяет его менять.",
@@ -54,6 +65,15 @@ public static class ReasonCodes
         [CatalogAdvice] = "Совет взят из встроенного каталога.",
         [WuMayRevert] = "Windows может вернуть настройку после обновления.",
         [ImpactUnknown] = "Влияние на время запуска не измерялось.",
+        [CacheRegenerable] = "Это кэш: программы создают его заново, когда он понадобится.",
+        [EvidenceInstallDirMissing] = "Папки, куда программа была установлена, на диске нет.",
+        [EvidenceUninstallerMissing] = "Файла удаления программы на диске нет, запустить его нечем.",
+        [EvidenceMsiUnknown] = "Windows Installer не знает такого продукта: программа уже удалена.",
+        [EvidenceFileMissing] = "Файла, на который указывает запись, на диске нет.",
+        [DriveMissing] = "Диск, на котором должен лежать файл, сейчас недоступен. Возможно, он просто отключён, поэтому запись не трогаем.",
+        [KeyTooLarge] = "В записи слишком много вложенных ключей, автоматически её не удаляем.",
+        [BrowserRunning] = "Браузер сейчас запущен: его кэш не очищается, пока он открыт.",
+        [SizeNeedsAgent] = "Точный размер покажет агент после запроса прав администратора.",
     };
 
     /// <summary>Роли, которые может назначить запись каталога автозагрузки.</summary>

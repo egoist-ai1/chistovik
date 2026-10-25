@@ -49,4 +49,6 @@ public interface IJournalWriter : IJournalReader
     void Finish(Guid op, OperationState s, string? code);
     IReadOnlyList<PendingStep> GetPending();
     int Purge(DateTimeOffset cutoff);
+    /// <summary>Id всех операций, которые ещё есть в журнале (после Purge): по ним удаляются осиротевшие копии ключей реестра.</summary>
+    IReadOnlyList<Guid> ExistingOperationIds();
 }

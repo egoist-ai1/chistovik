@@ -329,7 +329,8 @@ public class CleanupAndFindingsValidationTests
     [Fact]
     public void Step_codes_known_list_includes_new_codes()
     {
-        foreach (var c in new[] { "evidence-failed", "reg-tree-too-large", "reg-tree-has-link", "backup-mismatch", "backup-missing", "interrupted" })
+        foreach (var c in new[] { "evidence-failed", "reg-tree-too-large", "reg-tree-has-link", "backup-mismatch", "backup-missing", "interrupted",
+                     "reg-tree-bad-name", "reg-tree-bad-type", "partial-delete" })
             Assert.True(Chistovik.Core.Journal.StepCodes.IsKnown(c), c);
         Assert.False(Chistovik.Core.Journal.StepCodes.IsKnown("nope"));
     }

@@ -48,6 +48,9 @@ internal static class StepFactory
                 StepKind.PowerSetting => PowerSetting(env, targetKey, targetJson, desired, isRevert),
                 StepKind.PowerSchemeCreate => PowerCreate(env, targetKey, targetJson, desired, isRevert),
                 StepKind.UninstallRun => Uninstall(targetKey, targetJson, desired, isRevert),
+                StepKind.CleanupCategory or StepKind.RecycleBinEmpty => Cleanup(kind, clientSid, targetKey, targetJson, desired, isRevert),
+                StepKind.RegistryKeyDelete => KeyDelete(env, clientSid, targetKey, targetJson, desired, isRevert),
+                StepKind.StartupRemove or StepKind.SharedDllRemove => ValueRemove(kind, clientSid, targetKey, targetJson, desired, isRevert),
                 _ => Bad("journal-unknown-kind"),
             };
         }
@@ -157,6 +160,69 @@ internal static class StepFactory
         if (!KeyEq(StateJson.UninstallKey(t.Arch, t.Key), key)) return Bad("journal-target-key-mismatch");
         _ = StateJson.ParseUninstall(desired);
         return new UninstallStep(t) { RecoveryOnly = true };
+    }
+
+    // ---------- очистка диска (C2) ----------
+
+    /// <summary>
+    /// Очистка необратима: откат это отказ not-revertible. Для восстановления после обрыва (isRevert=false) строится шаг только для чтения
+    /// (RecoveryOnly); сама цель берётся из каталога, а не из базы на веру.
+    /// </summary>
+    static PlannedStep Cleanup(StepKind kind, string sid, string key, string target, string desired, bool isRevert)
+    {
+        PlannedStep Bad(string rule) => Refuse(kind, key, target, desired, StepCodes.PolicyDenied, rule, isRevert);
+        if (isRevert) return Refuse(kind, key, target, desired, StepCodes.NotRevertible, "cleanup-not-revertible", true);
+        var t = C2C3Json.Parse(target, JournalJson.Default.CleanupTarget);
+        if (t.V != JournalJson.CurrentVersion) return Bad("journal-bad-payload");
+        var category = CleanupCatalog.Shared.Find(t.Category);
+        if (category is null) return Bad("cleanup-unknown-category");
+
+        if (kind == StepKind.RecycleBinEmpty)
+        {
+            if (string.IsNullOrEmpty(t.Sid) || !KeyEq(t.Sid, sid)) return Bad("journal-foreign-sid");
+            if (!KeyEq($"recyclebin:{t.Sid}", key)) return Bad("journal-target-key-mismatch");
+            return new RecycleBinStep(category, t.Sid) { RecoveryOnly = true };
+        }
+        if (t.Scope is not ("machine" or "user")) return Bad("cleanup-bad-scope");
+        if (t.Scope == "user" && (string.IsNullOrEmpty(t.Sid) || !KeyEq(t.Sid, sid))) return Bad("journal-foreign-sid");
+        if (!KeyEq(CleanupStep.Key(t), key)) return Bad("journal-target-key-mismatch");
+        return new CleanupStep(category, t, null) { RecoveryOnly = true };
+    }
+
+    // ---------- чистка реестра (C3) ----------
+
+    static PlannedStep KeyDelete(ExecEnv env, string sid, string key, string target, string desired, bool isRevert)
+    {
+        PlannedStep Bad(string rule) => Refuse(StepKind.RegistryKeyDelete, key, target, desired, StepCodes.PolicyDenied, rule, isRevert);
+        var t = RegTreeJson.ParseDeleteTarget(target);
+        if (t.Root == "HKU" && (string.IsNullOrEmpty(t.Sid) || !KeyEq(t.Sid, sid))) return Bad("journal-foreign-sid");
+        if (t.Root == "HKLM" && t.Sid is not null) return Bad("reg-bad-location");
+        if (t.View != RegTreeJson.View(t.Key)) return Bad("reg-bad-location");
+        var loc = RegTreeJson.LocationOf(t);
+        if (!KeyEq(RegTreeJson.KeyTargetKey(loc), key)) return Bad("journal-target-key-mismatch");
+        if (!RegTreeJson.TryParseBackupKey(t.Backup.Key, out _, out _)) return Bad("reg-quarantine-dest");
+
+        // Расположение проверяется шлюзом и при восстановлении после обрыва: подделанная запись не заставит читать чужой ключ.
+        var g = env.Gate.CheckOrphanKeyRestore(loc, t.Backup.Key, new string('0', 64), sid);
+        if (!g.IsAllowed) return new RefusedStep(StepKind.RegistryKeyDelete, key, target, desired, Refusal.From(g), isRevert);
+
+        if (isRevert) return new RegistryKeyRestoreStep(t, desired, sid) { IsRevert = true };
+        return RegistryKeyDeleteStep.ForRecovery(t, sid);
+    }
+
+    static PlannedStep ValueRemove(StepKind kind, string sid, string key, string target, string desired, bool isRevert)
+    {
+        PlannedStep Bad(string rule) => Refuse(kind, key, target, desired, StepCodes.PolicyDenied, rule, isRevert);
+        var t = RegTreeJson.ParseValueTarget(target);
+        if (t.Root == "HKU" && (string.IsNullOrEmpty(t.Sid) || !KeyEq(t.Sid, sid))) return Bad("journal-foreign-sid");
+        if (t.Root == "HKLM" && t.Sid is not null) return Bad("reg-bad-location");
+        if (t.View != RegTreeJson.View(t.Key)) return Bad("reg-bad-location");
+        var loc = RegTreeJson.LocationOf(t);
+        if (!KeyEq(StateJson.RegistryKey(loc), key)) return Bad("journal-target-key-mismatch");
+
+        if (kind == StepKind.StartupRemove)
+            return isRevert ? StartupRemoveStep.ForRestore(t, desired, sid) : StartupRemoveStep.ForRecovery(t, sid);
+        return isRevert ? SharedDllRemoveStep.ForRestore(t, desired, sid) : SharedDllRemoveStep.ForRecovery(t, sid);
     }
 
     // ---------- питание ----------

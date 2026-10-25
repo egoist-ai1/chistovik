@@ -28,6 +28,9 @@ public interface IRegKeyHandle : IDisposable
 /// <summary>Сведения о ключе (RegQueryInfoKey): число подключей и значений.</summary>
 public sealed record RegKeyInfo(int SubKeyCount, int ValueCount);
 
+/// <summary>Значения ключа не умещаются в заданный предел байтов (см. <see cref="IRegTreeHandle.RawValues(long)"/>).</summary>
+public sealed class RegValueTooLargeException() : Exception("Значение реестра превышает допустимый размер");
+
 /// <summary>Обход и удаление поддерева реестра по хэндлам (C3). Ссылки не разыменовываются (REG_OPTION_OPEN_LINK).</summary>
 public interface IRegistryTree
 {
@@ -46,7 +49,18 @@ public interface IRegTreeHandle : IDisposable
     IRegTreeHandle? OpenSub(string name, bool forWrite);
 
     IReadOnlyList<(string Name, RegType Type, byte[] Raw)> RawValues();
-    IRegTreeHandle CreateSub(string name);
+
+    /// <summary>
+    /// Значения с общим пределом в байтах: размер каждого значения узнаётся до чтения данных, и если сумма уже прочитанного и следующего
+    /// превысит предел, бросается <see cref="RegValueTooLargeException"/> без чтения этого значения.
+    /// </summary>
+    IReadOnlyList<(string Name, RegType Type, byte[] Raw)> RawValues(long maxTotalBytes);
+
+    /// <summary>
+    /// Открывает подключ, создавая его при отсутствии. created=false: ключ уже существовал (REG_OPENED_EXISTING_KEY), его никто не создавал.
+    /// Native создаёт с REG_OPTION_OPEN_LINK: ссылка на месте имени не разыменовывается.
+    /// </summary>
+    IRegTreeHandle CreateSub(string name, out bool created);
     void SetRaw(string name, RegType type, byte[] raw);
 
     /// <summary>NtDeleteKey(handle); нужен DELETE в SAM.</summary>

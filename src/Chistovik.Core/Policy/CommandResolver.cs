@@ -5,7 +5,7 @@ namespace Chistovik.Core.Policy;
 /// Раскрывает только переменные, известные из <see cref="PolicyContext"/>; любая другая переменная окружения,
 /// относительный путь, сетевой путь, незакрытая кавычка или управляющие символы дают отказ (вызывающий трактует его как ReadOnly).
 /// </summary>
-internal sealed class CommandResolver
+public sealed class CommandResolver
 {
     static readonly string[] Extensions =
         ["exe", "com", "bat", "cmd", "scr", "lnk", "msc", "cpl", "vbs", "vbe", "js", "jse", "wsf", "ps1", "msi", "dll"];

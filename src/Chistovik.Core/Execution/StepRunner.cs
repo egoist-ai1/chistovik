@@ -108,7 +108,9 @@ internal sealed class StepRunner(ExecEnv env)
             return new StepOutcome(StepEnd.Done, null);
         }
 
-        var failCode = back ? (writeError is null ? StepCodes.AccessDenied : ErrorCodes.From(writeError)) : StepCodes.VerifyMismatch;
+        var failCode = back ? (writeError is null ? StepCodes.AccessDenied : ErrorCodes.From(writeError))
+            : writeError is StepFailureException { Code: StepCodes.PartialDelete } ? StepCodes.PartialDelete
+            : StepCodes.VerifyMismatch;
         env.Journal.Complete(stepId, StepState.Failed, failCode, writeError is null ? null : ErrorCodes.Text(writeError));
         return new StepOutcome(StepEnd.Failed, failCode);
     }

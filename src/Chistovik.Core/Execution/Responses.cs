@@ -31,7 +31,7 @@ internal static class Responses
             case OperationState.Partial:
                 return new AgentResponse(requestId, false, ResponseCodes.Partial, "Выполнено частично: " + code, op, steps);
             case OperationState.Denied:
-                return new AgentResponse(requestId, false, code is ResponseCodes.NotFound or ResponseCodes.Internal ? code : ResponseCodes.PolicyDenied,
+                return new AgentResponse(requestId, false, code is ResponseCodes.NotFound or ResponseCodes.Internal or ResponseCodes.BadRequest ? code : ResponseCodes.PolicyDenied,
                     "Операция отклонена", op, steps);
             case OperationState.Failed:
                 return new AgentResponse(requestId, false, FailureCode(code), "Операция не выполнена: " + code, op, steps);
@@ -59,6 +59,9 @@ internal static class StateDisplay
                 StepKind.PowerActiveScheme => "активна схема " + StateJson.ParsePowerActive(stateJson).Scheme.ToString("D"),
                 StepKind.PowerSetting => PowerText(StateJson.ParsePowerSetting(stateJson)),
                 StepKind.PowerSchemeCreate => StateJson.ParsePowerScheme(stateJson).Exists ? "схема есть" : "схемы нет",
+                StepKind.CleanupCategory or StepKind.RecycleBinEmpty => CleanupText(C2C3Json.Parse(stateJson, JournalJson.Default.CleanupState)),
+                StepKind.RegistryKeyDelete => KeyText(RegTreeJson.ParseKeyState(stateJson)),
+                StepKind.StartupRemove or StepKind.SharedDllRemove => Reg(StateJson.ParseRegistry(stateJson)),
                 _ => "неизвестно",
             };
             return s.Length <= 200 ? s : s[..200];
@@ -88,6 +91,12 @@ internal static class StateDisplay
             false => "выключена",
             _ => "неизвестное состояние",
         };
+
+    static string CleanupText(CleanupState c)
+        => c.Done ? "очищено" : c.Files is > 0 ? $"файлов: {c.Files}" : c.Bytes is > 0 ? "есть данные для очистки" : "очищать нечего";
+
+    static string KeyText(RegKeyState k)
+        => !k.Exists ? "ключа нет" : k.Subkeys is { } n ? $"ключ есть, подключей: {n}" : "ключ есть";
 
     static string PowerText(PowerSettingState p) => $"от сети {p.Ac}, от батареи {p.Dc}";
 

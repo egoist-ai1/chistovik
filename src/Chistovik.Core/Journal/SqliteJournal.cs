@@ -202,6 +202,19 @@ public sealed class SqliteJournal : IJournalWriter, IDisposable
         }
     }
 
+    public IReadOnlyList<Guid> ExistingOperationIds()
+    {
+        lock (_gate)
+        {
+            var res = new List<Guid>();
+            using var cmd = Cmd(_conn, "SELECT id FROM operation");
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                if (Guid.TryParse(r.GetString(0), out var id)) res.Add(id);
+            return res;
+        }
+    }
+
     private int ExecCount(string sql, SqliteTransaction? tx, params (string, object?)[] ps)
     {
         using var cmd = Cmd(_conn, sql, tx, ps);

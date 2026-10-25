@@ -3,7 +3,16 @@ namespace Chistovik.Core.Ports;
 /// <summary>Корень реестра. Всегда Registry64; HKCU агент не открывает, пользовательский куст это HKU\SID проверенного клиента.</summary>
 public enum RegRoot { Machine, User }
 
-public enum RegType { None, String, ExpandString, Binary, DWord, QWord, MultiString }
+public enum RegType
+{
+    None, String, ExpandString, Binary, DWord, QWord, MultiString,
+
+    /// <summary>
+    /// Тип вне списка выше (REG_DWORD_BIG_ENDIAN, REG_RESOURCE_*, REG_LINK и т. п.). Порт обхода дерева сообщает его вместо тихой подмены на Binary:
+    /// такое дерево Core не копирует и не удаляет (reg-tree-bad-type), потому что при откате исходный числовой тип не вернуть.
+    /// </summary>
+    Other,
+}
 
 /// <summary>Вид шага журнала. Имена совпадают со значениями колонки step.kind (§1).</summary>
 public enum StepKind { RegistryValue, StartupApproved, ServiceStart, TaskEnabled, PowerActiveScheme, PowerSetting, PowerSchemeCreate, UninstallRun, CleanupCategory, RecycleBinEmpty, RegistryKeyDelete, StartupRemove, SharedDllRemove }

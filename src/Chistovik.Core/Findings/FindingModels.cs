@@ -2,8 +2,11 @@ using Chistovik.Core.Policy;
 
 namespace Chistovik.Core.Findings;
 
-/// <summary>Область находки. В C0 четыре: пакеты ОС, реестр и диск появятся в C1–C3.</summary>
-public enum FindingArea { Programs, Startup, Services, Tasks }
+/// <summary>
+/// Область находки. Disk (C2): категория очистки диска, необратима. Registry (C3): запись реестра без файлов, удаляется с копией
+/// и откатывается из журнала.
+/// </summary>
+public enum FindingArea { Programs, Startup, Services, Tasks, Disk, Registry }
 
 /// <summary>Совет по объекту. Remove и Optional это совет, а не действие: в C0 ничего не меняется.</summary>
 public enum VerdictKind { Remove, Optional, Keep, Protected, Unknown }

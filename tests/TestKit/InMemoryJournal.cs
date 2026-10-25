@@ -213,6 +213,8 @@ public sealed class InMemoryJournal(IClock clock) : IJournalWriter
             && System.Text.Json.JsonDocument.Parse(s.AfterJson).RootElement.TryGetProperty("exists", out var ex) && ex.ValueKind == System.Text.Json.JsonValueKind.True
             && s.Id == _steps.Where(x => x.TargetKey == s.TargetKey && x.State == StepState.Done).Max(x => x.Id));
 
+    public IReadOnlyList<Guid> ExistingOperationIds() => _ops.Keys.ToList();
+
     public int Purge(DateTimeOffset cutoff)
     {
         var gone = _ops.Values.Where(o => o.State != OperationState.Running && o.Finished is { } f && f < cutoff && !HoldsOwnScheme(o.Id)).Select(o => o.Id).ToList();

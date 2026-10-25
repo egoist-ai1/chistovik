@@ -335,4 +335,105 @@ public class RecoveryTests
         Recover(t);
         Assert.Equal(0, t.Registry.OpenHandles);
     }
+
+    // ---------- чистка реестра (C3): три новых вида шагов ----------
+
+    const string Cv = @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion";
+
+    sealed record RegScenario(Action<TestEnv> Setup, string Id, Func<TestEnv, bool> Exists, StepKind Kind);
+
+    static readonly Dictionary<string, RegScenario> RegScenarios = new()
+    {
+        ["key"] = new(
+            t =>
+            {
+                var p = Cv + @"\Uninstall\Foo";
+                t.Registry.SetString(p, "DisplayName", "Foo App");
+                t.Registry.SetString(p, "UninstallString", "\"C:\\Program Files\\Foo\\unins000.exe\" /S");
+                t.Registry.SetString(p + @"\S0", "v", "1");
+            },
+            "arp:machine:x64:Foo",
+            t => t.Registry.KeyExists(Cv + @"\Uninstall\Foo"),
+            StepKind.RegistryKeyDelete),
+        ["run"] = new(
+            t => t.Registry.SetString(Cv + @"\Run", "Foo", "\"C:\\Gone\\foo.exe\""),
+            "run:hklm64:Foo",
+            t => t.Registry.Get(Cv + @"\Run", "Foo").Exists,
+            StepKind.StartupRemove),
+        ["shareddll"] = new(
+            t => t.Registry.SetDword(Cv + @"\SharedDLLs", @"C:\Gone\a.dll", 1),
+            "shareddll:x64:" + OrphanId.SharedDllHash(@"C:\Gone\a.dll"),
+            t => t.Registry.Get(Cv + @"\SharedDLLs", @"C:\Gone\a.dll").Exists,
+            StepKind.SharedDllRemove),
+    };
+
+    public static TheoryData<string> RegNames => new(RegScenarios.Keys);
+
+    static TestEnv RegEnv(RegScenario sc)
+    {
+        var t = new TestEnv();
+        t.Security.Trust(@"C:\");
+        sc.Setup(t);
+        return t;
+    }
+
+    [Theory]
+    [MemberData(nameof(RegNames))]
+    public void Registry_cleanup_crash_before_write_is_recovered_as_not_applied(string name)
+    {
+        var sc = RegScenarios[name];
+        var t = RegEnv(sc);
+        Crash(t, "AddPending:after", () => FindingsHarness.Run(t, sc.Id));
+        Assert.True(sc.Exists(t));
+        Assert.Single(t.Journal.GetPending());
+        Assert.Equal(sc.Kind, t.Journal.GetPending()[0].Kind);
+
+        var rep = Recover(t);
+
+        Assert.Equal(1, rep.NotApplied);
+        Assert.Equal(0, rep.RecoveredDone);
+        Assert.Equal(0, rep.Failed);
+        Assert.Equal(StepCodes.RecoveredNotApplied, OnlyPendingFirst(t).Code);
+        Assert.True(sc.Exists(t));
+        Assert.Empty(t.Journal.GetPending());
+        Assert.Equal(0, t.RegistryTree.OpenHandles);
+    }
+
+    [Theory]
+    [MemberData(nameof(RegNames))]
+    public void Registry_cleanup_crash_after_write_is_recovered_as_done(string name)
+    {
+        var sc = RegScenarios[name];
+        var t = RegEnv(sc);
+        Crash(t, "Complete:before", () => FindingsHarness.Run(t, sc.Id));
+        Assert.False(sc.Exists(t));
+        Assert.Single(t.Journal.GetPending());
+
+        var rep = Recover(t);
+
+        Assert.Equal(1, rep.RecoveredDone);
+        Assert.Equal(0, rep.NotApplied);
+        Assert.Equal(0, rep.Failed);
+        Assert.Equal(StepState.Done, OnlyPendingFirst(t).State);
+        Assert.Equal(StepCodes.RecoveredDone, OnlyPendingFirst(t).Code);
+        Assert.False(sc.Exists(t));
+        Assert.Equal(0, t.RegistryTree.OpenHandles);
+    }
+
+    [Fact]
+    public void Registry_key_recovery_never_writes_to_the_registry()
+    {
+        var sc = RegScenarios["key"];
+        var t = RegEnv(sc);
+        Crash(t, "AddPending:after", () => FindingsHarness.Run(t, sc.Id));
+        var created = t.RegistryTree.Created;
+        var deleted = t.RegistryTree.Deleted;
+        var writes = t.Registry.WriteCount;
+
+        Recover(t);
+
+        Assert.Equal(created, t.RegistryTree.Created);
+        Assert.Equal(deleted, t.RegistryTree.Deleted);
+        Assert.Equal(writes, t.Registry.WriteCount);
+    }
 }

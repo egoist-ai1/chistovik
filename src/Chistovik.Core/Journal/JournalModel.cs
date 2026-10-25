@@ -136,6 +136,12 @@ public static class StepCodes
     public const string EvidenceFailed = "evidence-failed";
     public const string RegTreeTooLarge = "reg-tree-too-large";
     public const string RegTreeHasLink = "reg-tree-has-link";
+    /// <summary>Имя ключа или значения в дереве содержит управляющий символ или «]»: .reg-копия такого дерева небезопасна для ручного импорта.</summary>
+    public const string RegTreeBadName = "reg-tree-bad-name";
+    /// <summary>В дереве есть значение типа вне поддерживаемого списка: при откате тип не вернуть, дерево не трогаем.</summary>
+    public const string RegTreeBadType = "reg-tree-bad-type";
+    /// <summary>Удаление дерева прервалось, а вернуть недостающее из копии не удалось: ключ остался неполным, копия сохранена.</summary>
+    public const string PartialDelete = "partial-delete";
     /// <summary>Хэш копии ключа не совпал с оригиналом (или с записанным в журнале).</summary>
     public const string BackupMismatch = "backup-mismatch";
     public const string BackupMissing = "backup-missing";
@@ -151,7 +157,8 @@ public static class StepCodes
             return int.TryParse(code.AsSpan(6), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _);
         return code is NoChange or ExternalChange or PolicyDenied or NotFound or AccessDenied or VerifyMismatch
             or RecoveredDone or RecoveredNotApplied or AlreadyReverted or NotRevertible or Timeout or InUse or SkippedByRule
-            or EvidenceFailed or RegTreeTooLarge or RegTreeHasLink or BackupMismatch or BackupMissing or Interrupted;
+            or EvidenceFailed or RegTreeTooLarge or RegTreeHasLink or RegTreeBadName or RegTreeBadType or PartialDelete
+            or BackupMismatch or BackupMissing or Interrupted;
     }
 }
 

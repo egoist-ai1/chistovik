@@ -46,6 +46,24 @@ public sealed class FakeRegistry : IRegistry
 
     public bool KeyExists(string path) => _keys.ContainsKey(path);
 
+    /// <summary>Все явно созданные ключи (для FakeRegistryTree: промежуточные узлы выводятся из путей).</summary>
+    public IReadOnlyCollection<string> KeyPaths => _keys.Keys;
+
+    /// <summary>Значения ключа (пусто, если ключа нет).</summary>
+    public IReadOnlyDictionary<string, RegValueState> ValuesOf(string path)
+        => _keys.TryGetValue(path, out var k) ? k : new Dictionary<string, RegValueState>();
+
+    public bool TryGetLink(string path, out string target)
+    {
+        if (_links.TryGetValue(path, out var l))
+        {
+            target = l.Target;
+            return true;
+        }
+        target = string.Empty;
+        return false;
+    }
+
     public void RemoveKey(string path) => _keys.Remove(path);
 
     public void Set(string keyPath, string name, RegValueState value)

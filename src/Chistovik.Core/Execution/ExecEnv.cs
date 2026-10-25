@@ -24,6 +24,12 @@ public sealed class ExecEnv
     public required IJournalWriter Journal { get; init; }
     public required StepGate Gate { get; init; }
 
+    /// <summary>.reg-копии ключей реестра (C3). null: файл не пишется, остаётся копия в реестре.</summary>
+    public IQuarantineStore? Quarantine { get; init; }
+
+    /// <summary>Хранилище журналов очистки (C2). null: журнал в файл не пишется, счётчики остаются в ответе.</summary>
+    public ICleanupLogStore? CleanupLog { get; init; }
+
     public string AgentVersion { get; init; } = "0.1";
     public string CatalogSha256 { get; init; } = "";
 

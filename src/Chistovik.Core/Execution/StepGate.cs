@@ -51,7 +51,11 @@ public sealed class StepGate
         _startup = new StartupPolicy(context);
         _powerPolicy = new PowerPolicy(power);
         _trust = trust;
+        Cleanup = new CleanupPolicy(context);
     }
+
+    /// <summary>Политика очистки диска (C2): решения по корням, записям и открытым хэндлам; ввод-вывода в ней нет.</summary>
+    public CleanupPolicy Cleanup { get; }
 
     /// <summary>Шлюз без сведений о подписях файлов (все файлы считаются неподписанными): службы остаются неизменяемыми. Для случаев, где службы не нужны.</summary>
     public StepGate(TweakCatalog tweaks, PowerCatalog power)
@@ -152,6 +156,125 @@ public sealed class StepGate
         for (var i = 0; i < ka.Segments.Length; i++)
             if (!ka.Segments[i].Equals(kb.Segments[i], StringComparison.OrdinalIgnoreCase)) return false;
         return true;
+    }
+
+    // ---------- чистка реестра (C3) ----------
+
+    /// <summary>Расположение системных каталогов этой машины (для проверок доказательств).</summary>
+    internal PolicyContext Context => _context;
+
+    static string FullKeyPath(RegLocation l)
+        => l.Root == RegRoot.Machine ? "HKEY_LOCAL_MACHINE\\" + l.KeyPath : "HKEY_USERS\\" + l.UserSid + "\\" + l.KeyPath;
+
+    /// <summary>Расположение построено правильно: машинное без SID, пользовательское только с SID клиента.</summary>
+    static string? LocationFault(RegLocation l, string clientSid)
+    {
+        if (l.Root == RegRoot.User)
+            return string.IsNullOrEmpty(l.UserSid) || !string.Equals(l.UserSid, clientSid, StringComparison.OrdinalIgnoreCase) ? "reg-foreign-sid" : null;
+        return l.UserSid is not null ? "reg-bad-location" : null;
+    }
+
+    /// <summary>Хэндл дерева: не символическая ссылка и ResolvedPath совпадает с ожидаемым путём.</summary>
+    public GateResult<RegLocation> CheckTreeHandle(RegLocation expected, IRegTreeHandle handle)
+    {
+        if (handle.IsSymbolicLink) return Deny<RegLocation>("reg-symlink");
+        var resolved = handle.ResolvedPath;
+        if (string.IsNullOrEmpty(resolved) || !SameKey(resolved, ExpectedPath(expected))) return Deny<RegLocation>("reg-resolved-mismatch");
+        return GateResult<RegLocation>.Allow(expected);
+    }
+
+    static string? ValueHandleFault(RegLocation expected, IRegKeyHandle handle)
+    {
+        if (handle.IsSymbolicLink) return "reg-symlink";
+        var resolved = handle.ResolvedPath;
+        return string.IsNullOrEmpty(resolved) || !SameKey(resolved, ExpectedPath(expected)) ? "reg-resolved-mismatch" : null;
+    }
+
+    static string OrphanCode(PolicyDecision d, OrphanEvidence e)
+    {
+        if (d.Rule == "reg-tree-too-large") return StepCodes.RegTreeTooLarge;
+        if (!e.Verified && !e.Protected && d.Rule == (e.Rule ?? "evidence-failed")) return StepCodes.EvidenceFailed;
+        return StepCodes.PolicyDenied;
+    }
+
+    static string QuarantineKey(Guid opId, int n) => $@"SOFTWARE\Chistovik\Quarantine\{opId:N}\{n}";
+
+    /// <summary>
+    /// Разрешает удаление ключа-сироты с копией: хэндл не ссылка и ResolvedPath верный, RegistryPolicy.CheckOrphanKeyDelete
+    /// (родитель Uninstall/App Paths, доказательство, число подключей) и CheckQuarantineDestination для копии текущей операции.
+    /// Код отказа: evidence-failed (не подтверждено), reg-tree-too-large, иначе policy-denied.
+    /// </summary>
+    public GateResult<ApprovedRegistryTreeDelete> CheckOrphanKeyDelete(RegLocation expected, IRegTreeHandle handle, OrphanEvidence evidence,
+        int subkeyCount, bool expertConfirmed, Guid opId, int n, string expectedSha256, string clientSid)
+    {
+        if (expected.ValueName.Length != 0) return Deny<ApprovedRegistryTreeDelete>("reg-bad-location");
+        if (LocationFault(expected, clientSid) is { } fault) return Deny<ApprovedRegistryTreeDelete>(fault);
+        var h = CheckTreeHandle(expected, handle);
+        if (!h.IsAllowed) return GateResult<ApprovedRegistryTreeDelete>.Deny(h.Code!, h.Rule);
+        if (!RegistryPolicy.TryParse(ExpectedPath(expected), out var key, out _)) return Deny<ApprovedRegistryTreeDelete>("reg-bad-key");
+        var d = RegistryPolicy.CheckOrphanKeyDelete(key, evidence, subkeyCount, expertConfirmed, clientSid);
+        if (!d.IsAllowed) return GateResult<ApprovedRegistryTreeDelete>.Deny(OrphanCode(d, evidence), d.Rule);
+
+        var dest = new RegLocation(RegRoot.Machine, null, QuarantineKey(opId, n), string.Empty);
+        if (!RegistryPolicy.TryParse(ExpectedPath(dest), out var destKey, out _)) return Deny<ApprovedRegistryTreeDelete>("reg-quarantine-dest");
+        var q = RegistryPolicy.CheckQuarantineDestination(destKey, opId, n);
+        if (!q.IsAllowed) return Deny<ApprovedRegistryTreeDelete>(q);
+        return GateResult<ApprovedRegistryTreeDelete>.Allow(new ApprovedRegistryTreeDelete(
+            expected, dest, opId, n, expectedSha256, subkeyCount, FullKeyPath(expected), $"{opId:N}\\{n}.reg"));
+    }
+
+    /// <summary>
+    /// Разрешает восстановление ключа из копии: цель это прямой потомок Uninstall или App Paths, копия лежит в Quarantine
+    /// по пути, разобранному из журнала (opId и n берутся из самого пути, CheckQuarantineDestination проверяет форму),
+    /// ожидаемый хэш это 64 hex-символа.
+    /// </summary>
+    public GateResult<ApprovedRegistryTreeRestore> CheckOrphanKeyRestore(RegLocation target, string backupKey, string expectedSha256, string clientSid)
+    {
+        if (target.ValueName.Length != 0) return Deny<ApprovedRegistryTreeRestore>("reg-bad-location");
+        if (LocationFault(target, clientSid) is { } fault) return Deny<ApprovedRegistryTreeRestore>(fault);
+        if (!RegTreeJson.IsSha256(expectedSha256)) return Deny<ApprovedRegistryTreeRestore>("journal-bad-hash");
+        if (!RegTreeJson.TryParseBackupKey(backupKey, out var opId, out var n)) return Deny<ApprovedRegistryTreeRestore>("reg-quarantine-dest");
+        var backup = new RegLocation(RegRoot.Machine, null, QuarantineKey(opId, n), string.Empty);
+        if (!RegistryPolicy.TryParse(ExpectedPath(backup), out var backupParsed, out _)) return Deny<ApprovedRegistryTreeRestore>("reg-quarantine-dest");
+        var q = RegistryPolicy.CheckQuarantineDestination(backupParsed, opId, n);
+        if (!q.IsAllowed) return Deny<ApprovedRegistryTreeRestore>(q);
+        if (!RegistryPolicy.TryParse(ExpectedPath(target), out var key, out _)) return Deny<ApprovedRegistryTreeRestore>("reg-bad-key");
+        var d = RegistryPolicy.CheckOrphanKeyRestore(key, clientSid);
+        if (!d.IsAllowed) return Deny<ApprovedRegistryTreeRestore>(d);
+        return GateResult<ApprovedRegistryTreeRestore>.Allow(new ApprovedRegistryTreeRestore(target, backup, expectedSha256.ToLowerInvariant()));
+    }
+
+    /// <summary>Разрешает удаление значения Run/RunOnce, у которого агент подтвердил «сироту».</summary>
+    public GateResult<ApprovedRegistryWrite> CheckStartupRemove(RegLocation expected, IRegKeyHandle handle, OrphanEvidence evidence, string clientSid)
+    {
+        if (LocationFault(expected, clientSid) is { } fault) return Deny<ApprovedRegistryWrite>(fault);
+        if (ValueHandleFault(expected, handle) is { } hf) return Deny<ApprovedRegistryWrite>(hf);
+        if (!RegistryPolicy.TryParse(ExpectedPath(expected), out var key, out _)) return Deny<ApprovedRegistryWrite>("reg-bad-key");
+        var d = RegistryPolicy.CheckStartupRemove(key, expected.ValueName, evidence, clientSid);
+        if (!d.IsAllowed) return GateResult<ApprovedRegistryWrite>.Deny(OrphanCode(d, evidence), d.Rule);
+        return GateResult<ApprovedRegistryWrite>.Allow(new ApprovedRegistryWrite(expected, new RegValueState(false, RegType.None, null)));
+    }
+
+    /// <summary>Разрешает возврат собственной записи Run/RunOnce при откате (строка до 2048 знаков).</summary>
+    public GateResult<ApprovedRegistryWrite> CheckStartupRestore(RegLocation expected, IRegKeyHandle handle, RegValueState desired, string clientSid)
+    {
+        if (LocationFault(expected, clientSid) is { } fault) return Deny<ApprovedRegistryWrite>(fault);
+        if (ValueHandleFault(expected, handle) is { } hf) return Deny<ApprovedRegistryWrite>(hf);
+        if (!desired.Exists || desired.Data is not string text || text.IndexOf('\0') >= 0) return Deny<ApprovedRegistryWrite>("reg-bad-value-type");
+        if (!RegistryPolicy.TryParse(ExpectedPath(expected), out var key, out _)) return Deny<ApprovedRegistryWrite>("reg-bad-key");
+        var d = RegistryPolicy.CheckStartupRestore(key, expected.ValueName, desired.Type, clientSid, text.Length);
+        return d.IsAllowed ? GateResult<ApprovedRegistryWrite>.Allow(new ApprovedRegistryWrite(expected, desired)) : Deny<ApprovedRegistryWrite>(d);
+    }
+
+    /// <summary>Разрешает удаление значения SharedDLLs, у которого агент подтвердил «сироту».</summary>
+    public GateResult<ApprovedRegistryWrite> CheckSharedDllRemove(RegLocation expected, IRegKeyHandle handle, OrphanEvidence evidence)
+    {
+        if (expected.Root != RegRoot.Machine || expected.UserSid is not null) return Deny<ApprovedRegistryWrite>("reg-bad-location");
+        if (ValueHandleFault(expected, handle) is { } hf) return Deny<ApprovedRegistryWrite>(hf);
+        if (!RegistryPolicy.TryParse(ExpectedPath(expected), out var key, out _)) return Deny<ApprovedRegistryWrite>("reg-bad-key");
+        var d = RegistryPolicy.CheckSharedDllRemove(key, expected.ValueName, evidence);
+        if (!d.IsAllowed) return GateResult<ApprovedRegistryWrite>.Deny(OrphanCode(d, evidence), d.Rule);
+        return GateResult<ApprovedRegistryWrite>.Allow(new ApprovedRegistryWrite(expected, new RegValueState(false, RegType.None, null)));
     }
 
     // ---------- службы ----------

@@ -29,7 +29,9 @@ public sealed class TestEnv
     public FakeCleanupFiles Cleanup { get; } = new();
     public FakeRecycleBin RecycleBin { get; } = new();
     public FakeProcessList Processes { get; } = new();
-    public FakeRegistryTree RegistryTree { get; } = new();
+    public FakeCleanupLog CleanupLog { get; } = new();
+    public FakeRegistryTree RegistryTree { get; }
+    public FakeQuarantineStore Quarantine { get; } = new();
     public FakeClock Clock { get; } = new();
     public SequentialIdGenerator Ids { get; } = new();
     public InMemoryJournal Journal { get; }
@@ -43,12 +45,15 @@ public sealed class TestEnv
     public TestEnv()
     {
         Journal = new InMemoryJournal(Clock);
+        RegistryTree = new FakeRegistryTree(Registry);
         Power.AddScheme(Saver);
         Power.AddScheme(Balanced);
         Power.AddScheme(High);
         Power.Active = Balanced;
         Folders.SetUser(Sid, @"C:\Users\Test\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup");
         Folders.Common = @"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup";
+        Folders.SetProfile(Sid, @"C:\Users\Test");
+        Cleanup.AddDir(@"C:\Users\Test");
         Env = BuildEnv();
         Handler = new OperationHandler(Env);
     }
@@ -66,7 +71,9 @@ public sealed class TestEnv
         Cleanup = Cleanup,
         RecycleBin = RecycleBin,
         Processes = Processes,
+        CleanupLog = CleanupLog,
         RegistryTree = RegistryTree,
+        Quarantine = Quarantine,
         Clock = Clock,
         Ids = Ids,
         Journal = Journal,
@@ -102,6 +109,14 @@ public sealed class TestEnv
     public AgentResponse PowerSetting(string id, uint? ac, uint? dc) => Run(new SetPowerSettingRequest { Id = NextRequestId(), SettingId = id, Ac = ac, Dc = dc });
 
     public AgentResponse Uninstall(string findingId) => Run(new UninstallRequest { Id = NextRequestId(), FindingId = findingId });
+
+    public AgentResponse Clean(params string[] categories)
+        => Run(new CleanCategoriesRequest { Id = NextRequestId(), Categories = categories, MeasureOnly = false });
+
+    public AgentResponse MeasureCleanup(params string[] categories)
+        => Run(new CleanCategoriesRequest { Id = NextRequestId(), Categories = categories, MeasureOnly = true });
+
+    public AgentResponse Findings(params string[] ids) => Run(FindingsHarness.Request(this, ids));
 
     public AgentResponse Undo(Guid operationId, params (long StepId, ConflictAction Action)[] resolutions)
         => Run(new UndoRequest

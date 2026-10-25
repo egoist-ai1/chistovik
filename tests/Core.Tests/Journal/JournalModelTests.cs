@@ -85,7 +85,8 @@ public class JournalModelTests
     [Fact]
     public void Step_codes_are_closed()
     {
-        foreach (var c in new[] { "evidence-failed", "reg-tree-too-large", "reg-tree-has-link", "backup-mismatch", "backup-missing", "interrupted" })
+        foreach (var c in new[] { "evidence-failed", "reg-tree-too-large", "reg-tree-has-link", "backup-mismatch", "backup-missing", "interrupted",
+                     "reg-tree-bad-name", "reg-tree-bad-type", "partial-delete" })
             Assert.True(StepCodes.IsKnown(c), c);
         Assert.True(StepCodes.IsKnown(StepCodes.NoChange));
         Assert.True(StepCodes.IsKnown(StepCodes.Win32(5)));
@@ -101,6 +102,6 @@ public class JournalModelTests
         // Публичных конструкторов нет: создать Approved* может только Core (и тесты через InternalsVisibleTo).
         foreach (var t in typeof(ApprovedRegistryWrite).Assembly.GetTypes().Where(t => t.Name.StartsWith("Approved", StringComparison.Ordinal)))
             Assert.Empty(t.GetConstructors());
-        Assert.Equal(8, typeof(ApprovedRegistryWrite).Assembly.GetTypes().Count(t => t.Name.StartsWith("Approved", StringComparison.Ordinal)));
+        Assert.Equal(10, typeof(ApprovedRegistryWrite).Assembly.GetTypes().Count(t => t.Name.StartsWith("Approved", StringComparison.Ordinal)));
     }
 }
