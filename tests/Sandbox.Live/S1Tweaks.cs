@@ -223,3 +223,128 @@ static class S1Tweaks
         return k?.GetValueNames() ?? [];
     }
 }
+
+/// <summary>
+/// Сценарий 1b. Твики каталога v2 (ContentDeliveryManager, Siuf, ConsentStore, TaskbarDa, Search, InputPersonalization;
+/// HKLM-политики System/WindowsCopilot/WindowsAI/CloudContent/Windows Search, Remote Assistance) отдельно от общего круга S1:
+/// применение из исходного состояния -> значение в реестре равно желаемому -> Undo -> значение равно исходному (или удалено,
+/// если его не было). Затем то же в обратную сторону. Для твиков, привязанных к редакциям, проверяется модель каталога и
+/// EditionID: UI Automation здесь не используется, пометку «не действует на этой редакции» стенд только предсказывает
+/// по той же логике, что TweakRowViewModel.IsNotApplicable (проект App из стенда недоступен), и пишет это в лог как ИНФО.
+/// </summary>
+static class S1bTweaksV2
+{
+    const string Sc = "S1b твики v2";
+
+    static readonly string[] KeyFragments =
+    [
+        "ContentDeliveryManager", @"\Siuf\", "ConsentStore", @"CurrentVersion\Search", "InputPersonalization",
+        @"Policies\Microsoft\Windows\", "Remote Assistance",
+    ];
+
+    static bool IsV2(TweakEntry t)
+        => t.Value.Equals("TaskbarDa", StringComparison.OrdinalIgnoreCase)
+           || KeyFragments.Any(f => t.Key.Contains(f, StringComparison.OrdinalIgnoreCase));
+
+    static string Label(bool enable) => enable ? "включить" : "выключить";
+
+    public static async Task Run(LiveContext c)
+    {
+        var set = TweakCatalog.Shared.Tweaks.Where(IsV2).ToList();
+        if (set.Count == 0) { c.Report.Skip(Sc, "твики v2", "в каталоге нет твиков с ключами v2: каталог устарел или фрагменты ключей изменились"); return; }
+        c.Report.Info(Sc, "твики v2 в каталоге", $"{set.Count}: HKCU {set.Count(Tweaks.IsUser)}, HKLM {set.Count(t => !Tweaks.IsUser(t))}");
+
+        using var s = Session.Open(c, "s1b");
+        foreach (var t in set)
+            foreach (var enable in new[] { true, false })
+            {
+                try { await Round(c, s, t, enable); }
+                catch (Exception e) { c.Report.Fail(Sc, $"{t.Id}/{Label(enable)}", "исключение: " + e.GetType().Name + ": " + e.Message); }
+            }
+
+        Editions(c, set);
+    }
+
+    static async Task Round(LiveContext c, Session s, TweakEntry t, bool enable)
+    {
+        var name = $"{t.Id}/{Label(enable)} ({t.Hive}\\{t.Key}\\{t.Value})";
+        var want = Tweaks.Expect(t, enable);
+        var other = Tweaks.Expect(t, !enable);
+        if (want.ToString() == other.ToString()) { c.Report.Skip(Sc, name, "оба состояния твика совпадают, проверять нечего"); return; }
+
+        var user = Tweaks.IsUser(t);
+        var orig = Tweaks.Read(c, t);
+        var keyExisted = Reg.KeyExists(user, c.Sid, t.Key);
+        try
+        {
+            // «включить» идёт из исходного состояния (если оно уже равно желаемому, ставим противоположное, чтобы изменение было настоящим);
+            // «выключить» начинается из включённого состояния
+            var needForce = enable ? want.Matches(orig) : !other.Matches(orig);
+            if (needForce)
+            {
+                try { Tweaks.Force(c, t, other); }
+                catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException)
+                {
+                    c.Report.Skip(Sc, name, "подготовка: запись в ключ закрыта даже для администратора (" + e.GetType().Name + ")");
+                    return;
+                }
+            }
+            var before = Tweaks.Read(c, t);
+
+            var r = await s.Send(Tweaks.Request(t.Id, enable));
+            var after = Tweaks.Read(c, t);
+            if (!r.Ok) { c.Report.Fail(Sc, name + " применение", "агент отказал: " + s.Describe(r)); return; }
+            if (!want.Matches(after)) { c.Report.Fail(Sc, name + " применение", $"агент ответил {r.Code}, но в реестре {after}, ожидалось {want}"); return; }
+            c.Report.Pass(Sc, name + " применение", $"{before} -> {after}");
+
+            var u = await s.Undo(r.OperationId!.Value);
+            var back = Tweaks.Read(c, t);
+            if (!u.Ok) c.Report.Fail(Sc, name + " откат", "агент отказал: " + s.Describe(u));
+            else if (!back.SameAs(before)) c.Report.Fail(Sc, name + " откат", $"после отката {back}, было до применения {before}");
+            else c.Report.Pass(Sc, name + " откат", before.Exists ? $"возврат к {back}" : "значения не было: после отката его снова нет");
+        }
+        finally
+        {
+            Reg.Restore(user, c.Sid, t.Key, t.Value, orig);
+            if (!keyExisted) Reg.DeleteTree(user, c.Sid, t.Key);
+        }
+    }
+
+    /// <summary>Сводит EditionID к Home | Pro | Enterprise | Education (как WindowsEdition.Normalize в App); неизвестное даёт null.</summary>
+    static string? Normalize(string? editionId)
+    {
+        if (string.IsNullOrWhiteSpace(editionId)) return null;
+        var id = editionId.Trim();
+        bool Is(string prefix) => id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        if (Is("ProfessionalEducation") || Is("Education")) return "Education";
+        if (Is("Professional")) return "Pro";
+        if (Is("Core")) return "Home";
+        if (Is("Enterprise") || Is("IoT")) return "Enterprise";
+        return null;
+    }
+
+    static void Editions(LiveContext c, List<TweakEntry> set)
+    {
+        var bound = set.Where(t => t.Editions is { Length: > 0 }).ToList();
+        if (bound.Count == 0) { c.Report.Skip(Sc, "редакции", "среди твиков v2 нет привязанных к редакциям"); return; }
+
+        string id;
+        using (var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+            id = k?.GetValue("EditionID") as string ?? "";
+        var edition = Normalize(id);
+        c.Report.Info(Sc, "редакция образа", $"EditionID «{id}» -> {edition ?? "не определена (пометка «не действует» не показывается)"}; проверка по модели каталога, не через UI Automation");
+
+        foreach (var t in bound)
+        {
+            var eds = t.Editions!;
+            var valid = eds.All(e => TweakCatalog.Editions.Contains(e));
+            var described = eds.All(e => t.Description.Contains(e, StringComparison.Ordinal));
+            c.Report.Check(Sc, $"{t.Id}: редакции в каталоге", valid && described,
+                $"{string.Join(", ", eds)}; описание называет все редакции",
+                valid ? $"описание не называет все редакции {string.Join(", ", eds)}: «{t.Description}»" : $"неизвестная редакция в {string.Join(", ", eds)}");
+
+            var notApplicable = edition is not null && !eds.Contains(edition, StringComparer.Ordinal);
+            c.Report.Info(Sc, $"{t.Id}: на этой редакции", notApplicable ? "UI покажет «не действует на этой редакции Windows»" : "действует, пометки нет");
+        }
+    }
+}

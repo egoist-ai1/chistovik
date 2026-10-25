@@ -137,3 +137,222 @@ static class S5Tasks
         finally { Proc.Run("schtasks.exe", ["/delete", "/tn", TaskName, "/f"]); }
     }
 }
+
+/// <summary>
+/// Сценарий 4b. Службы каталога-исключения (ServicePolicy.CarveOut): запуск можно понизить до Disabled/Manual, повысить
+/// напрямую нельзя (service-carveout-target, service-elevate-outside-program-files), вернуть можно откатом собственного шага.
+/// Службы вне каталога: общий svchost (service-shared) и жёсткий список (service-hardlist) остаются закрытыми.
+/// Допущение об образе: службы из списка есть в образе Sandbox не все; берётся первая существующая, которую политика
+/// признала Modifiable. Исходный запуск службы восстанавливается через sc.exe в любом случае.
+/// </summary>
+static class S4bCarveOutServices
+{
+    const string Sc = "S4b службы (карв-аут)";
+
+    static readonly string[] Candidates =
+        ["DiagTrack", "dmwappushservice", "RetailDemo", "WMPNetworkSvc", "RemoteRegistry", "Fax", "WerSvc", "MapsBroker", "lfsvc", "wisvc", "SCardSvr"];
+
+    static int? StartType(string service)
+    {
+        using var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + service);
+        return k?.GetValue("Start") is int v ? v : null;
+    }
+
+    static bool Delayed(string service)
+    {
+        using var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + service);
+        return k?.GetValue("DelayedAutostart") is int v && v != 0;
+    }
+
+    static string? ModeName(int start, bool delayed) => start switch
+    {
+        2 => delayed ? "delayed-auto" : "auto",
+        3 => "demand",
+        4 => "disabled",
+        _ => null,
+    };
+
+    static void RestoreStart(string service, int? start, bool delayed)
+    {
+        if (start is not { } st || ModeName(st, delayed) is not { } mode) return;
+        Proc.Run("sc.exe", ["config", service, "start=", mode]);
+    }
+
+    static bool Denied(string text, string rule)
+        => text.Contains("policy-denied", StringComparison.Ordinal) && text.Contains(rule, StringComparison.Ordinal);
+
+    public static async Task Run(LiveContext c)
+    {
+        using var s = Session.Open(c, "s4b");
+        await CarveOut(c, s);
+        await Closed(c, s, "Themes", "service-shared");
+        await Closed(c, s, "BITS", "service-hardlist");
+    }
+
+    static async Task CarveOut(LiveContext c, Session s)
+    {
+        var missing = new List<string>();
+        var notUsable = new List<string>();
+        foreach (var name in Candidates)
+        {
+            if (!Chistovik.Core.Policy.ServicePolicy.CarveOut.Contains(name))
+            {
+                c.Report.Fail(Sc, $"{name}: в каталоге-исключении", "имени нет в ServicePolicy.CarveOut: стенд устарел относительно кода");
+                continue;
+            }
+            var was = StartType(name);
+            if (was is null) { missing.Add(name); continue; }
+            var wasDelayed = Delayed(name);
+            if (was.Value is not (2 or 3 or 4)) { notUsable.Add($"{name}: START_TYPE {was}"); continue; }
+
+            try
+            {
+                // подготовка: исходное состояние сценария Automatic (напрямую через sc.exe, не через агента)
+                Proc.Run("sc.exe", ["config", name, "start=", "auto"]);
+                if (StartType(name) != 2) { notUsable.Add($"{name}: не удалось выставить Automatic"); continue; }
+
+                var off = await s.Send(new SetServiceStartRequest { Id = Guid.NewGuid(), ServiceName = name, Start = StartMode.Disabled });
+                var offText = s.Describe(off);
+                // политика не признала службу Modifiable в этом образе (другой файл, зависимые службы, подпись): пробуем следующую
+                if (!off.Ok && offText.Contains("service-carveout-", StringComparison.Ordinal)) { notUsable.Add($"{name}: {offText}"); continue; }
+
+                var nowOff = StartType(name);
+                c.Report.Check(Sc, $"{name}: Automatic -> Disabled", off.Ok && nowOff == 4, $"START_TYPE {nowOff}", $"ответ: {offText}; START_TYPE {nowOff}, ждали 4");
+                if (!off.Ok || off.OperationId is not { } op) return;
+
+                var auto = await s.Send(new SetServiceStartRequest { Id = Guid.NewGuid(), ServiceName = name, Start = StartMode.Automatic });
+                var autoText = s.Describe(auto);
+                c.Report.Check(Sc, $"{name}: Disabled -> Automatic напрямую запрещено",
+                    !auto.Ok && Denied(autoText, "service-carveout-target") && StartType(name) == 4,
+                    $"ответ {autoText}; запуск остался Disabled", $"ответ: {autoText}; START_TYPE {StartType(name)} (ждали отказ policy-denied/service-carveout-target и 4)");
+
+                var manual = await s.Send(new SetServiceStartRequest { Id = Guid.NewGuid(), ServiceName = name, Start = StartMode.Manual });
+                var manualText = s.Describe(manual);
+                c.Report.Check(Sc, $"{name}: Disabled -> Manual напрямую запрещено",
+                    !manual.Ok && Denied(manualText, "service-elevate-outside-program-files") && StartType(name) == 4,
+                    $"ответ {manualText}; запуск остался Disabled", $"ответ: {manualText}; START_TYPE {StartType(name)} (ждали отказ policy-denied/service-elevate-outside-program-files и 4)");
+
+                var u = await s.Undo(op);
+                var back = StartType(name);
+                c.Report.Check(Sc, $"{name}: откат восстанавливает Automatic", u.Ok && back == 2, $"START_TYPE снова {back}", $"ответ: {s.Describe(u)}; START_TYPE {back}, ждали 2");
+                return;
+            }
+            finally { RestoreStart(name, was, wasDelayed); }
+        }
+
+        var why = (missing.Count > 0 ? "нет в образе: " + string.Join(", ", missing) : "")
+                  + (notUsable.Count > 0 ? (missing.Count > 0 ? "; " : "") + "не подошли: " + string.Join(" | ", notUsable) : "");
+        c.Report.Skip(Sc, "службы карв-аута", "ни одну службу из списка нельзя проверить. " + why);
+    }
+
+    /// <summary>Служба вне каталога-исключения: отказ с нужным правилом и без изменения запуска.</summary>
+    static async Task Closed(LiveContext c, Session s, string name, string rule)
+    {
+        var was = StartType(name);
+        if (was is null) { c.Report.Skip(Sc, $"{name}: отказ {rule}", "службы нет в образе Sandbox"); return; }
+        var wasDelayed = Delayed(name);
+        try
+        {
+            var r = await s.Send(new SetServiceStartRequest { Id = Guid.NewGuid(), ServiceName = name, Start = StartMode.Disabled });
+            var text = s.Describe(r);
+            var now = StartType(name);
+            c.Report.Check(Sc, $"{name}: отказ {rule}", !r.Ok && Denied(text, rule) && now == was,
+                $"ответ {text}; START_TYPE остался {now}", $"ответ: {text}; START_TYPE было {was}, стало {now}; ждали отказ policy-denied/{rule}");
+        }
+        finally
+        {
+            if (StartType(name) != was) RestoreStart(name, was, wasDelayed);
+        }
+    }
+}
+
+/// <summary>
+/// Сценарий 5b. Задачи каталога-исключения (TaskPolicy.CarveOutTasks): выключить можно, включить только откатом;
+/// остальное поддерево \Microsoft\* закрыто (task-protected-tree). Состояние читается через Get-ScheduledTask (язык системы
+/// не влияет, в отличие от текста schtasks /query). Исходное состояние задач восстанавливается через schtasks /change.
+/// </summary>
+static class S5bCarveOutTasks
+{
+    const string Sc = "S5b задачи (карв-аут)";
+    const string Appraiser = @"\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser";
+    const string Protected = @"\Microsoft\Windows\UpdateOrchestrator\Schedule Scan";
+
+    /// <summary>Состояние задачи (Ready, Disabled, Running...) или пустая строка, если задачи нет.</summary>
+    static string State(string path)
+    {
+        var i = path.LastIndexOf('\\');
+        var (_, o) = Proc.PowerShell($"(Get-ScheduledTask -TaskPath '{path[..(i + 1)]}' -TaskName '{path[(i + 1)..]}' -ErrorAction SilentlyContinue).State");
+        return o.Trim();
+    }
+
+    static bool Denied(string text, string rule)
+        => text.Contains("policy-denied", StringComparison.Ordinal) && text.Contains(rule, StringComparison.Ordinal);
+
+    static void Force(string path, bool enable) => Proc.Run("schtasks.exe", ["/change", "/tn", path, enable ? "/enable" : "/disable"]);
+
+    public static async Task Run(LiveContext c)
+    {
+        using var s = Session.Open(c, "s5b");
+        await Catalog(c, s);
+        await ProtectedTree(c, s);
+    }
+
+    static async Task Catalog(LiveContext c, Session s)
+    {
+        if (!Chistovik.Core.Policy.TaskPolicy.CarveOutTasks.Contains(Appraiser))
+        {
+            c.Report.Fail(Sc, "Appraiser в каталоге-исключении", "пути нет в TaskPolicy.CarveOutTasks: стенд устарел относительно кода");
+            return;
+        }
+        var was = State(Appraiser);
+        if (was.Length == 0) { c.Report.Skip(Sc, "Appraiser", "задачи нет в образе Sandbox"); return; }
+        var wasDisabled = was == "Disabled";
+        try
+        {
+            if (wasDisabled) Force(Appraiser, true);
+            var before = State(Appraiser);
+            if (before == "Disabled") { c.Report.Skip(Sc, "Appraiser", "не удалось включить задачу для подготовки сценария"); return; }
+
+            var off = await s.Send(new SetTaskEnabledRequest { Id = Guid.NewGuid(), TaskPath = Appraiser, Enabled = false });
+            var st = State(Appraiser);
+            c.Report.Check(Sc, "Appraiser: выключение разрешено", off.Ok && st == "Disabled", $"состояние {st}", $"ответ: {s.Describe(off)}; состояние «{st}»");
+
+            var on = await s.Send(new SetTaskEnabledRequest { Id = Guid.NewGuid(), TaskPath = Appraiser, Enabled = true });
+            var onText = s.Describe(on);
+            st = State(Appraiser);
+            c.Report.Check(Sc, "Appraiser: прямое включение запрещено", !on.Ok && Denied(onText, "task-catalog-carveout") && st == "Disabled",
+                $"ответ {onText}; задача осталась выключенной", $"ответ: {onText}; состояние «{st}» (ждали отказ policy-denied/task-catalog-carveout и Disabled)");
+
+            if (off.OperationId is { } op)
+            {
+                var u = await s.Undo(op);
+                st = State(Appraiser);
+                c.Report.Check(Sc, "Appraiser: включение откатом", u.Ok && st.Length > 0 && st != "Disabled", $"состояние {st}", $"ответ: {s.Describe(u)}; состояние «{st}»");
+            }
+            else c.Report.Fail(Sc, "Appraiser: включение откатом", "у выключения нет OperationId, откатывать нечего");
+        }
+        finally
+        {
+            var now = State(Appraiser);
+            if (now.Length > 0 && (now == "Disabled") != wasDisabled) Force(Appraiser, !wasDisabled);
+        }
+    }
+
+    static async Task ProtectedTree(LiveContext c, Session s)
+    {
+        var was = State(Protected);
+        if (was.Length == 0) { c.Report.Skip(Sc, "Schedule Scan: защищённое поддерево", "задачи нет в образе Sandbox"); return; }
+        try
+        {
+            var r = await s.Send(new SetTaskEnabledRequest { Id = Guid.NewGuid(), TaskPath = Protected, Enabled = false });
+            var text = s.Describe(r);
+            var now = State(Protected);
+            c.Report.Check(Sc, "Schedule Scan: выключение запрещено", !r.Ok && Denied(text, "task-protected-tree") && now == was,
+                $"ответ {text}; состояние осталось {now}", $"ответ: {text}; состояние было «{was}», стало «{now}»; ждали отказ policy-denied/task-protected-tree");
+        }
+        finally
+        {
+            if (State(Protected) == "Disabled" && was != "Disabled") Force(Protected, true);
+        }
+    }
+}

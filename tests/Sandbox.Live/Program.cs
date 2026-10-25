@@ -58,10 +58,13 @@ public static class Program
         var all = new (string Name, Func<LiveContext, Task> Run)[]
         {
             ("S1", S1Tweaks.Run),
+            ("S1b", S1bTweaksV2.Run),
             ("S2", S2Startup.Run),
             ("S3", S3Power.Run),
             ("S4", S4Services.Run),
+            ("S4b", S4bCarveOutServices.Run),
             ("S5", S5Tasks.Run),
+            ("S5b", S5bCarveOutTasks.Run),
             ("S6", S6Journal.Run),
             ("S7", S7Agent.Run),
             ("S9", S9Uninstall.Run),
