@@ -23,7 +23,8 @@ public sealed record PolicyContext(string WindowsDir, string ProgramFiles, strin
         var windows = Pick(Environment.SpecialFolder.Windows, @"C:\Windows");
 
         // 64-разрядный Program Files: в 32-разрядном процессе SpecialFolder.ProgramFiles вернул бы x86-каталог.
-        var pfEnv = Environment.GetEnvironmentVariable("ProgramW6432");
+        // В 64-разрядном процессе (агент) переменной окружения не верим: её может переопределить HKCU\Environment.
+        var pfEnv = Environment.Is64BitProcess ? null : Environment.GetEnvironmentVariable("ProgramW6432");
         var pf = string.IsNullOrWhiteSpace(pfEnv) ? Pick(Environment.SpecialFolder.ProgramFiles, @"C:\Program Files") : pfEnv;
 
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
