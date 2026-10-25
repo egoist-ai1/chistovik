@@ -3,12 +3,14 @@ using Chistovik.App.Mocks;
 using Chistovik.App.Services;
 using Chistovik.App.Services.Agent;
 using Chistovik.App.Services.Changes;
+using Chistovik.App.Services.Scanners;
 using Chistovik.App.Services.Windows;
 using Chistovik.Core.Catalog;
 using Chistovik.Core.Inventory;
 using Chistovik.Core.Journal;
 using Chistovik.Core.Policy;
 using Chistovik.Core.Ports;
+using Chistovik.Native.Cleanup;
 using Chistovik.Native.Services;
 using Chistovik.Native.Setup;
 using Chistovik.Native.Tasks;
@@ -31,6 +33,9 @@ public sealed class AppServices
     public required IDialogService Dialogs { get; init; }
     public required TweakCatalog Tweaks { get; init; }
     public required PowerCatalog PowerCatalog { get; init; }
+
+    /// <summary>Сканер экрана «Чистка» (инвентарь, диск, реестр). null — только инвентарь из четырёх источников.</summary>
+    public ICleanupScanner? Scanner { get; init; }
 
     /// <summary>true — данные демонстрационные (самопроверка и предпросмотр дизайна), на экране об этом написано.</summary>
     public bool IsDemo { get; init; }
@@ -64,17 +69,24 @@ public static class CompositionRoot
         IReadOnlyList<InstalledProgram>? installed = null;
         IReadOnlyList<InstalledProgram> Installed() => installed ??= InventoryProgramsSource.Read(registry);
 
+        // Подсказка «можно удалить» считается той же политикой, что у агента; файлы проверяются только на чтение.
+        var programs = new InventoryProgramsSource(registry, new PackagePolicy(ctx, new WindowsFileSecurity()));
+        var startup = new RegistryStartupSource(registry, new DirectoryFileSystem(),
+            Environment.GetFolderPath(Environment.SpecialFolder.Startup),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup),
+            new StartupPolicy(ctx), trust, File.Exists);
+        var services = new ScmServiceSource(new WindowsServiceControl(), registry, Installed, trust, new ServicePolicy(ctx));
+        var tasksSource = new SchedulerTaskSource(new WindowsTaskScheduler(), new TaskPolicy(ctx));
+
         return new AppServices
         {
-            // Подсказка «можно удалить» считается той же политикой, что у агента; файлы проверяются только на чтение.
-            Programs = new InventoryProgramsSource(registry, new PackagePolicy(ctx, new WindowsFileSecurity())),
-            Startup = new RegistryStartupSource(registry, new DirectoryFileSystem(),
-                Environment.GetFolderPath(Environment.SpecialFolder.Startup),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup),
-                new StartupPolicy(ctx), trust, File.Exists),
+            Programs = programs,
+            Startup = startup,
             Journal = new JournalSource(CreateJournalReader),
-            Services = new ScmServiceSource(new WindowsServiceControl(), registry, Installed, trust, new ServicePolicy(ctx)),
-            Tasks = new SchedulerTaskSource(new WindowsTaskScheduler(), new TaskPolicy(ctx)),
+            Services = services,
+            Tasks = tasksSource,
+            Scanner = new CleanupScanner(FindingScanners.CreateReal(programs, startup, services, tasksSource, registry, ctx,
+                new WindowsProcessList())),
             TweakState = new RegistryTweakStateSource(registry),
             Power = new PowrProfPowerSource(power),
             Effects = effects,
@@ -98,6 +110,12 @@ public static class CompositionRoot
             Journal = new MockJournalSource(),
             Services = new MockServiceSource(),
             Tasks = new MockTaskSource(),
+            Scanner = new CleanupScanner(
+            [
+                new InventoryFindingScanner(new MockProgramsSource(), new MockStartupSource(), new MockServiceSource(), new MockTaskSource()),
+                new MockDiskScanner(),
+                new MockRegistryScanner(),
+            ]),
             TweakState = new MockTweakStateSource(),
             Power = new MockPowerSource(),
             Effects = effects,

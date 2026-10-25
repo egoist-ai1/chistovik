@@ -134,6 +134,68 @@ public sealed class MockPowerSource : IPowerSource
     }
 }
 
+/// <summary>Демо-находки очистки диска: несколько категорий с размерами, одна без размера, одна «браузер запущен».</summary>
+public sealed class MockDiskScanner : Services.Scanners.IFindingScanner
+{
+    public Core.Findings.FindingArea Area => Core.Findings.FindingArea.Disk;
+
+    public Task<IReadOnlyList<Core.Findings.Finding>> ScanAsync(CancellationToken ct = default)
+    {
+        static Core.Findings.Finding F(string id, string title, string detail, Core.Findings.VerdictKind kind, string code, string? evidence,
+            Core.Findings.Confidence conf, string what)
+            => Services.Scanners.FindingFactory.Make("cleanup:" + id, Core.Findings.FindingArea.Disk, title, detail, kind,
+                [Core.Findings.ReasonCodes.Make(code, evidence)], Core.Findings.Risk.Low, Core.Findings.Reversibility.Irreversible, conf,
+                new Core.Findings.Explanation(what, "Нужны только на время работы: программы создают их заново.",
+                    "Файлы пропадут, программы пересоздадут кэш при необходимости.",
+                    "Вернуть нельзя: файлы удаляются без копии."),
+                Core.Policy.ChangeClass.Modifiable);
+
+        IReadOnlyList<Core.Findings.Finding> list =
+        [
+            F("temp-user", "Временные файлы пользователя", "Около 1,2 ГБ, файлов: 4 310", Core.Findings.VerdictKind.Remove,
+                Core.Findings.ReasonCodes.CacheRegenerable, null, Core.Findings.Confidence.L2, "Временные файлы программ в вашей папке Temp."),
+            F("thumbcache", "Кэш эскизов", "Около 38 МБ, файлов: 12", Core.Findings.VerdictKind.Remove,
+                Core.Findings.ReasonCodes.CacheRegenerable, null, Core.Findings.Confidence.L2, "Кэш миниатюр картинок в Проводнике."),
+            F("temp-system", "Временные файлы Windows", "Размер уточнит агент", Core.Findings.VerdictKind.Remove,
+                Core.Findings.ReasonCodes.SizeNeedsAgent, null, Core.Findings.Confidence.L1, "Временные файлы системы."),
+            F("browser-chrome", "Кэш Google Chrome", "Около 640 МБ. Браузер запущен, категория будет пропущена", Core.Findings.VerdictKind.Optional,
+                Core.Findings.ReasonCodes.BrowserRunning, "chrome.exe", Core.Findings.Confidence.L2, "Сохранённые страницы и картинки браузера."),
+            F("recycle-bin", "Корзина", "Размер уточнит агент", Core.Findings.VerdictKind.Optional,
+                Core.Findings.ReasonCodes.SizeNeedsAgent, null, Core.Findings.Confidence.L1, "Удалённые файлы, которые ещё можно вернуть."),
+        ];
+        return Task.FromResult(list);
+    }
+}
+
+/// <summary>Демо-находки реестра: сирота, сомнительная запись и защищённая.</summary>
+public sealed class MockRegistryScanner : Services.Scanners.IFindingScanner
+{
+    public Core.Findings.FindingArea Area => Core.Findings.FindingArea.Registry;
+
+    public Task<IReadOnlyList<Core.Findings.Finding>> ScanAsync(CancellationToken ct = default)
+    {
+        static Core.Findings.Finding F(string id, string title, string detail, Core.Findings.VerdictKind kind, string code, string evidence,
+            Core.Policy.ChangeClass cls)
+            => Services.Scanners.FindingFactory.Make(id, Core.Findings.FindingArea.Registry, title, detail, kind,
+                [Core.Findings.ReasonCodes.Make(code, evidence)], Core.Findings.Risk.Low,
+                kind == Core.Findings.VerdictKind.Remove ? Core.Findings.Reversibility.Undoable : Core.Findings.Reversibility.NotAvailable,
+                Core.Findings.Confidence.L2,
+                new Core.Findings.Explanation("Запись реестра без файлов.", "Нужна, только пока файл на месте.",
+                    "Запись пропадёт, на работу Windows это не влияет.", "Копия сохраняется в журнале: «Отменить»."), cls);
+
+        IReadOnlyList<Core.Findings.Finding> list =
+        [
+            F("arp:machine:x64:OldTool_is1", "Old Tool 2.1", "Запись в списке программ: самой программы на диске нет",
+                Core.Findings.VerdictKind.Remove, Core.Findings.ReasonCodes.EvidenceUninstallerMissing, @"D:\Old Tool\unins000.exe", Core.Policy.ChangeClass.Modifiable),
+            F("run:hku:UpdaterX", "UpdaterX", @"Запускает C:\Users\demo\AppData\Local\UpdaterX\upd.exe, а файла там нет",
+                Core.Findings.VerdictKind.Remove, Core.Findings.ReasonCodes.EvidenceFileMissing, @"C:\Users\demo\AppData\Local\UpdaterX\upd.exe", Core.Policy.ChangeClass.Modifiable),
+            F("apppath:machine:x64:portable.exe", "portable.exe", @"Диск с программой сейчас недоступен",
+                Core.Findings.VerdictKind.Unknown, Core.Findings.ReasonCodes.DriveMissing, @"Z:\Portable\portable.exe", Core.Policy.ChangeClass.ReadOnly),
+        ];
+        return Task.FromResult(list);
+    }
+}
+
 /// <summary>Демо-эффекты: ничего не делают.</summary>
 public sealed class DemoShellEffects : IShellEffects
 {
@@ -150,5 +212,15 @@ public sealed class DemoAgentClient : IAgentClient
     public void AllowElevationRetry() { }
 
     public Task<AgentResponse> SendAsync(AgentRequest request, CancellationToken ct = default)
-        => Task.FromResult(new AgentResponse(request.Id, true, ResponseCodes.Ok, "Демонстрация: ничего не изменено", Guid.NewGuid()));
+    {
+        // Измерение очистки и пробная проверка реестра отвечают так же, как настоящий агент, чтобы диалоги подтверждения были видны.
+        if (request is CleanCategoriesRequest { MeasureOnly: true } measure)
+            return Task.FromResult(new AgentResponse(request.Id, true, ResponseCodes.Ok, null, null, null, null,
+                measure.Categories.Select(c => new FactEntry($"cleanup:user:-:{c}", "{\"v\":1,\"bytes\":52428800,\"files\":120}")).ToList()));
+        if (request is ApplyFindingsRequest { DryRun: true } dry)
+            return Task.FromResult(new AgentResponse(request.Id, true, ResponseCodes.DryRun, null, null, null, null,
+                dry.Items.Select((i, n) => new FactEntry($"regkey:hklm:-:x64:demo{n}",
+                    "{\"v\":1,\"display\":\"" + i.FindingId.Replace("\\", "").Replace("\"", "") + "\",\"subkeys\":3,\"revertible\":true,\"rule\":null}")).ToList()));
+        return Task.FromResult(new AgentResponse(request.Id, true, ResponseCodes.Ok, "Демонстрация: ничего не изменено", Guid.NewGuid()));
+    }
 }

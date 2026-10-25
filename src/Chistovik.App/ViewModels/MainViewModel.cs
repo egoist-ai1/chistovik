@@ -49,7 +49,6 @@ public sealed class MainViewModel : ObservableObject, INavigator
         ["Предпросмотр"] = ("eye", "Pink"),
         ["Выполнение"] = ("play", "Pink"),
         ["Карантин"] = ("archive", "Pink"),
-        ["Очистка диска"] = ("drive", "Mint"),
         ["Режимы"] = ("layers", "Blue"),
         ["Питание"] = ("zap", "Orange"),
         ["Автозагрузка"] = ("login", "Cyan"),
@@ -88,12 +87,11 @@ public sealed class MainViewModel : ObservableObject, INavigator
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
             ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings, this)),
-            ("Чистка", "", () => new CleanupViewModel(new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this, s.Changes, s.Dialogs)),
+            ("Чистка", "", () => new CleanupViewModel(s.Scanner ?? new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this, s.Changes, s.Dialogs)),
             ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs, s.Changes, this)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),
             ("Карантин", "Программы", () => Ph("Карантин", "Удалённое ждёт здесь. Срок виден на каждой операции.")),
-            ("Очистка диска", "Программы", () => Ph("Очистка диска", "Временные файлы и кэш. Только вручную.")),
             ("Режимы", "Система", () => new ModesViewModel(s.Tweaks, s.PowerCatalog, s.Changes, s.Dialogs, this)),
             ("Питание", "Система", () => new PowerViewModel(s.PowerCatalog, s.Power, s.Changes, s.Dialogs, this)),
             ("Автозагрузка", "Система", () => new StartupViewModel(s.Startup, s.Changes, this, s.Dialogs)),

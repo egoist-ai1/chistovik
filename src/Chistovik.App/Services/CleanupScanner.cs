@@ -1,4 +1,5 @@
 using Chistovik.App.Models;
+using Chistovik.App.Services.Scanners;
 using Chistovik.Core.Findings;
 using Chistovik.Core.Policy;
 
@@ -11,29 +12,29 @@ public interface ICleanupScanner
 }
 
 /// <summary>
-/// Читает те же источники, что экраны «Инвентарь», «Автозагрузка», «Службы» и «Задачи», и превращает каждую запись в находку.
+/// Собирает находки из сканеров областей (<see cref="IFindingScanner"/>): инвентарь, диск, реестр. Сканеры идут параллельно;
+/// исключение любого из них всплывает, экран покажет ошибку.
+/// Старый конструктор (четыре источника) строит один <see cref="InventoryFindingScanner"/>.
 /// Класс «можно менять» берётся у источника как есть: совет не расширяет права.
 /// </summary>
-public sealed class CleanupScanner(IProgramsSource programs, IStartupSource startup, IServiceSource services, ITaskSource tasks,
-    FindingClassifier? classifier = null) : ICleanupScanner
+public sealed class CleanupScanner : ICleanupScanner
 {
-    private readonly FindingClassifier _classifier = classifier ?? FindingClassifier.Shared;
+    private readonly IReadOnlyList<IFindingScanner> _scanners;
+
+    public CleanupScanner(IEnumerable<IFindingScanner> scanners) => _scanners = scanners.ToList();
+
+    public CleanupScanner(IProgramsSource programs, IStartupSource startup, IServiceSource services, ITaskSource tasks,
+        FindingClassifier? classifier = null)
+        : this([new InventoryFindingScanner(programs, startup, services, tasks, classifier)])
+    {
+    }
 
     public async Task<IReadOnlyList<Finding>> ScanAsync(CancellationToken ct = default)
     {
-        var startupTask = startup.GetStartupAsync(ct);
-        var servicesTask = services.GetServicesAsync(ct);
-        var tasksTask = tasks.GetTasksAsync(ct);
-        var programsTask = programs.GetProgramsAsync();
-        await Task.WhenAll(startupTask, servicesTask, tasksTask, programsTask).WaitAsync(ct);
+        var tasks = _scanners.Select(s => s.ScanAsync(ct)).ToList();
+        await Task.WhenAll(tasks).WaitAsync(ct);
         ct.ThrowIfCancellationRequested();
-
-        var all = new List<Finding>();
-        all.AddRange(startupTask.Result.Select(x => _classifier.Startup(ToSubject(x))));
-        all.AddRange(servicesTask.Result.Select(x => _classifier.Service(ToSubject(x))));
-        all.AddRange(tasksTask.Result.Select(x => _classifier.Task(ToSubject(x))));
-        all.AddRange(programsTask.Result.Select(x => _classifier.Program(ToSubject(x))));
-        return all;
+        return tasks.SelectMany(t => t.Result).ToList();
     }
 
     internal static ChangeClass Map(Changeability c) => c switch

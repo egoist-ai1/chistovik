@@ -16,6 +16,12 @@ public sealed class AgentClientOptions
     /// <summary>Удаление программы: деинсталлятор может работать долго (на стороне агента срок запуска 10 минут).</summary>
     public TimeSpan UninstallTimeout { get; init; } = TimeSpan.FromMinutes(15);
 
+    /// <summary>Очистка диска: перебор тысяч файлов (на стороне агента не больше 20 минут на категорию).</summary>
+    public TimeSpan CleanupTimeout { get; init; } = TimeSpan.FromMinutes(25);
+
+    /// <summary>Чистка реестра: проверка свидетельств, копии ключей и удаление.</summary>
+    public TimeSpan FindingsTimeout { get; init; } = TimeSpan.FromMinutes(5);
+
     public TimeSpan HeartbeatTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>Ожидание канала после запуска агента (UAC уже пройден).</summary>
@@ -104,7 +110,7 @@ public sealed class AgentClient : IAgentClient, IDisposable
             var prepared = await EnsureConnectedAsync(request, ct).ConfigureAwait(false);
             if (prepared is not null) return prepared;
 
-            var timeout = request is UninstallRequest ? _opt.UninstallTimeout : _opt.RequestTimeout;
+            var timeout = TimeoutFor(request);
             var result = await ExchangeAsync(request, timeout, ct).ConfigureAwait(false);
             if (result.Retry)
             {
@@ -117,6 +123,18 @@ public sealed class AgentClient : IAgentClient, IDisposable
         }
         finally { _gate.Release(); }
     }
+
+    /// <summary>
+    /// Срок ожидания ответа по типу запроса: удаление программы и очистка диска долгие, чистка реестра средняя;
+    /// измерение очистки (<c>MeasureOnly</c>) это обычный короткий запрос.
+    /// </summary>
+    internal TimeSpan TimeoutFor(AgentRequest request) => request switch
+    {
+        UninstallRequest => _opt.UninstallTimeout,
+        CleanCategoriesRequest { MeasureOnly: false } => _opt.CleanupTimeout,
+        ApplyFindingsRequest => _opt.FindingsTimeout,
+        _ => _opt.RequestTimeout,
+    };
 
     /// <summary>Один Ping, как по таймеру. Возвращает false, если связь потеряна. Для тестов и таймера.</summary>
     public async Task<bool> HeartbeatOnceAsync(CancellationToken ct = default)

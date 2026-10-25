@@ -142,6 +142,22 @@ public class UiPolishTests : IDisposable
         "task-privileged-principal", "task-protected-tree", "task-unknown-principal", "task-unknown-runlevel",
         "tweak-bad-hive", "tweak-not-in-catalog",
         "not-elevated",
+        "cleanup-bad-catalog", "cleanup-browser-running", "cleanup-keep-name", "cleanup-not-under-root", "cleanup-pattern",
+        "cleanup-profile-location", "cleanup-profile-owner", "cleanup-profile-reparse", "cleanup-recovery-only", "cleanup-reparse",
+        "cleanup-root-missing", "cleanup-root-moved", "cleanup-root-outside", "cleanup-root-reparse", "cleanup-too-fresh",
+        "recyclebin-foreign-user",
+        "apppath-no-default", "apppath-unresolved", "arp-no-display-name", "arp-parent-key", "arp-system-component", "arp-update",
+        "arp-windows-location", "command-unresolved", "drive-missing", "evidence-command-exists", "evidence-failed",
+        "evidence-file-exists", "evidence-file-missing", "evidence-install-dir-exists", "evidence-install-dir-missing",
+        "evidence-location-unresolved", "evidence-msi-installed", "evidence-msi-unknown", "evidence-no-uninstaller",
+        "evidence-uninstaller-exists", "evidence-uninstaller-missing", "evidence-uninstaller-unresolved", "file-missing",
+        "finding-gone", "msi-unknown", "reg-orphan-parent", "reg-orphan-restore", "reg-quarantine-dest", "reg-run-orphan",
+        "reg-run-restore", "reg-shareddll-hive", "reg-shareddll-orphan", "reg-shareddll-parent", "reg-tree-expert",
+        "reg-tree-has-link", "reg-tree-too-large", "run-launcher", "run-no-command", "run-system-entry", "run-unresolved",
+        "shareddll-unc", "shareddll-unresolved", "uninstall-orphan",
+        "reg-tree-bad-name", "reg-tree-bad-type", "reg-tree-not-deletable", "partial-delete", "backup-mismatch", "backup-missing",
+        "interrupted", "restore-parent-missing", "restore-key-missing", "precheck-error", "cleanup-not-revertible",
+        "cleanup-unknown-category", "cleanup-bad-scope", "uninstall-bad-target", "journal-foreign-sid",
     };
 
     [Fact]

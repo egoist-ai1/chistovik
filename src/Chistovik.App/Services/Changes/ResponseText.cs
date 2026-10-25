@@ -1,5 +1,6 @@
 using Chistovik.App.Services.Agent;
 using Chistovik.Core.Ipc;
+using Chistovik.Core.Journal;
 using Chistovik.Core.Ports;
 
 namespace Chistovik.App.Services.Changes;
@@ -44,13 +45,121 @@ public static class ResponseText
         }
     }
 
+    /// <summary>Измерение очистки диска (<c>MeasureOnly</c>): ничего не удаляется и не журналируется, размеры лежат в <c>Facts</c>.</summary>
+    public static ChangeOutcome ForMeasure(AgentResponse r)
+    {
+        var o = Map(r, undo: false);
+        return r.Code == ResponseCodes.Ok
+            ? o with { Message = "Размер посчитан. Ничего не удалено." }
+            : o;
+    }
+
+    /// <summary>
+    /// Очистка диска: итог по категориям. Освобождённое место и число файлов берутся из фактов ответа; категории, которые
+    /// пришлось пропустить (браузер открыт, нет папки), считаются отдельно. Удаление необратимо, поэтому об откате не говорим.
+    /// </summary>
+    public static ChangeOutcome ForCleanup(AgentResponse r)
+    {
+        var o = Map(r, undo: false);
+        var facts = ParseCleanupFacts(r.Facts);
+        var freed = facts.Sum(f => f.FreedBytes);
+        var deleted = facts.Sum(f => f.Deleted);
+        var skipped = r.Steps?.Count(s => s.State is StepState.Skipped or StepState.Denied) ?? 0;
+        var failed = r.Steps?.Count(s => s.State == StepState.Failed) ?? 0;
+        var tail = (skipped > 0 ? $" Пропущено категорий: {skipped}." : "") + (failed > 0 ? $" Не удалось очистить: {failed}." : "");
+        var what = freed > 0 || deleted > 0
+            ? $"Освобождено {ViewModels.Fmt.Size(freed)}, удалено файлов: {ViewModels.Fmt.Number((int)Math.Min(deleted, int.MaxValue))}."
+            : "Подходящих файлов не нашлось.";
+        switch (r.Code)
+        {
+            case ResponseCodes.Ok:
+                return o with { Message = "Очистка завершена. " + what + tail + " Вернуть удалённое нельзя." };
+            case ResponseCodes.NoChange:
+                return o with { Message = "Чистить было нечего." + tail };
+            case ResponseCodes.Partial:
+                return o with { Message = "Очистка выполнена частично. " + what + tail + " Подробности в журнале." };
+            default:
+                return o;
+        }
+    }
+
+    /// <summary>
+    /// Чистка реестра: пробная проверка (<c>dry-run</c>) только сообщает, что агент подтвердил; боевой запуск говорит,
+    /// сколько записей убрано и что копии лежат в журнале. Запись, чьё доказательство не подтвердилось, остаётся нетронутой.
+    /// </summary>
+    public static ChangeOutcome ForFindings(AgentResponse r)
+    {
+        var o = Map(r, undo: false);
+        var (done, total) = Count(r.Steps);
+        var notConfirmed = r.Steps?.Count(s => s.Code == StepCodes.EvidenceFailed) ?? 0;
+        var tail = notConfirmed > 0 ? $" Не подтвердилось ещё раз: {notConfirmed}, их не тронули." : "";
+        switch (r.Code)
+        {
+            case ResponseCodes.DryRun:
+                return o with
+                {
+                    Kind = OutcomeKind.NoChange,
+                    Message = $"Пробная проверка: агент подтвердил записей: {done} из {total}. Ничего не изменено." + tail,
+                };
+            case ResponseCodes.Ok:
+                return o with { Message = $"Убрано записей реестра: {done} из {total}. Копии сохранены в журнале, любую запись можно вернуть." };
+            case ResponseCodes.NoChange:
+                return o with { Message = "Убирать нечего: этих записей в реестре уже нет." };
+            case ResponseCodes.Partial:
+                return o with { Message = $"Убрано записей реестра: {done} из {total}." + tail + " Подробности в журнале; убранное можно вернуть." };
+            default:
+                return o;
+        }
+    }
+
+    /// <summary>Итог очистки одной категории из фактов ответа.</summary>
+    public sealed record CleanupFact(string Category, long Bytes, long Files, long Deleted, long FreedBytes,
+        IReadOnlyDictionary<string, int> Skipped, int Failed);
+
+    /// <summary>
+    /// Разбирает факты очистки: ключ «cleanup:{scope}:{sid|-}:{категория}» либо «recyclebin:{sid}», значение это состояние
+    /// категории (bytes, files, deleted, freedBytes, skipped, failed). Всё непонятное пропускается: факты только для показа.
+    /// </summary>
+    public static IReadOnlyList<CleanupFact> ParseCleanupFacts(IReadOnlyList<FactEntry>? facts)
+    {
+        var list = new List<CleanupFact>();
+        if (facts is null) return list;
+        foreach (var f in facts)
+        {
+            string? category = null;
+            if (f.Key.StartsWith("cleanup:", StringComparison.OrdinalIgnoreCase) && f.Key.Split(':', 4) is { Length: 4 } p) category = p[3];
+            else if (f.Key.StartsWith("recyclebin:", StringComparison.OrdinalIgnoreCase))
+                category = Chistovik.Core.Catalog.CleanupCatalog.Shared.Categories.FirstOrDefault(c => c.Mechanism == "recyclebin")?.Id;
+            if (category is null) continue;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(f.Json);
+                var e = doc.RootElement;
+                if (e.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+                var skipped = new Dictionary<string, int>(StringComparer.Ordinal);
+                if (e.TryGetProperty("skipped", out var sk) && sk.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    foreach (var kv in sk.EnumerateObject())
+                        if (kv.Value.TryGetInt32(out var n)) skipped[kv.Name] = n;
+                list.Add(new CleanupFact(category, Num(e, "bytes"), Num(e, "files"), Num(e, "deleted"), Num(e, "freedBytes"),
+                    skipped, (int)Num(e, "failed")));
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
+        return list;
+
+        static long Num(System.Text.Json.JsonElement e, string name)
+            => e.TryGetProperty(name, out var v) && v.TryGetInt64(out var n) ? n : 0;
+    }
+
     static ChangeOutcome Map(AgentResponse r, bool undo)
     {
         var (done, total) = Count(r.Steps);
-        ChangeOutcome Make(OutcomeKind k, string msg) => new(k, msg, r.OperationId, done, total, r.Conflicts, null, r);
+        ChangeOutcome Make(OutcomeKind k, string msg) => new(k, msg, r.OperationId, done, total, r.Conflicts, null, r, r.Facts);
 
         switch (r.Code)
         {
+            case ResponseCodes.DryRun:
+                return Make(OutcomeKind.NoChange, "Пробная проверка прошла. Ничего не изменено.");
             case ResponseCodes.Ok:
                 return Make(OutcomeKind.Success, undo
                     ? (total > 0 ? $"Вернули {done} из {total}." : "Операция откачена.")
@@ -136,6 +245,8 @@ public static class ResponseText
         OperationKind.PowerSetting => "Параметр питания",
         OperationKind.Undo => "Откат",
         OperationKind.Uninstall => "Удаление программы",
+        OperationKind.Cleanup => "Очистка диска",
+        OperationKind.Registry => "Реестр",
         _ => k.ToString(),
     };
 
@@ -175,6 +286,16 @@ public static class ResponseText
         "recovered-done" => "восстановлено после сбоя: выполнено",
         "recovered-not-applied" => "восстановлено после сбоя: не применялось",
         "already-reverted" => "уже возвращено",
+        "skipped-by-rule" => "пропущено по правилу очистки",
+        "evidence-failed" => "при повторной проверке запись оказалась не лишней, её не тронули",
+        "reg-tree-too-large" => "в записи слишком много вложенных ключей, автоматически её не убираем",
+        "reg-tree-has-link" => "внутри записи есть ссылка на другое место реестра, её не убираем",
+        "reg-tree-bad-name" => "имя ключа или значения содержит недопустимый символ, запись не тронута",
+        "reg-tree-bad-type" => "внутри ключа есть значение особого типа, которое нельзя вернуть при откате, запись не тронута",
+        "partial-delete" => "удаление остановилось на середине, ключ остался неполным; копия сохранена, её можно вернуть из журнала",
+        "backup-mismatch" => "копия записи не совпала с оригиналом, запись не тронули",
+        "backup-missing" => "копии записи нет, вернуть её нельзя",
+        "interrupted" => "шаг прервала перезагрузка агента, проверьте результат",
         "win32:3010" => "программа удалена, нужна перезагрузка компьютера",
         "win32:1603" => "установщик сообщил о неустранимой ошибке (1603)",
         _ when code.StartsWith("win32:", StringComparison.Ordinal) => "ошибка Windows " + code[6..],
@@ -192,6 +313,11 @@ public static class ResponseText
         StepKind.PowerSetting => "Параметр питания",
         StepKind.PowerSchemeCreate => "Создание схемы питания",
         StepKind.UninstallRun => "Удаление программы",
+        StepKind.CleanupCategory => "Очистка категории",
+        StepKind.RecycleBinEmpty => "Очистка Корзины",
+        StepKind.RegistryKeyDelete => "Удаление записи реестра",
+        StepKind.StartupRemove => "Удаление записи автозапуска",
+        StepKind.SharedDllRemove => "Удаление записи общего файла",
         _ => k.ToString(),
     };
 }

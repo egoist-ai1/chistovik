@@ -175,6 +175,178 @@ public class ChangeServiceTests
         _ = svc;
     }
 
+    // ----- очистка диска и реестра (C2, C3) -----
+
+    static FactEntry CleanFact(string category, string json) => new($"cleanup:user:-:{category}", json);
+
+    [Fact]
+    public async Task Measure_sends_measure_only_request_and_keeps_facts()
+    {
+        var fact = CleanFact("temp-user", "{\"v\":1,\"done\":false,\"bytes\":2048,\"files\":3}");
+        var agent = new FakeAgentClient
+        {
+            Handler = r => new AgentResponse(r.Id, true, ResponseCodes.Ok, null, null, null, null, [fact]),
+        };
+        var svc = Make.Changes(agent);
+
+        var o = await svc.MeasureCleanupAsync(["temp-user", "thumbcache"]);
+
+        var sent = Assert.IsType<CleanCategoriesRequest>(Assert.Single(agent.Sent));
+        Assert.True(sent.MeasureOnly);
+        Assert.Equal(["temp-user", "thumbcache"], sent.Categories);
+        Assert.Equal(OutcomeKind.Success, o.Kind);
+        Assert.Equal(fact, Assert.Single(o.Facts!));
+        var parsed = Assert.Single(ResponseText.ParseCleanupFacts(o.Facts));
+        Assert.Equal("temp-user", parsed.Category);
+        Assert.Equal(2048, parsed.Bytes);
+        Assert.Equal(3, parsed.Files);
+    }
+
+    [Fact]
+    public async Task Clean_sends_real_request_and_reports_freed_space_without_undo_promise()
+    {
+        var fact = CleanFact("temp-user", "{\"v\":1,\"done\":true,\"deleted\":5,\"freedBytes\":3145728}");
+        var agent = new FakeAgentClient
+        {
+            Handler = r => new AgentResponse(r.Id, true, ResponseCodes.Ok, null, Guid.NewGuid(),
+                [new StepResult(1, 0, StepKind.CleanupCategory, StepState.Done, null)], null, [fact]),
+        };
+        var svc = Make.Changes(agent);
+
+        var o = await svc.CleanAsync(["temp-user"]);
+
+        Assert.False(Assert.IsType<CleanCategoriesRequest>(Assert.Single(agent.Sent)).MeasureOnly);
+        Assert.Equal(OutcomeKind.Success, o.Kind);
+        Assert.Contains("Освобождено", o.Message);
+        Assert.Contains("3", o.Message);
+        Assert.Contains("Вернуть удалённое нельзя", o.Message);
+        Assert.NotNull(o.Facts);
+    }
+
+    [Fact]
+    public async Task Clean_counts_skipped_categories()
+    {
+        var agent = new FakeAgentClient
+        {
+            Handler = r => new AgentResponse(r.Id, true, ResponseCodes.Partial, null, Guid.NewGuid(),
+                [
+                    new StepResult(1, 0, StepKind.CleanupCategory, StepState.Done, null),
+                    new StepResult(2, 1, StepKind.CleanupCategory, StepState.Skipped, "skipped-by-rule"),
+                ]),
+        };
+
+        var o = await Make.Changes(agent).CleanAsync(["temp-user", "browser-chrome"]);
+
+        Assert.Equal(OutcomeKind.Partial, o.Kind);
+        Assert.Contains("Пропущено категорий: 1", o.Message);
+    }
+
+    [Fact]
+    public async Task Clean_with_no_categories_is_denied_without_sending()
+    {
+        var agent = new FakeAgentClient();
+
+        var o = await Make.Changes(agent).CleanAsync([]);
+
+        Assert.Equal(OutcomeKind.Denied, o.Kind);
+        Assert.Empty(agent.Sent);
+    }
+
+    [Fact]
+    public async Task ApplyFindings_builds_request_with_dry_run_and_expert_confirmations()
+    {
+        var agent = new FakeAgentClient();
+        var items = new[]
+        {
+            new FindingAction("apppath:machine:x64:a.exe", FindingActionKind.Remove),
+            new FindingAction("arp:machine:x64:Big_is1", FindingActionKind.Remove),
+        };
+
+        await Make.Changes(agent).ApplyFindingsAsync(items, dryRun: true, expertConfirmations: ["arp:machine:x64:Big_is1"]);
+
+        var sent = Assert.IsType<ApplyFindingsRequest>(Assert.Single(agent.Sent));
+        Assert.True(sent.DryRun);
+        Assert.Equal(2, sent.Items.Count);
+        Assert.Equal(["arp:machine:x64:Big_is1"], sent.ExpertConfirmations);
+    }
+
+    [Fact]
+    public async Task ApplyFindings_expert_confirmation_outside_items_is_denied()
+    {
+        var agent = new FakeAgentClient();
+        var items = new[] { new FindingAction("apppath:machine:x64:a.exe", FindingActionKind.Remove) };
+
+        var o = await Make.Changes(agent).ApplyFindingsAsync(items, false, ["arp:machine:x64:other"]);
+
+        Assert.Equal(OutcomeKind.Denied, o.Kind);
+        Assert.Empty(agent.Sent);
+    }
+
+    [Fact]
+    public async Task Dry_run_response_is_not_a_change()
+    {
+        var agent = new FakeAgentClient
+        {
+            Handler = r => new AgentResponse(r.Id, true, ResponseCodes.DryRun, null, null,
+                [new StepResult(1, 0, StepKind.RegistryKeyDelete, StepState.Pending, null)]),
+        };
+        var items = new[] { new FindingAction("apppath:machine:x64:a.exe", FindingActionKind.Remove) };
+
+        var o = await Make.Changes(agent).ApplyFindingsAsync(items, true);
+
+        Assert.False(o.Changed);
+        Assert.Contains("Ничего не изменено", o.Message);
+    }
+
+    [Fact]
+    public async Task Partial_findings_result_mentions_unconfirmed_records()
+    {
+        var agent = new FakeAgentClient
+        {
+            Handler = r => new AgentResponse(r.Id, true, ResponseCodes.Partial, null, Guid.NewGuid(),
+                [
+                    new StepResult(1, 0, StepKind.RegistryKeyDelete, StepState.Done, null),
+                    new StepResult(2, 1, StepKind.StartupRemove, StepState.Failed, "evidence-failed"),
+                ]),
+        };
+        var items = new[]
+        {
+            new FindingAction("apppath:machine:x64:a.exe", FindingActionKind.Remove),
+            new FindingAction("runonce:hklm64:X", FindingActionKind.Remove),
+        };
+
+        var o = await Make.Changes(agent).ApplyFindingsAsync(items, false);
+
+        Assert.Equal(OutcomeKind.Partial, o.Kind);
+        Assert.Contains("1 из 2", o.Message);
+        Assert.Contains("Не подтвердилось", o.Message);
+    }
+
+    [Fact]
+    public void New_kinds_and_codes_have_russian_names()
+    {
+        Assert.Equal("Очистка диска", ResponseText.KindName(OperationKind.Cleanup));
+        Assert.Equal("Реестр", ResponseText.KindName(OperationKind.Registry));
+        foreach (var k in new[] { StepKind.CleanupCategory, StepKind.RecycleBinEmpty, StepKind.RegistryKeyDelete, StepKind.StartupRemove, StepKind.SharedDllRemove })
+            Assert.Matches("[А-Яа-я]", ResponseText.StepKindName(k));
+        foreach (var c in new[] { "evidence-failed", "reg-tree-too-large", "reg-tree-has-link", "reg-tree-bad-name", "reg-tree-bad-type", "partial-delete", "backup-mismatch", "backup-missing", "interrupted", "skipped-by-rule" })
+            Assert.Matches("[А-Яа-я]", ResponseText.StepCodeName(c));
+    }
+
+    [Fact]
+    public void Target_text_for_cleanup_recyclebin_and_registry_keys()
+    {
+        var title = Chistovik.Core.Catalog.CleanupCatalog.Shared.Find("temp-user")!.Title;
+        Assert.Equal(title, SubjectText.OfTarget("cleanup:user:s-1-5-21-1:temp-user"));
+        Assert.Equal("Корзина", SubjectText.OfTarget("recyclebin:s-1-5-21-1"));
+        Assert.Equal("Old Tool 2.1", SubjectText.OfTarget("regkey:hklm:-:x64:software\\microsoft\\windows\\currentversion\\uninstall\\oldtool_is1",
+            "{\"v\":1,\"display\":\"Old Tool 2.1\"}"));
+        // без display: последний компонент пути
+        Assert.Equal("oldtool_is1", SubjectText.OfTarget("regkey:hklm:-:x64:software\\microsoft\\windows\\currentversion\\uninstall\\oldtool_is1"));
+        // битый JSON не роняет журнал
+        Assert.Equal("oldtool_is1", SubjectText.OfTarget("regkey:hklm:-:x64:software\\microsoft\\windows\\currentversion\\uninstall\\oldtool_is1", "{"));
+    }
+
     sealed class CancellingClient : IAgentClient
     {
         public AgentAccess Access => AgentAccess.Connected;

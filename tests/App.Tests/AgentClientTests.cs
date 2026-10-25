@@ -241,6 +241,79 @@ public class AgentClientTests
         Assert.Equal(AgentAccess.Lost, client.Access);
     }
 
+    static CleanCategoriesRequest Clean(bool measureOnly) => new() { Id = Guid.NewGuid(), Categories = ["user-temp"], MeasureOnly = measureOnly };
+
+    static ApplyFindingsRequest Findings() => new()
+    {
+        Id = Guid.NewGuid(),
+        Items = [new FindingAction("apppath:machine:x64:a.exe", FindingActionKind.Remove)],
+        DryRun = true,
+    };
+
+    [Fact]
+    public void Timeout_depends_on_request_type()
+    {
+        var opt = new AgentClientOptions
+        {
+            RequestTimeout = TimeSpan.FromSeconds(1),
+            UninstallTimeout = TimeSpan.FromSeconds(2),
+            CleanupTimeout = TimeSpan.FromSeconds(3),
+            FindingsTimeout = TimeSpan.FromSeconds(4),
+        };
+        var client = new AgentClient(new FakeLauncher(), new FakeAgentHost(), opt);
+
+        Assert.Equal(TimeSpan.FromSeconds(3), client.TimeoutFor(Clean(false)));
+        Assert.Equal(TimeSpan.FromSeconds(1), client.TimeoutFor(Clean(true)));   // измерение обычный короткий запрос
+        Assert.Equal(TimeSpan.FromSeconds(4), client.TimeoutFor(Findings()));
+        Assert.Equal(TimeSpan.FromSeconds(2), client.TimeoutFor(new UninstallRequest { Id = Guid.NewGuid(), FindingId = "arp:machine:x64:k" }));
+        Assert.Equal(TimeSpan.FromSeconds(1), client.TimeoutFor(Change()));
+    }
+
+    [Fact]
+    public void Default_timeouts_are_25_minutes_for_cleanup_and_5_for_findings()
+    {
+        var opt = new AgentClientOptions();
+        Assert.Equal(TimeSpan.FromMinutes(25), opt.CleanupTimeout);
+        Assert.Equal(TimeSpan.FromMinutes(5), opt.FindingsTimeout);
+    }
+
+    [Fact]
+    public async Task Cleanup_waits_longer_than_an_ordinary_request_while_measure_does_not()
+    {
+        var opt = new AgentClientOptions
+        {
+            UserSid = "S-1-5-21-test", ParentPid = 1, AppPath = @"C:\app\Chistovik.App.exe",
+            RequestTimeout = TimeSpan.FromMilliseconds(100),
+            CleanupTimeout = TimeSpan.FromSeconds(30),
+            HeartbeatInterval = TimeSpan.FromMinutes(10),
+            ConnectTimeout = TimeSpan.FromSeconds(1),
+            ReconnectTimeout = TimeSpan.FromMilliseconds(200),
+        };
+        var (client, _, host) = Create(opt);
+        host.Hang = true;
+
+        var measured = await client.SendAsync(Clean(true));
+        Assert.Equal(ClientCodes.Timeout, measured.Code);
+
+        // Очистка за 100 мс не обрывается: ждёт своего срока, здесь её останавливает только отмена вызывающего.
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.SendAsync(Clean(false), cts.Token));
+    }
+
+    [Fact]
+    public async Task Facts_travel_through_the_channel()
+    {
+        var (client, _, host) = Create();
+        host.Handler = (r, _) => new AgentResponse(r.Id, true, ResponseCodes.Ok, null, Guid.NewGuid(), null, null,
+            [new FactEntry("cleanup:user:-:user-temp", "{\"v\":1,\"done\":false,\"bytes\":10,\"files\":2}")]);
+
+        var r = await client.SendAsync(Clean(true));
+
+        Assert.True(r.Ok);
+        var fact = Assert.Single(r.Facts!);
+        Assert.Equal("cleanup:user:-:user-temp", fact.Key);
+    }
+
     [Fact]
     public async Task Cancellation_throws_and_closes_the_channel()
     {

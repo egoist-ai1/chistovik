@@ -76,7 +76,7 @@ public sealed class JournalSource(Func<IJournalReader> readerFactory, int pageSi
     public static JournalStep ToStep(StepRecord r)
     {
         var code = ResponseText.StepCodeName(r.Code);
-        var detail = SubjectText.OfTarget(r.TargetKey) + (code.Length > 0 ? " · " + code : "");
+        var detail = SubjectText.OfTarget(r.TargetKey, r.TargetJson) + (code.Length > 0 ? " · " + code : "");
         return new JournalStep(r.Id, ResponseText.StepKindName(r.Kind), detail, r.State, ResponseText.StepStateName(r.State));
     }
 }

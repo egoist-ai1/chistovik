@@ -31,7 +31,8 @@ public sealed record ChangeOutcome(
     int StepsTotal = 0,
     IReadOnlyList<ConflictInfo>? Conflicts = null,
     string? RestartHint = null,
-    AgentResponse? Response = null)
+    AgentResponse? Response = null,
+    IReadOnlyList<FactEntry>? Facts = null)
 {
     public bool Changed => Kind is OutcomeKind.Success or OutcomeKind.Partial;
 }
@@ -56,6 +57,20 @@ public interface IChangeService
 
     /// <summary>Удаляет программу компьютера (arp:machine:...) штатным деинсталлятором через агента. Вернуть её откатом нельзя.</summary>
     Task<ChangeOutcome> UninstallAsync(string programId, CancellationToken ct = default);
+
+    /// <summary>Измеряет категории очистки диска (идентификаторы каталога) через агента: ничего не удаляется, размеры в <c>Facts</c>.</summary>
+    Task<ChangeOutcome> MeasureCleanupAsync(IReadOnlyList<string> categoryIds, CancellationToken ct = default);
+
+    /// <summary>Очищает категории диска. Удаление необратимо, откатить его нельзя.</summary>
+    Task<ChangeOutcome> CleanAsync(IReadOnlyList<string> categoryIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Убирает записи реестра по идентификаторам находок; агент заново проверяет доказательства и сохраняет копии для отката.
+    /// <paramref name="dryRun"/>: только проверить, ничего не писать. <paramref name="expertConfirmations"/>: идентификаторы,
+    /// подтверждённые отдельно (крупные ключи).
+    /// </summary>
+    Task<ChangeOutcome> ApplyFindingsAsync(IReadOnlyList<FindingAction> items, bool dryRun,
+        IReadOnlyList<string>? expertConfirmations = null, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -111,6 +126,24 @@ public sealed class ChangeService : IChangeService
 
     public Task<ChangeOutcome> UninstallAsync(string programId, CancellationToken ct = default)
         => RunAsync(new UninstallRequest { Id = _newId(), FindingId = programId }, ResponseText.ForUninstall, null, ct);
+
+    public Task<ChangeOutcome> MeasureCleanupAsync(IReadOnlyList<string> categoryIds, CancellationToken ct = default)
+        => RunAsync(new CleanCategoriesRequest { Id = _newId(), Categories = categoryIds, MeasureOnly = true },
+            ResponseText.ForMeasure, null, ct);
+
+    public Task<ChangeOutcome> CleanAsync(IReadOnlyList<string> categoryIds, CancellationToken ct = default)
+        => RunAsync(new CleanCategoriesRequest { Id = _newId(), Categories = categoryIds, MeasureOnly = false },
+            ResponseText.ForCleanup, null, ct);
+
+    public Task<ChangeOutcome> ApplyFindingsAsync(IReadOnlyList<FindingAction> items, bool dryRun,
+        IReadOnlyList<string>? expertConfirmations = null, CancellationToken ct = default)
+        => RunAsync(new ApplyFindingsRequest
+        {
+            Id = _newId(),
+            Items = items,
+            DryRun = dryRun,
+            ExpertConfirmations = expertConfirmations is { Count: > 0 } ? expertConfirmations : null,
+        }, ResponseText.ForFindings, null, ct);
 
     async Task<ChangeOutcome> RunAsync(AgentRequest request, Func<AgentResponse, ChangeOutcome> map,
         IReadOnlyList<string>? ids, CancellationToken ct)
