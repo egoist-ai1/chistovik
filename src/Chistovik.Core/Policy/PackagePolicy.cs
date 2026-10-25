@@ -84,6 +84,10 @@ public sealed class PackagePolicy
     {
         "cmd.exe", "powershell.exe", "pwsh.exe", "wscript.exe", "cscript.exe", "rundll32.exe", "mshta.exe", "msiexec.exe",
         "regsvr32.exe", "wmic.exe", "forfiles.exe", "bash.exe", "wsl.exe",
+        // интерпретаторы и лаунчеры, которые выполняют произвольный код из аргументов
+        "python.exe", "pythonw.exe", "py.exe", "node.exe", "java.exe", "javaw.exe", "perl.exe", "ruby.exe", "git-bash.exe",
+        "sh.exe", "dotnet.exe", "conhost.exe", "explorer.exe", "start.exe", "schtasks.exe", "reg.exe", "sc.exe", "net.exe",
+        "curl.exe", "certutil.exe", "bitsadmin.exe", "installutil.exe", "regasm.exe", "msbuild.exe",
     };
 
     static readonly string[] LauncherSchemes = ["steam://", "com.epicgames.launcher://", "uplay://", "goggalaxy://", "origin2://", "battlenet://"];
@@ -178,9 +182,20 @@ public sealed class PackagePolicy
                 return Forbid("Деинсталлятор в системной зоне", "protected-component");
         if (!Trusted(file)) return View("Файл деинсталлятора доступен на запись обычным пользователям", "exe-writable-dir");
 
+        // Каждый каталог от файла вверх до корня Program Files: иначе пользователь, владеющий верхним каталогом, подменит
+        // вложенный (переименует его или подставит ссылку) между проверкой и запуском.
+        var pfRoot = _roots.First(r => PathNormalizer.IsEqualOrUnder(final, r)).TrimEnd('\\');
         var dirPath = final[..final.LastIndexOf('\\')];
-        var dir = _files.Inspect(dirPath);
-        if (!dir.Exists || !Trusted(dir)) return View("Каталог деинсталлятора доступен на запись обычным пользователям", "exe-writable-dir");
+        for (var depth = 0; ; depth++)
+        {
+            if (depth > 64) return View("Слишком глубокий путь деинсталлятора", "exe-writable-dir");
+            var dir = _files.Inspect(dirPath);
+            if (!dir.Exists || !Trusted(dir)) return View("Каталог деинсталлятора доступен на запись обычным пользователям", "exe-writable-dir");
+            var up = dirPath.LastIndexOf('\\');
+            if (up < 0) break;
+            dirPath = dirPath[..up];
+            if (dirPath.Length <= pfRoot.Length || !PathNormalizer.IsEqualOrUnder(dirPath, pfRoot)) break; // сам корень Program Files не проверяется
+        }
 
         string finalName = final[(final.LastIndexOf('\\') + 1)..];
         if (Interpreters.Contains(finalName))
@@ -188,6 +203,9 @@ public sealed class PackagePolicy
 
         if (quiet)
             return Run(final, args, "Деинсталлятор с тихим режимом");
+        // Тихий ключ подставляем только к команде без своих аргументов: «setup.exe /uninstall» не должен превратиться в запуск установщика.
+        if (!string.IsNullOrWhiteSpace(args))
+            return View("У деинсталлятора нет известного тихого режима", "exe-no-quiet");
         if (InnoName.IsMatch(finalName) && _files.Inspect(final[..^4] + ".dat").Exists)
             return Run(final, InnoArguments, "Деинсталлятор Inno Setup");
         if (_files.HasNsisMarker(final))

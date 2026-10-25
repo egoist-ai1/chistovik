@@ -7,4 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Chistovik.Core\Chistovik.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Native.Tests" />
+  </ItemGroup>
 </Project>

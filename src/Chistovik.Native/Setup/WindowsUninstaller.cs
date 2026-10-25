@@ -9,8 +9,14 @@ namespace Chistovik.Native.Setup;
 /// </summary>
 public sealed class WindowsUninstaller : IUninstaller
 {
+    const int ErrorInstallAlreadyRunning = 1618;
+
     static readonly object UiLock = new();
     static bool _uiConfigured;
+
+    // Незавершённое удаление (по сроку оно не прерывается): пока оно идёт, новое не запускается, а отвечает «занято».
+    static readonly object BusyLock = new();
+    static Task? _busy;
 
     public int QueryMsiState(string productCode)
     {
@@ -21,20 +27,34 @@ public sealed class WindowsUninstaller : IUninstaller
     public UninstallOutcome RunMsi(string productCode, TimeSpan timeout)
     {
         ArgumentException.ThrowIfNullOrEmpty(productCode);
-        EnsureNoUi();
 
         // MsiConfigureProductEx блокирует поток и не прерывается; по сроку возвращаем TimedOut, а вызов доработает сам.
-        var work = Task.Factory.StartNew(
-            () => unchecked((int)Win32Setup.MsiConfigureProductEx(productCode, Win32Setup.InstallLevelDefault,
-                Win32Setup.InstallStateAbsent, "REBOOT=ReallySuppress")),
-            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        return work.Wait(timeout) ? new UninstallOutcome(work.Result, false) : new UninstallOutcome(0, true);
+        return Guarded(timeout, () => Task.Factory.StartNew(
+            () =>
+            {
+                EnsureNoUi(); // уровень интерфейса задаётся в том же потоке, что и вызов установщика
+                return new UninstallOutcome(unchecked((int)Win32Setup.MsiConfigureProductEx(productCode, Win32Setup.InstallLevelDefault,
+                    Win32Setup.InstallStateAbsent, "REBOOT=ReallySuppress")), false);
+            },
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default));
     }
 
     public UninstallOutcome RunExe(string exePath, string arguments, TimeSpan timeout)
     {
         ArgumentException.ThrowIfNullOrEmpty(exePath);
-        return ProcessRunner.Run(exePath, arguments, timeout);
+        return Guarded(timeout, () => ProcessRunner.Start(exePath, arguments));
+    }
+
+    static UninstallOutcome Guarded(TimeSpan timeout, Func<Task<UninstallOutcome>> start)
+    {
+        Task<UninstallOutcome> work;
+        lock (BusyLock)
+        {
+            if (_busy is { IsCompleted: false }) return new UninstallOutcome(ErrorInstallAlreadyRunning, false);
+            work = start();
+            _busy = work;
+        }
+        return work.Wait(timeout) ? work.GetAwaiter().GetResult() : new UninstallOutcome(0, true);
     }
 
     // Уровень интерфейса относится ко всему процессу: задаём один раз до первого вызова установщика.

@@ -55,8 +55,15 @@ internal static class Win32Setup
     }
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CreateProcessW")]
-    public static extern bool CreateProcess(string? application, string commandLine, IntPtr processAttributes, IntPtr threadAttributes,
+    public static extern bool CreateProcess(string? application, System.Text.StringBuilder commandLine, IntPtr processAttributes, IntPtr threadAttributes,
         bool inheritHandles, uint flags, IntPtr environment, string? currentDirectory, ref StartupInfo startup, out ProcessInformation info);
+
+    // hToken = NULL и inherit = false: блок только из системных переменных.
+    [DllImport("userenv.dll", SetLastError = true)]
+    public static extern bool CreateEnvironmentBlock(out IntPtr environment, IntPtr token, bool inherit);
+
+    [DllImport("userenv.dll", SetLastError = true)]
+    public static extern bool DestroyEnvironmentBlock(IntPtr environment);
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CreateJobObjectW")]
     public static extern IntPtr CreateJobObject(IntPtr attributes, string? name);

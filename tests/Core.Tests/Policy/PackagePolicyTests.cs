@@ -203,6 +203,44 @@ public class PackagePolicyTests
     }
 
     [Fact]
+    public void Every_ancestor_up_to_program_files_must_be_trusted()
+    {
+        const string nested = @"C:\Program Files\Foo\bin\uninst.exe";
+        var fs = new FakeFileSecurity().TrustFileAndDir(nested).Trust(@"C:\Program Files\Foo").UsersWritable(@"C:\Program Files\Foo");
+        AssertRefused(Policy(fs).Classify(MachineId("Foo"), Facts(quiet: "\"" + nested + "\" /S")), "exe-writable-dir");
+    }
+
+    [Fact]
+    public void Missing_ancestor_is_read_only_and_trusted_ancestors_pass()
+    {
+        const string nested = @"C:\Program Files\Foo\bin\uninst.exe";
+        var fs = new FakeFileSecurity().TrustFileAndDir(nested);
+        AssertRefused(Policy(fs).Classify(MachineId("Foo"), Facts(quiet: "\"" + nested + "\" /S")), "exe-writable-dir");
+
+        fs.Trust(@"C:\Program Files\Foo");
+        Assert.True(Policy(fs).Classify(MachineId("Foo"), Facts(quiet: "\"" + nested + "\" /S")).IsModifiable);
+    }
+
+    [Fact]
+    public void Silent_switch_is_not_added_to_a_command_with_its_own_arguments()
+    {
+        const string inno = @"C:\Program Files\Foo\unins000.exe";
+        var fs = Trusted(inno).Trust(@"C:\Program Files\Foo\unins000.dat");
+        AssertRefused(Policy(fs).Classify(MachineId("Foo"), Facts(uninstall: "\"" + inno + "\" /reinstall")), "exe-no-quiet");
+        AssertRefused(Policy(Trusted().Nsis(Exe)).Classify(MachineId("Foo"), Facts(uninstall: "\"" + Exe + "\" /modify")), "exe-no-quiet");
+    }
+
+    [Theory]
+    [InlineData(@"C:\Program Files\Python312\python.exe -c x")]
+    [InlineData(@"C:\Program Files\nodejs\node.exe -e x")]
+    [InlineData(@"C:\Program Files\Git\git-bash.exe x")]
+    public void Script_interpreters_in_trusted_directories_are_read_only(string cmd)
+    {
+        var exe = cmd[..(cmd.IndexOf(".exe", StringComparison.Ordinal) + 4)];
+        AssertRefused(Policy(Trusted(exe)).Classify(MachineId("Foo"), Facts(quiet: cmd)), "managed-by-launcher");
+    }
+
+    [Fact]
     public void Junction_to_outside_program_files_is_read_only()
     {
         var fs = Trusted();

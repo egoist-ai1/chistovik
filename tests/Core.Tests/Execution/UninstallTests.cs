@@ -287,6 +287,22 @@ public class UninstallTests
         Assert.Equal(StepState.Done, t.Journal.Get(op)!.Steps.Single().State);
     }
 
+    [Fact]
+    public void Undo_of_failed_uninstall_is_not_revertible_too()
+    {
+        var t = new TestEnv();
+        AddMsi(t);
+        t.Uninstaller.Outcome = new UninstallOutcome(1603, false);
+        var op = t.Uninstall(MsiId).OperationId!.Value;
+        var ops = t.Journal.AllOperations.Count;
+
+        var u = t.Undo(op);
+
+        Assert.False(u.Ok);
+        Assert.Equal(ResponseCodes.NotRevertible, u.Code);
+        Assert.Equal(ops, t.Journal.AllOperations.Count);
+    }
+
     // ---------- обрыв процесса ----------
 
     static void Crash(TestEnv t, string label, Action act)

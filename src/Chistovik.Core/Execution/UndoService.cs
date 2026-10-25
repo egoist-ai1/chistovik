@@ -40,7 +40,8 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
         }
 
         // Удаление программы возвращается только установкой заново: любой выполненный необратимый шаг закрывает откат всей операции.
-        if (view.Steps.Any(s => s.State == StepState.Done && !s.Revertible))
+        // Для удаления это верно и при неудаче: незавершённая попытка могла что-то удалить, откатывать нечем.
+        if (view.Summary.Kind == OperationKind.Uninstall || view.Steps.Any(s => s.State == StepState.Done && !s.Revertible))
             return Reject(req.Id, ResponseCodes.NotRevertible, "Эта операция необратима: программу можно вернуть только установкой заново");
 
         // ---- предпроход: только чтение ----

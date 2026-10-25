@@ -84,7 +84,9 @@ public sealed class AgentPipeServer(
             catch (OperationCanceledException) { return false; }
             catch (InvalidDataException e) { RejectedClients++; log?.Invoke("bad-frame:" + e.Message); }
             catch (IOException e) { log?.Invoke("io:" + e.Message); }
-            // повреждённый кадр или обрыв: сессия закрыта, ждём нового клиента до конца таймера
+            // повреждённый кадр или обрыв (в том числе во время долгого запроса): сессия закрыта, таймер простоя снова идёт,
+            // иначе агент с правами администратора остался бы ждать нового клиента бесконечно
+            idle.CancelAfter(idleTimeout);
         }
         return false;
     }

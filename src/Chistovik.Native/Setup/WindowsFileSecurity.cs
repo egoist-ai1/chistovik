@@ -16,7 +16,6 @@ public sealed class WindowsFileSecurity : IFileSecurity
 {
     const int MaxScanBytes = 2 * 1024 * 1024;
     static readonly byte[] NsisFirstHeader = [0xEF, 0xBE, 0xAD, 0xDE, .. "NullsoftInst"u8];
-    static readonly byte[] NsisBanner = "Nullsoft Install System"u8.ToArray();
 
     static readonly FileFacts Missing = new(false, false, null, null, []);
 
@@ -62,7 +61,8 @@ public sealed class WindowsFileSecurity : IFileSecurity
             read += n;
         }
         var span = buf.AsSpan(0, read);
-        return span.IndexOf(NsisFirstHeader) >= 0 || span.IndexOf(NsisBanner) >= 0;
+        // Только сигнатура первого заголовка NSIS: надпись «Nullsoft Install System» встречается и в посторонних файлах.
+        return span.IndexOf(NsisFirstHeader) >= 0;
     }
 
     static string FinalPath(SafeFileHandle h)
