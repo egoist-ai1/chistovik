@@ -1,0 +1,292 @@
+[
+  {
+    "id": "onedrive",
+    "title": "OneDrive",
+    "names": ["OneDrive", "OneDriveSetup"],
+    "files": ["OneDrive.exe"],
+    "role": "role-cloud-sync",
+    "what": "Облачное хранилище Microsoft: синхронизирует выбранные папки с вашей учётной записью.",
+    "why": "Нужен, если вы храните файлы в OneDrive и хотите видеть их на других устройствах.",
+    "ifRemoved": "Синхронизация остановится, пока вы не откроете OneDrive вручную. Файлы на диске останутся на месте."
+  },
+  {
+    "id": "dropbox",
+    "title": "Dropbox",
+    "names": ["Dropbox*"],
+    "files": ["Dropbox.exe"],
+    "role": "role-cloud-sync",
+    "what": "Клиент облачного хранилища Dropbox.",
+    "why": "Нужен, чтобы изменения в папке Dropbox сразу попадали в облако и на другие устройства.",
+    "ifRemoved": "Файлы перестанут синхронизироваться, пока вы не запустите Dropbox. Сами файлы не пропадут."
+  },
+  {
+    "id": "google-drive",
+    "title": "Google Диск",
+    "names": ["GoogleDriveFS", "Google Drive"],
+    "files": ["GoogleDriveFS.exe"],
+    "role": "role-cloud-sync",
+    "what": "Клиент Google Диска для компьютера.",
+    "why": "Нужен, чтобы файлы Google Диска были доступны как обычные папки и обновлялись сами.",
+    "ifRemoved": "Диск станет доступен только после ручного запуска клиента. Данные в облаке не затрагиваются."
+  },
+  {
+    "id": "yandex-disk",
+    "title": "Яндекс Диск",
+    "names": ["YandexDisk*"],
+    "files": ["YandexDisk2.exe", "YandexDisk.exe"],
+    "role": "role-cloud-sync",
+    "what": "Клиент облачного хранилища Яндекс Диск.",
+    "why": "Нужен для автоматической синхронизации папки Яндекс Диска.",
+    "ifRemoved": "Синхронизация начнётся только после ручного запуска клиента. Файлы на диске и в облаке сохранятся."
+  },
+  {
+    "id": "steam",
+    "title": "Steam",
+    "names": ["Steam"],
+    "files": ["steam.exe"],
+    "role": "role-game-launcher",
+    "what": "Клиент Steam: магазин, библиотека игр, чат с друзьями.",
+    "why": "Нужен, если вы хотите, чтобы игры обновлялись и друзья видели вас в сети сразу после входа в Windows.",
+    "ifRemoved": "Steam не запустится сам. Игры продолжат работать, когда вы откроете Steam вручную."
+  },
+  {
+    "id": "epic-games",
+    "title": "Epic Games Launcher",
+    "names": ["EpicGamesLauncher"],
+    "files": ["EpicGamesLauncher.exe"],
+    "role": "role-game-launcher",
+    "what": "Клиент магазина и библиотеки игр Epic Games.",
+    "why": "Нужен для автоматического обновления игр Epic и показа бесплатных раздач.",
+    "ifRemoved": "Лаунчер откроется только по вашей команде. Установленные игры не пострадают."
+  },
+  {
+    "id": "battle-net",
+    "title": "Battle.net",
+    "names": ["Battle.net"],
+    "files": ["Battle.net.exe"],
+    "role": "role-game-launcher",
+    "what": "Клиент Battle.net от Blizzard для игр и обновлений.",
+    "why": "Нужен, чтобы игры Blizzard обновлялись в фоне и вы были в сети сразу после входа.",
+    "ifRemoved": "Клиент запустится только вручную. Игры останутся установленными."
+  },
+  {
+    "id": "discord",
+    "title": "Discord",
+    "names": ["Discord"],
+    "files": [],
+    "role": "role-tray",
+    "what": "Мессенджер Discord для голосового и текстового общения.",
+    "why": "Нужен, если вы хотите получать сообщения сразу после входа в Windows.",
+    "ifRemoved": "Discord не откроется сам. Сообщения придут после ручного запуска, учётная запись не пострадает."
+  },
+  {
+    "id": "spotify",
+    "title": "Spotify",
+    "names": ["Spotify", "SpotifyWebHelper"],
+    "files": ["Spotify.exe"],
+    "role": "role-tray",
+    "what": "Приложение музыкального сервиса Spotify.",
+    "why": "Нужно, если музыка должна играть сразу после входа или управляться с клавиатуры.",
+    "ifRemoved": "Spotify не запустится сам. Откроете вручную, и всё будет как раньше."
+  },
+  {
+    "id": "telegram",
+    "title": "Telegram",
+    "names": ["Telegram*"],
+    "files": ["Telegram.exe"],
+    "role": "role-tray",
+    "what": "Настольное приложение Telegram.",
+    "why": "Нужно, чтобы уведомления о сообщениях приходили сразу после входа в Windows.",
+    "ifRemoved": "Telegram откроется только вручную. До этого уведомления на этом компьютере приходить не будут."
+  },
+  {
+    "id": "teams",
+    "title": "Microsoft Teams",
+    "names": ["Teams", "com.squirrel.Teams.Teams"],
+    "files": ["Teams.exe"],
+    "role": "role-tray",
+    "what": "Программа для звонков и чатов Microsoft Teams.",
+    "why": "Нужна, если вы работаете или учитесь в Teams и хотите быть на связи с момента входа.",
+    "ifRemoved": "Teams не откроется сам. Запустите вручную перед встречей."
+  },
+  {
+    "id": "zoom",
+    "title": "Zoom",
+    "names": ["ZoomOpener", "Zoom"],
+    "files": ["Zoom.exe"],
+    "role": "role-tray",
+    "what": "Клиент видеоконференций Zoom.",
+    "why": "Нужен, если вам часто звонят в Zoom и важно сразу принимать приглашения.",
+    "ifRemoved": "Zoom откроется по ссылке на встречу или вручную. Учётная запись не пострадает."
+  },
+  {
+    "id": "skype",
+    "title": "Skype",
+    "names": ["Skype*"],
+    "files": ["Skype.exe"],
+    "role": "role-tray",
+    "what": "Мессенджер Skype для звонков и переписки.",
+    "why": "Нужен, если вы ждёте звонки и сообщения сразу после входа.",
+    "ifRemoved": "Skype не запустится сам. Звонки и сообщения придут после ручного запуска."
+  },
+  {
+    "id": "viber",
+    "title": "Viber",
+    "names": ["Viber"],
+    "files": ["Viber.exe"],
+    "role": "role-tray",
+    "what": "Настольное приложение мессенджера Viber.",
+    "why": "Нужно, чтобы сообщения приходили на компьютер сразу после входа.",
+    "ifRemoved": "Viber откроется только вручную. История переписки сохранится."
+  },
+  {
+    "id": "whatsapp",
+    "title": "WhatsApp",
+    "names": ["WhatsApp"],
+    "files": ["WhatsApp.exe"],
+    "role": "role-tray",
+    "what": "Настольное приложение мессенджера WhatsApp.",
+    "why": "Нужно, чтобы сообщения приходили на компьютер сразу после входа.",
+    "ifRemoved": "WhatsApp откроется только вручную. Переписка в телефоне не затрагивается."
+  },
+  {
+    "id": "qbittorrent",
+    "title": "qBittorrent",
+    "names": ["qBittorrent"],
+    "files": ["qbittorrent.exe"],
+    "role": "role-tray",
+    "what": "Торрент-клиент qBittorrent.",
+    "why": "Нужен, если раздачи и закачки должны продолжаться с момента входа в Windows.",
+    "ifRemoved": "Закачки и раздачи начнутся только после ручного запуска. Список торрентов сохранится."
+  },
+  {
+    "id": "ccleaner",
+    "title": "CCleaner",
+    "names": ["CCleaner*"],
+    "files": ["CCleaner64.exe", "CCleaner.exe"],
+    "role": "role-tray",
+    "what": "Утилита очистки CCleaner в области уведомлений.",
+    "why": "Нужна только если вы хотите, чтобы она напоминала об очистке и следила за браузерами.",
+    "ifRemoved": "Очистка запускается вручную. Настройки программы остаются."
+  },
+  {
+    "id": "adobe-creative-cloud",
+    "title": "Adobe Creative Cloud",
+    "names": ["Adobe Creative Cloud", "AdobeCreativeCloud"],
+    "files": ["Creative Cloud.exe"],
+    "role": "role-tray",
+    "what": "Приложение Adobe Creative Cloud: установка и обновление программ Adobe, облачные файлы.",
+    "why": "Нужно, если вы пользуетесь программами Adobe и хотите, чтобы облачные библиотеки были готовы сразу.",
+    "ifRemoved": "Приложение откроется только вручную или вместе с программой Adobe. Установленные программы работают."
+  },
+  {
+    "id": "edge-autolaunch",
+    "title": "Предзапуск Microsoft Edge",
+    "names": ["MicrosoftEdgeAutoLaunch*"],
+    "files": [],
+    "role": "role-tray",
+    "what": "Запускает Microsoft Edge в фоне при входе, чтобы браузер открывался быстрее.",
+    "why": "Ускоряет первое открытие Edge. Если вы пользуетесь другим браузером, выгоды нет.",
+    "ifRemoved": "Edge откроется чуть медленнее в первый раз. Закладки и пароли не затрагиваются."
+  },
+  {
+    "id": "itunes-helper",
+    "title": "iTunesHelper",
+    "names": ["iTunesHelper"],
+    "files": ["iTunesHelper.exe"],
+    "role": "role-tray",
+    "what": "Помощник iTunes: замечает подключение iPhone, iPad или iPod.",
+    "why": "Нужен только если вы часто подключаете устройства Apple и хотите, чтобы iTunes открывался сам.",
+    "ifRemoved": "iTunes не откроется при подключении устройства сам. Откроете его вручную."
+  },
+  {
+    "id": "google-update",
+    "title": "Обновление Google",
+    "names": ["Google Update", "GoogleUpdateCore"],
+    "files": ["GoogleUpdate.exe"],
+    "role": "role-updater",
+    "what": "Служебная запись для обновления программ Google, например Chrome.",
+    "why": "Нужна только для проверки новых версий. Работе уже установленных программ она не нужна.",
+    "ifRemoved": "Программы Google будут обновляться реже. Проверяйте обновления в самих программах."
+  },
+  {
+    "id": "adobe-updater",
+    "title": "Обновление Adobe",
+    "names": ["AdobeAAMUpdater*", "Adobe ARM", "AdobeAAMUpdater-1.0"],
+    "files": ["AdobeARM.exe", "AdobeUpdater.exe"],
+    "role": "role-updater",
+    "what": "Проверяет обновления Adobe Reader, Acrobat и других программ Adobe.",
+    "why": "Нужна только для проверки новых версий.",
+    "ifRemoved": "Программы Adobe не будут обновляться сами. Обновляйте их из меню справки."
+  },
+  {
+    "id": "java-update",
+    "title": "Обновление Java",
+    "names": ["SunJavaUpdateSched"],
+    "files": ["jusched.exe"],
+    "role": "role-updater",
+    "what": "Планировщик обновлений Java.",
+    "why": "Нужен только для проверки новых версий Java.",
+    "ifRemoved": "Java не будет обновляться сама. Новые версии придётся ставить вручную."
+  },
+  {
+    "id": "security-health",
+    "title": "Безопасность Windows",
+    "names": ["SecurityHealth", "Windows Defender", "WindowsDefender"],
+    "files": ["SecurityHealthSystray.exe"],
+    "role": "role-security",
+    "what": "Значок и уведомления службы «Безопасность Windows».",
+    "why": "Показывает состояние защиты и предупреждает о проблемах.",
+    "ifRemoved": "Вы перестанете видеть предупреждения защиты. Эту запись программа не даёт менять."
+  },
+  {
+    "id": "antivirus-ui",
+    "title": "Антивирус",
+    "names": ["Avast*", "AVG*", "Kaspersky*", "ESET*", "Norton*", "McAfee*"],
+    "files": ["avp.exe", "AvastUI.exe", "avgui.exe", "egui.exe", "NortonSecurity.exe"],
+    "role": "role-security",
+    "what": "Интерфейс и фоновая часть стороннего антивируса.",
+    "why": "Показывает состояние защиты и принимает ваши решения по угрозам.",
+    "ifRemoved": "Защита может перестать работать с момента входа. Менять эту запись без причины не стоит."
+  },
+  {
+    "id": "realtek-audio",
+    "title": "Звук Realtek",
+    "names": ["RtkAudUService", "RtHDVCpl", "RTHDVCPL", "RtHDVBg", "RAVBg64", "RAVCpl64", "Realtek*"],
+    "files": ["RtkAudUService64.exe", "RAVBg64.exe", "RAVCpl64.exe", "RtkNGUI64.exe"],
+    "role": "role-device-helper",
+    "what": "Фоновая часть и панель управления звуковой карты Realtek.",
+    "why": "Нужна для настроек звука и автоматического выбора устройств (наушники, колонки).",
+    "ifRemoved": "Звук обычно продолжает работать, но настройки и автопереключение устройств могут пропасть."
+  },
+  {
+    "id": "intel-graphics",
+    "title": "Графика Intel",
+    "names": ["IgfxTray", "HotKeysCmds", "Persistence"],
+    "files": ["igfxtray.exe", "hkcmd.exe", "igfxpers.exe"],
+    "role": "role-device-helper",
+    "what": "Фоновые компоненты встроенной графики Intel: значок, сочетания клавиш, сохранение настроек экрана.",
+    "why": "Нужны, чтобы настройки экрана (поворот, яркость, режимы) сохранялись между сеансами.",
+    "ifRemoved": "Экран работает, но часть настроек может сбрасываться после перезагрузки."
+  },
+  {
+    "id": "touchpad",
+    "title": "Тачпад",
+    "names": ["SynTPEnh", "ETDCtrl", "Elantech*"],
+    "files": ["SynTPEnh.exe", "ETDCtrl.exe", "ETDService.exe"],
+    "role": "role-device-helper",
+    "what": "Фоновая часть драйвера тачпада (Synaptics или Elan): жесты и настройки.",
+    "why": "Нужна для жестов, прокрутки двумя пальцами и отключения тачпада при подключении мыши.",
+    "ifRemoved": "Тачпад работает как простая мышь, часть жестов может пропасть."
+  },
+  {
+    "id": "razer-synapse",
+    "title": "Razer Synapse",
+    "names": ["Razer Synapse*", "RazerCentral*"],
+    "files": ["RazerCentral.exe", "Razer Synapse 3.exe"],
+    "role": "role-device-helper",
+    "what": "Программа настройки мышей, клавиатур и наушников Razer: подсветка и макросы.",
+    "why": "Нужна, если вы используете профили, макросы и подсветку устройств Razer.",
+    "ifRemoved": "Устройства работают с последними сохранёнными настройками на самом устройстве, макросы и подсветка по профилям пропадут."
+  }
+]

@@ -42,7 +42,7 @@ public sealed class InventoryProgramsSource(IRegistryReader reader) : IProgramsS
 /// не классифицируются: считаются изменяемыми, если идентификатор допустим.
 /// </summary>
 public sealed class RegistryStartupSource(IRegistryReader reg, IFileSystem fs, string? userStartupDir, string? commonStartupDir,
-    StartupPolicy? policy = null, IFileTrust? trust = null)
+    StartupPolicy? policy = null, IFileTrust? trust = null, Func<string, bool>? fileExists = null)
     : IStartupSource
 {
     const string Run = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
@@ -75,8 +75,8 @@ public sealed class RegistryStartupSource(IRegistryReader reg, IFileSystem fs, s
         {
             var id = $"run:{idPart}:{name}";
             var command = raw?.ToString() ?? "";
-            var (cls, rule) = Classify(id, command, readSignature: true);
-            into.Add(Make(id, name, command, origin, IsEnabled(approved, name), cls, rule));
+            var (cls, rule, facts) = Classify(id, command, readSignature: true);
+            into.Add(Make(id, name, command, origin, IsEnabled(approved, name), cls, rule, facts));
         }
     }
 
@@ -99,36 +99,47 @@ public sealed class RegistryStartupSource(IRegistryReader reg, IFileSystem fs, s
             if (file.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
             var id = $"folder:{idPart}:{file}";
             // Цель ярлыка App не разбирает (это делает слой Native у агента): подсказка строится по пути самого файла.
-            var (cls, rule) = Classify(id, path, readSignature: false);
-            into.Add(Make(id, file, path, origin, IsEnabled(approved, file), cls, rule));
+            var (cls, rule, facts) = Classify(id, path, readSignature: false);
+            into.Add(Make(id, file, path, origin, IsEnabled(approved, file), cls, rule, facts));
         }
     }
 
+    /// <summary>Факты о файле запуска: путь, есть ли он, подпись. null — не выяснено.</summary>
+    readonly record struct FileFacts(string? ExePath, bool? FileMissing, bool? SignatureValid, bool? MicrosoftSigned);
+
     /// <summary>Класс записи по политике; идентификатор, который нельзя передать агенту, это «только чтение».</summary>
-    (Changeability Class, string Rule) Classify(string id, string command, bool readSignature)
+    (Changeability Class, string Rule, FileFacts Facts) Classify(string id, string command, bool readSignature)
     {
         if (!IsValidId(id) || !StartupEntryId.TryParse(id, out var entry, out _))
-            return (Changeability.ReadOnly, ReasonTexts.StartupBadId);
-        if (policy is null) return (Changeability.Modifiable, "");
+            return (Changeability.ReadOnly, ReasonTexts.StartupBadId, default);
+        if (policy is null) return (Changeability.Modifiable, "", default);
 
         var sig = new SignatureFacts(false, false);
-        if (readSignature && trust is not null && policy.TryResolveCommand(command, out var exe, out _))
-            sig = trust.GetSignature(exe);
+        FileFacts facts = default;
+        if (readSignature && policy.TryResolveCommand(command, out var exe, out _))
+        {
+            bool? missing = fileExists is null ? null : !fileExists(exe);
+            if (trust is not null && missing != true) sig = trust.GetSignature(exe);
+            facts = new FileFacts(exe, missing,
+                trust is not null && missing != true ? sig.Valid : null,
+                trust is not null && missing != true ? sig.MicrosoftSigned : null);
+        }
         var (cls, _, rule) = policy.Classify(entry, command, sig);
         return (cls switch
         {
             ChangeClass.Modifiable => Changeability.Modifiable,
             ChangeClass.Forbidden => Changeability.Forbidden,
             _ => Changeability.ReadOnly,
-        }, rule);
+        }, rule, facts);
     }
 
-    static StartupInfo Make(string id, string name, string command, string origin, bool enabled, Changeability cls, string rule)
+    static StartupInfo Make(string id, string name, string command, string origin, bool enabled, Changeability cls, string rule, FileFacts facts)
     {
         var canToggle = cls == Changeability.Modifiable;
         // Идентификатор, который агенту не передать, наружу не отдаётся.
         var entryId = rule == ReasonTexts.StartupBadId ? "" : id;
-        return new StartupInfo(entryId, name, command, origin, enabled, canToggle, canToggle ? null : ReasonTexts.Explain(rule), cls, rule);
+        return new StartupInfo(entryId, name, command, origin, enabled, canToggle, canToggle ? null : ReasonTexts.Explain(rule), cls, rule,
+            facts.ExePath, facts.FileMissing, facts.SignatureValid, facts.MicrosoftSigned);
     }
 
     static bool IsValidId(string id) => id.Length <= 300 && !id.Any(c => c < ' ' || c == '\u007f');

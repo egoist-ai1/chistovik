@@ -10,6 +10,7 @@
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Ideal" RenderOptions.ClearTypeHint="Enabled">
     <Window.Resources>
         <DataTemplate DataType="{x:Type vm:OverviewViewModel}"><views:OverviewView/></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:CleanupViewModel}"><views:CleanupView/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:ProgramsViewModel}"><views:ProgramsView/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:StartupViewModel}"><views:StartupView/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:JournalViewModel}"><views:JournalView/></DataTemplate>

@@ -69,7 +69,7 @@ public static class CompositionRoot
             Startup = new RegistryStartupSource(registry, new DirectoryFileSystem(),
                 Environment.GetFolderPath(Environment.SpecialFolder.Startup),
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup),
-                new StartupPolicy(ctx), trust),
+                new StartupPolicy(ctx), trust, File.Exists),
             Journal = new JournalSource(CreateJournalReader),
             Services = new ScmServiceSource(new WindowsServiceControl(), registry, Installed, trust, new ServicePolicy(ctx)),
             Tasks = new SchedulerTaskSource(new WindowsTaskScheduler(), new TaskPolicy(ctx)),

@@ -1,0 +1,536 @@
+{
+  "services": [
+    {
+      "name": "RetailDemo",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Служба демонстрационного режима для витринных компьютеров в магазинах.",
+      "why": "На домашнем и рабочем компьютере не используется.",
+      "ifRemoved": "Ничего не изменится: демонстрационный режим вам не нужен.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "WMPNetworkSvc",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Общий доступ к библиотеке проигрывателя Windows Media по сети (DLNA).",
+      "why": "Нужна, только если вы раздаёте музыку и видео с этого компьютера на телевизор или колонки через проигрыватель Windows Media.",
+      "ifRemoved": "Устройства в сети перестанут видеть медиатеку проигрывателя. Сам проигрыватель работает.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "RemoteRegistry",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Позволяет другим компьютерам по сети читать и менять реестр этого компьютера.",
+      "why": "Домашним пользователям не нужна, а открытый удалённый доступ к реестру увеличивает риск.",
+      "ifRemoved": "Удалённо управлять реестром станет нельзя. Для обычной работы это не требуется.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "Fax",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Служба отправки и приёма факсов через модем.",
+      "why": "Нужна только если к компьютеру подключён факс-модем.",
+      "ifRemoved": "Отправить факс из Windows будет нельзя. Печать и сканирование не затрагиваются.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "DiagTrack",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "«Функциональные возможности для подключённых пользователей и телеметрия»: собирает данные о работе Windows и отправляет их в Microsoft.",
+      "why": "Нужна Microsoft для диагностики и статистики. Для работы вашего компьютера не требуется.",
+      "ifRemoved": "Windows перестанет отправлять диагностические данные через эту службу. На работу системы это не влияет.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "dmwappushservice",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Маршрутизация push-сообщений WAP: принимает служебные сообщения для управления устройством и телеметрии.",
+      "why": "На обычном компьютере используется в основном телеметрией.",
+      "ifRemoved": "Служебные push-сообщения не будут обрабатываться. Работа компьютера не изменится.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "WerSvc",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Служба отчётов об ошибках Windows: собирает сведения о сбоях программ и предлагает отправить их в Microsoft.",
+      "why": "Помогает Microsoft и разработчикам находить причины сбоев.",
+      "ifRemoved": "Отчёты о сбоях не формируются и не отправляются. Искать причину сбоя программы будет сложнее.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "MapsBroker",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Диспетчер скачанных карт: обновляет офлайн-карты для приложения «Карты».",
+      "why": "Нужна, только если вы пользуетесь офлайн-картами Windows.",
+      "ifRemoved": "Скачанные карты перестанут обновляться. Остальное не затрагивается.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "lfsvc",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Служба геолокации: определяет местоположение компьютера для приложений.",
+      "why": "Нужна погоде, картам и другим программам, которые используют ваше местоположение.",
+      "ifRemoved": "Приложения не смогут определить, где вы находитесь, и спросят город вручную.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "XblAuthManager",
+      "verdict": "Optional",
+      "risk": "Medium",
+      "what": "Диспетчер проверки подлинности Xbox Live: входит в учётную запись Xbox.",
+      "why": "Нужен играм из Microsoft Store, Game Pass и приложению Xbox.",
+      "ifRemoved": "Игры, требующие входа в Xbox, могут не запуститься или не сохранить прогресс. Если вы играете в такие игры, оставьте службу.",
+      "reasons": ["role-game-launcher"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "XblGameSave",
+      "verdict": "Optional",
+      "risk": "Medium",
+      "what": "Сохранения игр Xbox Live: синхронизирует прогресс игр с облаком.",
+      "why": "Нужна играм из Microsoft Store и Game Pass для облачных сохранений.",
+      "ifRemoved": "Прогресс таких игр не будет синхронизироваться между устройствами.",
+      "reasons": ["role-game-launcher"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "XboxNetApiSvc",
+      "verdict": "Optional",
+      "risk": "Medium",
+      "what": "Сетевая служба Xbox Live: помогает играм соединяться с серверами Xbox.",
+      "why": "Нужна сетевым играм Xbox и Microsoft Store.",
+      "ifRemoved": "Сетевые функции игр Xbox могут перестать работать.",
+      "reasons": ["role-game-launcher"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "XboxGipSvc",
+      "verdict": "Optional",
+      "risk": "Medium",
+      "what": "Служба аксессуаров Xbox: управляет подключёнными геймпадами и гарнитурами Xbox.",
+      "why": "Нужна, если вы используете устройства Xbox на этом компьютере.",
+      "ifRemoved": "Геймпады и гарнитуры Xbox могут определяться хуже или не определяться.",
+      "reasons": ["role-game-launcher"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "Spooler",
+      "verdict": "Optional",
+      "risk": "Medium",
+      "what": "Диспетчер печати: ставит документы в очередь и отправляет их на принтер.",
+      "why": "Нужен для любой печати, включая сохранение в PDF через «Microsoft Print to PDF».",
+      "ifRemoved": "Печать перестанет работать. Если принтеров у вас нет и PDF не печатаете, можно отключить.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "SSDPSRV",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Обнаружение SSDP: находит в сети устройства Plug and Play, например телевизоры и медиасерверы.",
+      "why": "Нужно, если вы подключаетесь к устройствам в домашней сети по UPnP.",
+      "ifRemoved": "Устройства UPnP в сети могут перестать находиться автоматически.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "upnphost",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Узел универсальных PnP-устройств: позволяет размещать на компьютере UPnP-устройства.",
+      "why": "Нужен редким программам, которые сами выступают UPnP-устройством.",
+      "ifRemoved": "Такие программы потеряют часть функций. Обычная работа не затрагивается.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "SharedAccess",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Общий доступ к подключению к интернету (ICS): раздача интернета другим устройствам.",
+      "why": "Нужна, если вы раздаёте интернет с этого компьютера, например через мобильный хот-спот.",
+      "ifRemoved": "Раздать интернет с этого компьютера не получится.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "TermService",
+      "verdict": "Optional",
+      "risk": "Medium",
+      "what": "Службы удалённых рабочих столов: принимают входящие подключения по RDP.",
+      "why": "Нужна, чтобы подключаться к этому компьютеру из другого места.",
+      "ifRemoved": "Подключиться к компьютеру по RDP станет нельзя. Если вы так не работаете, отключение уменьшает риск.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "wisvc",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Служба программы предварительной оценки Windows (Windows Insider).",
+      "why": "Нужна только участникам программы Insider.",
+      "ifRemoved": "Предварительные сборки Windows получать не получится. Обычные обновления не затрагиваются.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "SCardSvr",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Смарт-карта: даёт доступ к считывателям смарт-карт и токенов.",
+      "why": "Нужна, если вы входите в систему или подписываете документы смарт-картой или USB-токеном.",
+      "ifRemoved": "Смарт-карты и токены перестанут читаться.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "gupdate",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Служба Google Update: проверяет обновления программ Google, например Chrome.",
+      "why": "Нужна, чтобы браузер и другие программы Google обновлялись сами.",
+      "ifRemoved": "Программы Google будут обновляться реже: проверяйте обновления вручную, иначе могут остаться незакрытые уязвимости.",
+      "reasons": ["role-updater"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "gupdatem",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Служба Google Update (вторая): проверяет обновления программ Google.",
+      "why": "Нужна, чтобы программы Google обновлялись сами.",
+      "ifRemoved": "Обновления придётся проверять вручную, иначе могут остаться незакрытые уязвимости.",
+      "reasons": ["role-updater"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "AdobeARMservice",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Служба обновления Adobe Acrobat и Reader.",
+      "why": "Нужна для автоматических обновлений программ Adobe.",
+      "ifRemoved": "Acrobat и Reader не будут обновляться сами. Обновляйте их из меню справки.",
+      "reasons": ["role-updater"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "AdobeUpdateService",
+      "verdict": "Optional",
+      "risk": "Low",
+      "what": "Служба обновления программ Adobe Creative Cloud.",
+      "why": "Нужна для автоматических обновлений программ Adobe.",
+      "ifRemoved": "Программы Adobe не будут обновляться сами. Обновления ставятся из приложения Creative Cloud.",
+      "reasons": ["role-updater"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "WSearch",
+      "verdict": "Keep",
+      "risk": "Medium",
+      "what": "Windows Search: ведёт индекс файлов и почты для быстрого поиска.",
+      "why": "Нужна, чтобы поиск в меню «Пуск» и в Проводнике работал быстро.",
+      "ifRemoved": "Поиск станет медленным и будет искать только по именам. Выгода от отключения невелика.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "SysMain",
+      "verdict": "Keep",
+      "risk": "Low",
+      "what": "SysMain (бывший Superfetch): заранее загружает в память часто используемые программы.",
+      "why": "Ускоряет запуск привычных программ, особенно на жёстком диске.",
+      "ifRemoved": "Программы могут запускаться чуть медленнее. На SSD разница небольшая, но и вред от службы обычно мал.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "PcaSvc",
+      "verdict": "Keep",
+      "risk": "Low",
+      "what": "Помощник по совместимости программ: замечает проблемы старых программ и предлагает настройки.",
+      "why": "Помогает запускать старые программы в современной Windows.",
+      "ifRemoved": "Windows перестанет предлагать исправления для несовместимых программ.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "WpnService",
+      "verdict": "Keep",
+      "risk": "Medium",
+      "what": "Служба push-уведомлений Windows: доставляет уведомления приложениям.",
+      "why": "Нужна для всплывающих уведомлений от приложений и самой системы.",
+      "ifRemoved": "Уведомления от приложений перестанут приходить.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "TabletInputService",
+      "verdict": "Keep",
+      "risk": "Medium",
+      "what": "Служба сенсорной клавиатуры и панели рукописного ввода.",
+      "why": "Нужна для экранной клавиатуры, рукописного ввода и части эмодзи-панели.",
+      "ifRemoved": "Экранная клавиатура и рукописный ввод могут перестать работать, даже если сенсорного экрана нет.",
+      "reasons": [],
+      "wuMayRevert": false
+    }
+  ],
+  "tasks": [
+    {
+      "name": "\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Собирает сведения об установленных программах и драйверах и отправляет их Microsoft для оценки совместимости.",
+      "why": "Нужна для подготовки к крупным обновлениям Windows. На повседневную работу не влияет.",
+      "ifRemoved": "Сведения собираться не будут. Перед большим обновлением системы Windows может создать их заново.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Обновляет данные совместимости программ и отправляет сведения об их использовании.",
+      "why": "Нужна Microsoft для статистики. Вашему компьютеру не требуется.",
+      "ifRemoved": "Данные совместимости обновляться не будут. Работа программ не изменится.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Задача Программы улучшения качества ПО: собирает и отправляет сведения о том, как вы используете Windows.",
+      "why": "Нужна Microsoft для статистики. Для вашей работы не требуется.",
+      "ifRemoved": "Сведения об использовании Windows перестанут отправляться.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Отправляет Microsoft сведения об использовании USB-устройств в рамках Программы улучшения качества ПО.",
+      "why": "Нужна Microsoft для статистики. Для вашей работы не требуется.",
+      "ifRemoved": "Сведения об USB-устройствах перестанут отправляться. Подключение устройств не затрагивается.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Собирает данные о состоянии дисков и отправляет их в Microsoft.",
+      "why": "Нужна Microsoft для статистики о дисках. Состояние ваших дисков она не улучшает.",
+      "ifRemoved": "Данные о дисках перестанут отправляться. Диски работают как прежде.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient*",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Задачи обратной связи Windows: запрашивают вашу оценку системы и отправляют ответы.",
+      "why": "Нужны Microsoft для опросов. На работу системы не влияют.",
+      "ifRemoved": "Windows перестанет просить оценить систему и отправлять отзывы.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Windows Error Reporting\\QueueReporting",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Отправляет в Microsoft накопленные отчёты об ошибках программ.",
+      "why": "Нужна Microsoft и разработчикам для разбора сбоев.",
+      "ifRemoved": "Накопленные отчёты не будут отправляться. Сами сбои программ это не затрагивает.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Autochk\\Proxy",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Собирает данные о работе проверки диска при загрузке (autochk) для телеметрии.",
+      "why": "Нужна Microsoft для статистики. Саму проверку диска не выполняет.",
+      "ifRemoved": "Статистика перестанет собираться. Проверка дисков при загрузке работает как прежде.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Maps\\MapsUpdateTask",
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Обновляет скачанные офлайн-карты Windows.",
+      "why": "Нужна, только если вы пользуетесь офлайн-картами.",
+      "ifRemoved": "Скачанные карты не будут обновляться.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Application Experience\\StartupAppTask",
+      "verdict": "Keep",
+      "risk": "Low",
+      "what": "Проверяет программы автозагрузки и сообщает о тех, что замедляют вход в Windows.",
+      "why": "Помогает заметить программы, которые тормозят запуск.",
+      "ifRemoved": "Windows перестанет сообщать о медленных программах автозагрузки.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Servicing\\StartComponentCleanup",
+      "verdict": "Keep",
+      "risk": "Medium",
+      "what": "Очищает устаревшие компоненты Windows после обновлений.",
+      "why": "Освобождает место на диске и держит хранилище компонентов в порядке.",
+      "ifRemoved": "Старые компоненты будут копиться, и занятое место станет расти.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\.NET Framework\\*",
+      "verdict": "Keep",
+      "risk": "Medium",
+      "what": "Компилирует сборки .NET заранее, чтобы программы на .NET запускались быстрее.",
+      "why": "Ускоряет запуск программ, написанных на .NET.",
+      "ifRemoved": "Программы на .NET могут запускаться медленнее.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\SystemRestore\\SR",
+      "verdict": "Keep",
+      "risk": "High",
+      "what": "Создаёт точки восстановления системы по расписанию.",
+      "why": "Позволяет вернуть Windows в прежнее состояние после неудачной установки или обновления.",
+      "ifRemoved": "Автоматические точки восстановления перестанут создаваться, откатить систему станет труднее.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Device Setup\\Metadata Refresh",
+      "verdict": "Keep",
+      "risk": "Low",
+      "what": "Обновляет сведения об устройствах: названия и значки в окне «Устройства».",
+      "why": "Нужна, чтобы подключённые устройства выглядели в Windows правильно.",
+      "ifRemoved": "Названия и значки новых устройств могут отображаться по-простому.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\MicrosoftEdgeUpdateTaskMachine*",
+      "verdict": "Keep",
+      "risk": "Medium",
+      "what": "Задача обновления Microsoft Edge и компонента WebView2.",
+      "why": "Держит браузер и WebView2 в актуальном состоянии. Многие программы используют WebView2.",
+      "ifRemoved": "Edge и WebView2 не будут обновляться сами, и могут остаться незакрытые уязвимости. Edge чинит эти задачи сам.",
+      "reasons": ["role-updater"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\UpdateOrchestrator\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи оркестратора обновлений Windows: запускают поиск и установку обновлений.",
+      "why": "Без них Windows не получает обновления безопасности.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\WindowsUpdate\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи Центра обновления Windows.",
+      "why": "Без них Windows не получает обновления безопасности.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\WaaSMedic\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи службы медицинского обслуживания обновлений: чинят сам Центр обновления.",
+      "why": "Без них поломка обновлений не исправится.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Windows Defender\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи Microsoft Defender: проверки, очистка и обслуживание защиты.",
+      "why": "Поддерживают работу встроенной защиты компьютера.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": ["role-security"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Chkdsk\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи проверки дисков.",
+      "why": "Помогают находить и исправлять ошибки файловой системы.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Time Synchronization\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи синхронизации времени.",
+      "why": "Неверное время ломает вход на сайты, обновления и сертификаты.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": [],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\BitLocker\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи шифрования дисков BitLocker.",
+      "why": "Обслуживают защиту данных на дисках.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": ["role-security"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\TPM\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи доверенного платформенного модуля (TPM).",
+      "why": "Обслуживают хранение ключей и вход по Windows Hello.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": ["role-security"],
+      "wuMayRevert": false
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Shell\\*",
+      "verdict": "Protected",
+      "risk": "High",
+      "what": "Задачи оболочки Windows: меню «Пуск», индексация, значки.",
+      "why": "Нужны для нормальной работы рабочего стола и поиска.",
+      "ifRemoved": "Не меняется: эти задачи защищены.",
+      "reasons": [],
+      "wuMayRevert": false
+    }
+  ]
+}

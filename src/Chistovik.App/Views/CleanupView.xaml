@@ -1,0 +1,233 @@
+<UserControl x:Class="Chistovik.App.Views.CleanupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ctl="clr-namespace:Chistovik.App.Controls"
+             xmlns:views="clr-namespace:Chistovik.App.Views">
+    <UserControl.Resources>
+        <Style x:Key="CleanupRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}"/>
+        </Style>
+
+        <!-- Кнопка-фильтр: выбранная имеет лаймовую рамку и заливку, подпись «выбрано» читают программы экрана -->
+        <Style x:Key="ChipButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Padding" Value="12,4"/>
+            <Setter Property="FontSize" Value="{DynamicResource FsSm}"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentTintBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Подпись блока в подробностях: моноширинная, прописными -->
+        <Style x:Key="BlockLabel" TargetType="TextBlock" BasedOn="{StaticResource Eyebrow}">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Margin" Value="0,18,0,6"/>
+        </Style>
+        <Style x:Key="BlockText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="22"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="{DynamicResource PageMargin}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}"
+                       AutomationProperties.HeadingLevel="Level1"/>
+            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Subtle}" Margin="0,6,0,16" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <views:PageBanner Grid.Row="1"/>
+
+        <!-- Фильтры: поиск, область, совет -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,8" Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
+            <WrapPanel Margin="0,0,0,2">
+                <TextBox Style="{StaticResource SearchBox}" Width="320" Margin="0,0,12,8" Tag="Поиск по названию или описанию"
+                         Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="Поиск в списке чистки"/>
+                <Button Style="{StaticResource SecondaryButton}" Content="Сканировать заново" Margin="0,0,0,8"
+                        Command="{Binding ReloadCommand}" AutomationProperties.Name="Сканировать систему заново"/>
+            </WrapPanel>
+            <ItemsControl ItemsSource="{Binding AreaChips}" Focusable="False" AutomationProperties.Name="Фильтр по области">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource ChipButton}" Content="{Binding Label}"
+                                Command="{Binding DataContext.AreaCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding Key}"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl ItemsSource="{Binding VerdictChips}" Focusable="False" AutomationProperties.Name="Фильтр по совету">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource ChipButton}" Content="{Binding Label}"
+                                Command="{Binding DataContext.VerdictCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding Key}"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding StatusText}" Style="{StaticResource Subtle}" Margin="2,0,0,0"/>
+        </StackPanel>
+
+        <!-- Список слева, подробности справа -->
+        <Grid Grid.Row="3" Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="230"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="3*" MinWidth="280"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource Card}" Padding="0">
+                <Grid>
+                    <ListBox Style="{StaticResource PlainList}" ItemsSource="{Binding Items}"
+                             SelectedItem="{Binding Selected, Mode=TwoWay}"
+                             ItemContainerStyle="{StaticResource CleanupRow}"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                             ScrollViewer.CanContentScroll="True" KeyboardNavigation.TabNavigation="Once"
+                             AutomationProperties.Name="Список объектов">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid MinHeight="58" Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,12,0" VerticalAlignment="Center"
+                                            Background="{Binding VerdictHue, Converter={StaticResource Hue}, ConverterParameter=Tint}">
+                                        <ctl:Icon Kind="{Binding VerdictIcon}" Size="18" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Foreground="{Binding VerdictHue, Converter={StaticResource Hue}}"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" FontWeight="Medium"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Style="{StaticResource Subtle}" FontSize="{DynamicResource FsXs}" TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding AreaText, Mode=OneWay}"/><Run Text="  ·  "/><Run Text="{Binding VerdictText, Mode=OneWay}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Text="Ничего не подошло под поиск и фильтры. Сбросьте фильтр «Всё» или очистите поиск."
+                               Style="{StaticResource Subtle}" Margin="20" VerticalAlignment="Top"
+                               Visibility="{Binding NothingMatches, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0" AutomationProperties.Name="Подробности объекта">
+                <Grid>
+                    <TextBlock Text="Выберите объект слева, чтобы прочитать, что это и что будет, если его убрать."
+                               Style="{StaticResource Subtle}" Margin="24" VerticalAlignment="Top"
+                               Visibility="{Binding NoSelection, Converter={StaticResource BoolToVis}}"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False"
+                                  Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Margin="24,22,24,24" DataContext="{Binding Selected}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="48" Height="48" CornerRadius="14" Margin="0,0,16,0" VerticalAlignment="Top"
+                                        Background="{Binding VerdictHue, Converter={StaticResource Hue}, ConverterParameter=Tint}">
+                                    <ctl:Icon Kind="{Binding VerdictIcon}" Size="26" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Foreground="{Binding VerdictHue, Converter={StaticResource Hue}}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" FontSize="{DynamicResource FsLg}"
+                                               AutomationProperties.HeadingLevel="Level2"/>
+                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource MonoText}" Margin="0,4,0,0"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="{DynamicResource FsXs}"
+                                               TextWrapping="Wrap" TextTrimming="None"
+                                               Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}"/>
+                                    <WrapPanel Margin="0,12,0,0">
+                                        <Border CornerRadius="11" Padding="10,4" BorderThickness="1" Margin="0,0,10,6"
+                                                Background="{Binding VerdictHue, Converter={StaticResource Hue}, ConverterParameter=Tint}"
+                                                BorderBrush="{Binding VerdictHue, Converter={StaticResource Hue}, ConverterParameter=Line}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <ctl:Icon Kind="{Binding VerdictIcon}" Size="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                          Foreground="{Binding VerdictHue, Converter={StaticResource Hue}}"/>
+                                                <TextBlock Text="{Binding VerdictText}" FontWeight="SemiBold" FontSize="{DynamicResource FsXs}"
+                                                           Foreground="{Binding VerdictHue, Converter={StaticResource Hue}}"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource Pill}" Margin="0,0,10,6"><TextBlock Text="{Binding AreaText}"/></Border>
+                                        <Border Style="{StaticResource Pill}" Margin="0,0,10,6"><TextBlock Text="{Binding RiskText}"/></Border>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="ЧТО ЭТО" Style="{StaticResource BlockLabel}"/>
+                            <TextBlock Text="{Binding WhatIsIt}" Style="{StaticResource BlockText}"/>
+                            <TextBlock Text="ЗАЧЕМ НУЖНО" Style="{StaticResource BlockLabel}"/>
+                            <TextBlock Text="{Binding WhyNeeded}" Style="{StaticResource BlockText}"/>
+                            <TextBlock Text="ЧТО БУДЕТ, ЕСЛИ УБРАТЬ" Style="{StaticResource BlockLabel}"/>
+                            <TextBlock Text="{Binding IfRemoved}" Style="{StaticResource BlockText}"/>
+                            <TextBlock Text="КАК ВЕРНУТЬ" Style="{StaticResource BlockLabel}"/>
+                            <TextBlock Text="{Binding HowToUndo}" Style="{StaticResource BlockText}"/>
+                            <TextBlock Text="{Binding ReversibilityText}" Style="{StaticResource Subtle}" Margin="0,6,0,0"/>
+
+                            <TextBlock Text="ПОЧЕМУ ТАКОЙ СОВЕТ" Style="{StaticResource BlockLabel}"/>
+                            <ItemsControl ItemsSource="{Binding Reasons}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="18"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="•" Foreground="{DynamicResource TextMutedBrush}"/>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Text}" Style="{StaticResource BlockText}" LineHeight="20"/>
+                                                <TextBlock Text="{Binding Evidence}" Style="{StaticResource MonoText}"
+                                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="{DynamicResource FsXs}"
+                                                           TextWrapping="Wrap" TextTrimming="None"
+                                                           Visibility="{Binding HasEvidence, Converter={StaticResource BoolToVis}}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="{Binding ConfidenceText, StringFormat=Уверенность: {0}}" Style="{StaticResource Subtle}"
+                                       Margin="0,4,0,0"/>
+
+                            <Border Margin="0,22,0,0" Padding="14,12" CornerRadius="{DynamicResource RadiusMd}"
+                                    Background="{DynamicResource Surface2Brush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ctl:Icon Kind="eye" Size="18" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,12,0"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding ClassText}" Style="{StaticResource Subtle}"
+                                               Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="2" Style="{StaticResource SecondaryButton}" Content="{Binding OpenText}"
+                                            Command="{Binding OpenCommand}" Margin="16,0,0,0" MinHeight="32" Padding="14,5"
+                                            Visibility="{Binding CanOpen, Converter={StaticResource BoolToVis}}"
+                                            AutomationProperties.Name="Открыть раздел, где этот объект можно менять"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

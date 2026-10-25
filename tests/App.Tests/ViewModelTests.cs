@@ -682,7 +682,7 @@ public class NavigationTests
         var vm = Create();
 
         Assert.Equal(
-            new[] { "Обзор", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат" },
+            new[] { "Обзор", "Чистка", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат" },
             vm.NavItems.Select(n => n.Title).ToArray());
         Assert.Equal(MainViewModel.ReleaseSections, vm.NavItems.Select(n => n.Title).ToArray());
     }

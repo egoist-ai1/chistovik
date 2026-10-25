@@ -5,10 +5,14 @@ namespace Chistovik.App.Models;
 public sealed record ProgramInfo(
     string Name, string Publisher, string Version, long SizeBytes, DateTime? InstalledOn, string Source);
 
-/// <summary>Запись автозагрузки. EntryId в формате протокола (run:hklm64:Имя, folder:user:файл) или пусто, если менять нельзя.</summary>
+/// <summary>
+/// Запись автозагрузки. EntryId в формате протокола (run:hklm64:Имя, folder:user:файл) или пусто, если менять нельзя.
+/// ExePath, FileMissing и подписи это факты для объяснений в «Чистке»: null значит «не выяснено», а не «нет».
+/// </summary>
 public sealed record StartupInfo(
     string EntryId, string Name, string Command, string Origin, bool Enabled, bool CanToggle, string? ReadOnlyReason,
-    Changeability Class = Changeability.Modifiable, string Rule = "");
+    Changeability Class = Changeability.Modifiable, string Rule = "",
+    string? ExePath = null, bool? FileMissing = null, bool? SignatureValid = null, bool? MicrosoftSigned = null);
 
 /// <summary>Класс объекта для интерфейса: подсказка App, окончательное решение принимает агент.</summary>
 public enum Changeability { Modifiable, ReadOnly, Forbidden }

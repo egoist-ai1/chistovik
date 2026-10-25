@@ -37,13 +37,14 @@ public sealed class MainViewModel : ObservableObject, INavigator
     /// </summary>
     public static readonly IReadOnlyList<string> ReleaseSections = new[]
     {
-        "Обзор", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат",
+        "Обзор", "Чистка", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат",
     };
 
     /// <summary>Значок и оттенок каждого раздела: имена из Themes/Icons.xaml и Themes/Tokens.xaml.</summary>
     public static readonly IReadOnlyDictionary<string, (string Icon, string Hue)> Looks = new Dictionary<string, (string, string)>
     {
         ["Обзор"] = ("home", "Lime"),
+        ["Чистка"] = ("trash", "Orange"),
         ["Инвентарь"] = ("package", "Pink"),
         ["Предпросмотр"] = ("eye", "Pink"),
         ["Выполнение"] = ("play", "Pink"),
@@ -87,6 +88,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         var items = new List<(string Title, string Group, Func<PageViewModel> F)>
         {
             ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings, this)),
+            ("Чистка", "", () => new CleanupViewModel(new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this)),
             ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),

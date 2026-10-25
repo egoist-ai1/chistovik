@@ -8,6 +8,7 @@ using Chistovik.Core.Ipc;
 namespace Chistovik.App.Views;
 
 public partial class OverviewView : UserControl { public OverviewView() { InitializeComponent(); } }
+public partial class CleanupView : UserControl { public CleanupView() { InitializeComponent(); } }
 public partial class ProgramsView : UserControl { public ProgramsView() { InitializeComponent(); } }
 public partial class StartupView : UserControl
 {

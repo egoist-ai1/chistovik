@@ -59,6 +59,7 @@ public static class SnapshotPlan
     public static readonly IReadOnlyList<SnapshotScreen> Screens = new SnapshotScreen[]
     {
         new("overview", "Обзор", OverviewStates),
+        new("cleanup", "Чистка", ListStates),
         new("programs", "Инвентарь", ListStates),
         new("startup", "Автозагрузка", ListAndChange),
         new("services", "Службы", ListAndChange),

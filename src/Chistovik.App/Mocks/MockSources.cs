@@ -47,6 +47,10 @@ public sealed class MockStartupSource : IStartupSource
             new("run:hku:Discord", "Discord", @"C:\Users\demo\AppData\Local\Discord\Update.exe --processStart Discord.exe", "Реестр, текущий пользователь", true, true, null),
             new("run:hklm64:Steam", "Steam", @"C:\Program Files (x86)\Steam\steam.exe -silent", "Реестр, все пользователи", true, true, null),
             new("folder:user:Telegram.lnk", "Telegram.lnk", @"C:\Users\demo\...\Startup\Telegram.lnk", "Папка автозагрузки, текущий пользователь", false, true, null),
+            new("run:hku:Skype", "Skype", @"C:\Program Files\Skype\Skype.exe /minimized", "Реестр, текущий пользователь", true, true, null,
+                Changeability.Modifiable, "", @"C:\Program Files\Skype\Skype.exe", true, null, null),
+            new("run:hklm64:SecurityHealth", "SecurityHealth", @"C:\Windows\System32\SecurityHealthSystray.exe", "Реестр, все пользователи", true, true, null,
+                Changeability.Modifiable, "", @"C:\Windows\System32\SecurityHealthSystray.exe", false, true, true),
             new("", "SetupHelper", @"C:\Setup\helper.exe", "Однократный запуск, все пользователи", true, false,
                 ReasonTexts.Explain(ReasonTexts.StartupRunOnce), Changeability.ReadOnly, ReasonTexts.StartupRunOnce),
         };
@@ -88,6 +92,8 @@ public sealed class MockServiceSource : IServiceSource
         IReadOnlyList<ServiceInfo> list = new List<ServiceInfo>
         {
             new("DemoUpdater", "Демо-служба обновления программы", StartMode.Automatic, Changeability.Modifiable, "Служба установленной программы", @"C:\Program Files\Demo\updater.exe"),
+            new("DiagTrack", "Функциональность для подключённых пользователей и телеметрия (демо)", StartMode.Automatic, Changeability.Modifiable, "", @"C:\Windows\System32\svchost.exe -k utcsvc -p"),
+            new("WSearch", "Windows Search (демо)", StartMode.Automatic, Changeability.Modifiable, "", @"C:\Windows\System32\SearchIndexer.exe /Embedding"),
             new("WinDefend", "Защитник Windows (демо)", StartMode.Automatic, Changeability.Forbidden, ReasonTexts.Explain("service-hardlist"), @"C:\Program Files\Windows Defender\MsMpEng.exe", "service-hardlist"),
         };
         return Task.FromResult(list);
@@ -101,6 +107,7 @@ public sealed class MockTaskSource : ITaskSource
         IReadOnlyList<TaskInfo> list = new List<TaskInfo>
         {
             new(@"\DemoUpdateTask", "DemoUpdateTask", true, Changeability.ReadOnly, ReasonTexts.Explain("task-exec-outside-roots"), @"C:\Program Files\Demo\update.exe /check", "task-exec-outside-roots"),
+            new(@"\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser", "Microsoft Compatibility Appraiser", true, Changeability.Modifiable, "", "Демо"),
             new(@"\Microsoft\Windows\Demo\Task", "Task", true, Changeability.Forbidden, ReasonTexts.Explain("task-protected-tree"), "Демо", "task-protected-tree"),
         };
         return Task.FromResult(list);
