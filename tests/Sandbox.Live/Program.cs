@@ -48,6 +48,7 @@ public static class Program
             SvcExe = o.Get("--svc-exe"),
             SvcSkipReason = o.Get("--svc-skip-reason"),
             SkipIdle = o.Has("--skip-idle"),
+            InstallersDir = o.Get("--installers"),
         };
         Directory.CreateDirectory(ctx.WorkDir);
         report.Pass("S0", "признак Sandbox", $"пользователь {Environment.UserName}, администратор: {Sids.IsAdmin()}");
@@ -62,6 +63,7 @@ public static class Program
             ("S5", S5Tasks.Run),
             ("S6", S6Journal.Run),
             ("S7", S7Agent.Run),
+            ("S9", S9Uninstall.Run),
         };
         var only = o.Get("--only")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var (name, run) in all)

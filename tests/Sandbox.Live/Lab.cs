@@ -48,6 +48,8 @@ sealed class LiveContext
     /// <summary>Почему нет подписанного тестового файла (пишет guest-run.ps1); попадает в ПРОПУСК S4.</summary>
     public string? SvcSkipReason { get; init; }
     public bool SkipIdle { get; init; }
+    /// <summary>Папка с установщиками для S9 (*.msi, *.exe); хост монтирует её на чтение.</summary>
+    public string? InstallersDir { get; init; }
 }
 
 /// <summary>Заранее заданные GUID (идентификаторы операций и новых схем питания), дальше обычные случайные.</summary>

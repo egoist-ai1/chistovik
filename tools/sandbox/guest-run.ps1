@@ -13,6 +13,7 @@ param(
   [string]$ReleaseDir = 'C:\Release',
   [string]$MsiDir = 'C:\Msi',
   [string]$ResultsDir = 'C:\Results',
+  [string]$InstallersDir = 'C:\Installers',
   [string]$Only = '',
   [switch]$SkipIdle,
   [switch]$SkipInstaller,
@@ -181,6 +182,7 @@ if ($svcExe) { $standArgs += @("--svc-exe", $svcExe) }
 if ($svcSkipReason) { $standArgs += @("--svc-skip-reason", $svcSkipReason) }
 if ($SkipIdle) { $standArgs += '--skip-idle' }
 if ($Only) { $standArgs += @('--only', $Only) }
+if (Test-Path -LiteralPath $InstallersDir) { $standArgs += @('--installers', $InstallersDir) }
 Log ('запуск стенда: ' + $stand)
 & $stand @standArgs 2>&1 | Tee-Object -FilePath (Join-Path $ResultsDir 'stand.log')
 $standCode = $LASTEXITCODE

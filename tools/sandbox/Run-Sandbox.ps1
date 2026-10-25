@@ -17,6 +17,10 @@
   Папка с Chistovik.Agent.exe и Chistovik.App.exe (publish-x64 релизной сборки).
 .PARAMETER MsiPath
   Необязательно: MSI для сценария 8 (установка/удаление в Sandbox).
+.PARAMETER InstallersDir
+  Необязательно: папка с установщиками для сценария 9 (удаление программ: *.msi и *.exe). Копируется в <ResultsDir>\installers и монтируется на чтение как C:\Installers.
+.PARAMETER Only
+  Необязательно: выполнить только перечисленные сценарии стенда (например S9 или S1,S2).
 .PARAMETER ResultsDir
   Куда Sandbox пишет results.json/results.md/логи. Путь только ASCII (без кириллицы). По умолчанию C:\Users\Public\ChistovikSandbox\<метка времени>.
 #>
@@ -25,6 +29,8 @@ param(
   [Parameter(Mandatory = $true)][string]$ReleaseDir,
   [string]$MsiPath = '',
   [string]$ResultsDir = '',
+  [string]$InstallersDir = '',
+  [string]$Only = '',
   [switch]$SkipIdle,
   [switch]$ProtectedClient,
   [switch]$Launch
@@ -62,6 +68,15 @@ if ($MsiPath) {
   Copy-Item -LiteralPath (Resolve-Path -LiteralPath $MsiPath).ProviderPath -Destination $msiDir -Force
 }
 
+$installersCopy = $null
+if ($InstallersDir) {
+  if (-not (Test-Path -LiteralPath $InstallersDir -PathType Container)) { throw "Не найдена папка установщиков: $InstallersDir" }
+  # Только установщики, без остальных файлов (fetch.txt и прочего).
+  $installersCopy = Join-Path $results 'installers'
+  New-Item -ItemType Directory -Force -Path $installersCopy | Out-Null
+  Get-ChildItem -LiteralPath $InstallersDir -File | Where-Object { $_.Extension -in '.msi', '.exe' } | Copy-Item -Destination $installersCopy -Force
+}
+
 # Токен: 32 случайных шестнадцатеричных символа.
 $bytes = New-Object byte[] 16
 $rng = New-Object Security.Cryptography.RNGCryptoServiceProvider
@@ -82,7 +97,10 @@ if ($msiDir) {
   $folders += (Folder $msiDir 'C:\Msi' $true)
 }
 
+if ($installersCopy) { $folders += (Folder $installersCopy 'C:\Installers' $true) }
+
 $guestArgs = "-Token $token"
+if ($Only) { $guestArgs += " -Only $Only" }
 if ($SkipIdle) { $guestArgs += ' -SkipIdle' }
 if (-not $msiDir) { $guestArgs += ' -SkipInstaller' }
 $protected = if ($ProtectedClient) { 'Enable' } else { 'Disable' }
