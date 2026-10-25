@@ -44,9 +44,10 @@ public sealed record PowerSchemeState(int V, bool Exists);
 
 /// <summary>
 /// UninstallRun. Scope всегда "machine" (HKCU агент не открывает), Arch "x64" | "x86" (представление реестра), Key — имя ключа ARP,
-/// Kind "msi" | "exe", ProductCode — GUID с фигурными скобками для msi.
+/// Kind "msi" | "exe", ProductCode — GUID с фигурными скобками для msi. Name — DisplayName на момент плана: после удаления записи ARP нет,
+/// а журналу нужно имя для человека (не участвует в решениях агента; в старых записях отсутствует).
 /// </summary>
-public sealed record UninstallTarget(string Scope, string Arch, string Key, string Kind, string? ProductCode);
+public sealed record UninstallTarget(string Scope, string Arch, string Key, string Kind, string? ProductCode, string? Name = null);
 
 /// <summary>UninstallRun. Installed: MSI — состояние продукта «установлен»; EXE — ключ ARP существует.</summary>
 public sealed record UninstallState(int V, bool Installed);

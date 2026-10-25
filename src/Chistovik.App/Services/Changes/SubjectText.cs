@@ -11,7 +11,7 @@ namespace Chistovik.App.Services.Changes;
 public static class SubjectText
 {
     /// <summary>Тема операции: имя записи автозагрузки, названия твиков, имя режима; незнакомое остаётся как есть.</summary>
-    public static string OfOperation(OperationKind kind, string? subject)
+    public static string OfOperation(OperationKind kind, string? subject, string? programName = null)
     {
         if (string.IsNullOrWhiteSpace(subject)) return "";
         // У отката тема та же, что у исходной операции, а вид другой: пробуем все форматы.
@@ -19,9 +19,13 @@ public static class SubjectText
             && StartupEntryId.TryParse(subject, out var id, out _))
             return id.Name;
 
-        // Удаление программы: тема это идентификатор записи («arp:machine:x64:ключ»); человеку нужен ключ записи.
-        if (kind == OperationKind.Uninstall && ArpId.TryParse(subject, out _, out _, out var arpKey))
-            return arpKey;
+        // Удаление программы: тема это идентификатор записи («arp:machine:x64:ключ»). Человеку нужно имя программы,
+        // которое агент записал в цель шага; в старых записях его нет, тогда показываем ключ записи.
+        if (kind == OperationKind.Uninstall)
+        {
+            if (!string.IsNullOrWhiteSpace(programName)) return programName;
+            if (ArpId.TryParse(subject, out _, out _, out var arpKey)) return arpKey;
+        }
 
         var catalog = TweakCatalog.Shared;
         if (kind is OperationKind.Tweaks or OperationKind.Undo)

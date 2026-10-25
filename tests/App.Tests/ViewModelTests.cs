@@ -677,12 +677,12 @@ public class NavigationTests
     static MainViewModel Create() => new(CompositionRoot.CreateDemo(new FakeDialogs()));
 
     [Fact]
-    public void Menu_has_only_release_0_1_sections_in_order()
+    public void Menu_has_only_release_sections_in_order()
     {
         var vm = Create();
 
         Assert.Equal(
-            new[] { "Обзор", "Чистка", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат" },
+            new[] { "Обзор", "Чистка", "Инвентарь", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат" },
             vm.NavItems.Select(n => n.Title).ToArray());
         Assert.Equal(MainViewModel.ReleaseSections, vm.NavItems.Select(n => n.Title).ToArray());
     }
@@ -692,11 +692,13 @@ public class NavigationTests
     {
         var vm = Create();
 
-        Assert.Contains(vm.AllNavItems, n => n.Title == "Инвентарь");
-        Assert.DoesNotContain(vm.NavItems, n => n.Group == "Программы");
-        Assert.Equal(new[] { "Режимы" }, vm.NavItems.Where(n => n.GroupStart).Select(n => n.Title).ToArray());
-        vm.Open("Инвентарь");
+        Assert.Contains(vm.AllNavItems, n => n.Title == "Предпросмотр");
+        Assert.DoesNotContain(vm.NavItems, n => n.Title == "Предпросмотр");
+        Assert.Equal(new[] { "Инвентарь", "Режимы" }, vm.NavItems.Where(n => n.GroupStart).Select(n => n.Title).ToArray());
+        vm.Open("Предпросмотр");
         Assert.Equal("Обзор", vm.SelectedNav!.Title);
+        vm.Open("Инвентарь");
+        Assert.Equal("Инвентарь", vm.SelectedNav!.Title);
         vm.Open("Журнал и откат");
         Assert.Equal("Журнал и откат", vm.SelectedNav!.Title);
     }

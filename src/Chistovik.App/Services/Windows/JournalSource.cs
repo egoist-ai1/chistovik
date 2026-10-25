@@ -1,6 +1,7 @@
 using System.IO;
 using Chistovik.App.Models;
 using Chistovik.App.Services.Changes;
+using Chistovik.Core.Execution;
 using Chistovik.Core.Journal;
 using Chistovik.Core.Ports;
 
@@ -24,8 +25,23 @@ public sealed class JournalSource(Func<IJournalReader> readerFactory, int pageSi
     public Task<IReadOnlyList<JournalOperation>> GetOperationsAsync() => Task.Run<IReadOnlyList<JournalOperation>>(() =>
     {
         using var lease = Open();
-        return lease.Reader.List(0, pageSize).Select(ToOperation).ToList();
+        return lease.Reader.List(0, pageSize).Select(s => ToOperation(s, ProgramName(lease.Reader, s))).ToList();
     });
+
+    /// <summary>Имя программы для удаления: агент записал его в цель шага до удаления (в старых записях его нет).</summary>
+    static string? ProgramName(IJournalReader reader, OperationSummary s)
+    {
+        if (s.Kind != OperationKind.Uninstall) return null;
+        try
+        {
+            var step = reader.Get(s.Id)?.Steps.OrderBy(x => x.Ord).FirstOrDefault(x => x.Kind == StepKind.UninstallRun);
+            return step is null ? null : StateJson.ParseUninstallTarget(step.TargetJson).Name;
+        }
+        catch (Exception e) when (e is InvalidDataException or JournalException)
+        {
+            return null;
+        }
+    }
 
     public Task<IReadOnlyList<JournalStep>> GetStepsAsync(Guid operationId) => Task.Run<IReadOnlyList<JournalStep>>(() =>
     {
@@ -46,12 +62,12 @@ public sealed class JournalSource(Func<IJournalReader> readerFactory, int pageSi
         public void Dispose() => (Reader as IDisposable)?.Dispose();
     }
 
-    public static JournalOperation ToOperation(OperationSummary s)
+    public static JournalOperation ToOperation(OperationSummary s, string? programName = null)
     {
         var when = s.CreatedUtc.ToLocalTime().DateTime;
         var reversible = s.Kind != OperationKind.Undo
             && s.State is OperationState.Done or OperationState.Partial or OperationState.PartiallyUndone;
-        var text = SubjectText.OfOperation(s.Kind, s.Subject);
+        var text = SubjectText.OfOperation(s.Kind, s.Subject, programName);
         var subject = text.Length == 0 ? "" : ": " + text;
         return new JournalOperation(s.Id, s.Kind, ResponseText.KindName(s.Kind) + subject, when, s.State,
             ResponseText.StateName(s.State), reversible, null);

@@ -152,14 +152,34 @@ internal static class UninstallPlanner
         if (!g.IsAllowed) return Refused(id, arch, key, Refusal.From(g));
 
         var c = g.Approved!.Command;
-        var step = new UninstallStep(new UninstallTarget("machine", arch, key, c.Kind, c.ProductCode));
+        var step = new UninstallStep(new UninstallTarget("machine", arch, key, c.Kind, c.ProductCode, JournalName(facts!.DisplayName)));
         return new OperationPlan(OperationKind.Uninstall, id.ToLowerInvariant(), [step]);
+    }
+
+    /// <summary>Имя для журнала: без управляющих символов и не длиннее 120 знаков; пустое остаётся null (тогда показывается ключ записи).</summary>
+    internal static string? JournalName(string? displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) return null;
+        // По символам Unicode (Rune), а не по UTF-16: обрезка не должна разрезать суррогатную пару; непарные суррогаты выбрасываются.
+        var sb = new System.Text.StringBuilder();
+        foreach (var r in displayName.EnumerateRunes())
+        {
+            if (r.Value == 0xFFFD || System.Text.Rune.IsControl(r)) continue;
+            if (System.Text.Rune.GetUnicodeCategory(r) == System.Globalization.UnicodeCategory.Format) continue;
+            sb.Append(r.ToString());
+        }
+        var clean = sb.ToString().Trim();
+        if (clean.Length == 0) return null;
+        if (clean.Length <= 120) return clean;
+        var cut = clean[..120];
+        if (char.IsHighSurrogate(cut[^1])) cut = cut[..^1];
+        return cut.TrimEnd();
     }
 
     // Отказ политики фиксируется как denied-шаг журнала с правилом (как у твиков): причина видна в ответе.
     static OperationPlan Refused(string id, string arch, string key, Refusal refusal)
     {
-        var step = new UninstallStep(new UninstallTarget("machine", arch, key, "exe", null)) { PresetRefusal = refusal };
+        var step = new UninstallStep(new UninstallTarget("machine", arch, key, "exe", null, null)) { PresetRefusal = refusal };
         return new OperationPlan(OperationKind.Uninstall, id.ToLowerInvariant(), [step]);
     }
 }

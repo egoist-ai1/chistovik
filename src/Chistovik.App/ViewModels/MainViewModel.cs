@@ -37,7 +37,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
     /// </summary>
     public static readonly IReadOnlyList<string> ReleaseSections = new[]
     {
-        "Обзор", "Чистка", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат",
+        "Обзор", "Чистка", "Инвентарь", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат",
     };
 
     /// <summary>Значок и оттенок каждого раздела: имена из Themes/Icons.xaml и Themes/Tokens.xaml.</summary>
@@ -89,7 +89,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
         {
             ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings, this)),
             ("Чистка", "", () => new CleanupViewModel(new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this, s.Changes, s.Dialogs)),
-            ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs)),
+            ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs, s.Changes, this)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),
             ("Карантин", "Программы", () => Ph("Карантин", "Удалённое ждёт здесь. Срок виден на каждой операции.")),
