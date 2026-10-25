@@ -68,7 +68,7 @@ public partial class ConfirmDialog : Window
         }
         OkButton.Content = content.ConfirmText;
         OkButton.SetResourceReference(StyleProperty, content.Danger ? "DangerButton" : "PrimaryButton");
-        OkButton.SetValue(System.Windows.Automation.AutomationProperties.NameProperty, content.ConfirmText + ": " + content.Title);
+        OkButton.SetValue(System.Windows.Automation.AutomationProperties.NameProperty, AccessibleName(content));
         if (content.Danger)
         {
             // Для опасных действий по умолчанию стоит «Отмена»: случайный Enter ничего не меняет.
@@ -81,6 +81,13 @@ public partial class ConfirmDialog : Window
         }
         Loaded += (_, _) => WindowStyling.FadeIn(Root);
     }
+
+    /// <summary>
+    /// Имя кнопки подтверждения для программ чтения с экрана. WPF считает «_» в имени кнопки маркером быстрой клавиши
+    /// и убирает его («Имя_файла» превращается в «Имяфайла»), поэтому каждый «_» удваивается.
+    /// </summary>
+    internal static string AccessibleName(ConfirmContent content)
+        => (content.ConfirmText + ": " + content.Title).Replace("_", "__");
 
     /// <summary>
     /// Делит текст на «что произойдёт» и «как вернуть»: всё после «Откуда вернуть:» уходит в отдельную панель.

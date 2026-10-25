@@ -51,7 +51,8 @@ public sealed class JournalSource(Func<IJournalReader> readerFactory, int pageSi
         var when = s.CreatedUtc.ToLocalTime().DateTime;
         var reversible = s.Kind != OperationKind.Undo
             && s.State is OperationState.Done or OperationState.Partial or OperationState.PartiallyUndone;
-        var subject = string.IsNullOrWhiteSpace(s.Subject) ? "" : ": " + s.Subject;
+        var text = SubjectText.OfOperation(s.Kind, s.Subject);
+        var subject = text.Length == 0 ? "" : ": " + text;
         return new JournalOperation(s.Id, s.Kind, ResponseText.KindName(s.Kind) + subject, when, s.State,
             ResponseText.StateName(s.State), reversible, null);
     }
@@ -59,7 +60,7 @@ public sealed class JournalSource(Func<IJournalReader> readerFactory, int pageSi
     public static JournalStep ToStep(StepRecord r)
     {
         var code = ResponseText.StepCodeName(r.Code);
-        var detail = r.TargetKey + (code.Length > 0 ? " · " + code : "");
+        var detail = SubjectText.OfTarget(r.TargetKey) + (code.Length > 0 ? " · " + code : "");
         return new JournalStep(r.Id, ResponseText.StepKindName(r.Kind), detail, r.State, ResponseText.StepStateName(r.State));
     }
 }

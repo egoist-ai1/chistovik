@@ -117,6 +117,11 @@
                                    Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}"/>
                         <ItemsControl ItemsSource="{Binding Steps}" Focusable="False"
                                       AutomationProperties.Name="Шаги операции">
+                            <ItemsControl.ItemContainerStyle>
+                                <Style TargetType="ContentPresenter">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}"/>
+                                </Style>
+                            </ItemsControl.ItemContainerStyle>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,0,0,12">

@@ -16,6 +16,9 @@ public abstract class PageViewModel : ObservableObject
 
     public string Title { get; }
     public string Subtitle { get; }
+
+    /// <summary>Вызывается, когда пользователь возвращается на уже открытый раздел: данные могли измениться снаружи.</summary>
+    public virtual void OnShown() { }
 }
 
 public sealed class PlaceholderViewModel : PageViewModel
@@ -60,6 +63,7 @@ public abstract class StatefulPageViewModel : PageViewModel
     private string _resultHint = "";
     private bool _busy;
     private CancellationTokenSource? _loadCts;
+    private bool _quietNext;
     private int _loadVersion;
     private int _loadedCount;
 
@@ -85,6 +89,14 @@ public abstract class StatefulPageViewModel : PageViewModel
 
     /// <summary>Перечитывает данные экрана.</summary>
     public abstract Task ReloadAsync();
+
+    /// <summary>Тихое обновление при возврате на экран: прежний список остаётся на месте, скелетон не показывается.</summary>
+    public override void OnShown()
+    {
+        if (_loadedCount == 0 || IsLoading || IsBusy) return;
+        _quietNext = true;
+        _ = ReloadAsync();
+    }
 
     // ----- состояние страницы -----
 
@@ -121,8 +133,13 @@ public abstract class StatefulPageViewModel : PageViewModel
         var cts = new CancellationTokenSource();
         _loadCts = cts;
         var version = ++_loadVersion;
-        State = PageState.Loading;
-        StateMessage = "Загружаем…";
+        var quiet = _quietNext && _loadedCount > 0;
+        _quietNext = false;
+        if (!quiet)
+        {
+            State = PageState.Loading;
+            StateMessage = "Загружаем…";
+        }
         CancelLoadCommand.RaiseCanExecuteChanged();
         try
         {
@@ -132,6 +149,10 @@ public abstract class StatefulPageViewModel : PageViewModel
             _loadedCount = count;
             if (count == 0) { StateMessage = emptyMessage; State = PageState.Empty; }
             else State = PageState.Ready;
+        }
+        catch (Exception) when (quiet && version == _loadVersion)
+        {
+            // Тихое обновление не вышло: остаётся прежний список, ошибку не показываем.
         }
         catch (OperationCanceledException) when (version == _loadVersion)
         {

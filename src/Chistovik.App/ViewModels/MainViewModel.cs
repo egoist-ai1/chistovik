@@ -174,7 +174,9 @@ public sealed class MainViewModel : ObservableObject, INavigator
         set
         {
             if (value is null || !SetProperty(ref _selectedNav, value)) return;
+            var revisit = value.Cached is not null;
             Current = value.Cached ??= value.Factory();
+            if (revisit) Current.OnShown();
             OnPropertyChanged(nameof(SelectedTitle));
         }
     }

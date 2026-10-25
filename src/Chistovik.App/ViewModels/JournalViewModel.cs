@@ -14,6 +14,8 @@ public sealed class JournalStepViewModel(JournalStep model)
     public StepState State => model.State;
     public bool IsDone => model.State is StepState.Done or StepState.Undone;
     public bool IsProblem => model.State is StepState.Failed or StepState.Denied or StepState.Pending;
+    public string AutomationName => $"{model.Title}, {model.StateText}, {model.Detail}";
+    public override string ToString() => AutomationName;
 }
 
 public sealed class JournalOperationViewModel

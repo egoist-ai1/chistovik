@@ -32,18 +32,50 @@ public static class ChangeabilityText
     public const string BusyTip = "Дождитесь окончания предыдущего изменения.";
 }
 
+/// <summary>
+/// Пользовательские экземпляры служб: в системе рядом с шаблоном «CDPUserSvc» живёт «CDPUserSvc_4b92f»
+/// с тем же отображаемым именем и случайным хвостом. Хвост человеку ничего не говорит.
+/// </summary>
+public static partial class PerUser
+{
+    [System.Text.RegularExpressions.GeneratedRegex(@"_[0-9a-fA-F]{4,8}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex Suffix();
+
+    /// <summary>Имя шаблона, если <paramref name="name"/> — пользовательский экземпляр вида «Имя_1a2b3»; иначе null.</summary>
+    public static string? TemplateName(string name)
+    {
+        var m = Suffix().Match(name);
+        return m.Success && m.Index > 0 ? name[..m.Index] : null;
+    }
+
+    /// <summary>Отображаемое имя без хвоста экземпляра: убирается только такой же хвост, что и в имени службы.</summary>
+    public static string CleanDisplayName(string name, string displayName)
+    {
+        var m = Suffix().Match(name);
+        if (!m.Success || m.Index == 0) return displayName;
+        return displayName.EndsWith(m.Value, StringComparison.OrdinalIgnoreCase) ? displayName[..^m.Value.Length] : displayName;
+    }
+
+    /// <summary>Убирает экземпляры, у которых в списке есть шаблон: на экране остаётся одна строка.</summary>
+    public static IReadOnlyList<ServiceInfo> CollapseInstances(IReadOnlyList<ServiceInfo> services)
+    {
+        var names = new HashSet<string>(services.Select(s => s.Name), StringComparer.OrdinalIgnoreCase);
+        return services.Where(s => TemplateName(s.Name) is not { } t || !names.Contains(t)).ToList();
+    }
+}
+
 public sealed class ServiceRowViewModel(ServiceInfo model) : IListRow
 {
     public ServiceInfo Model { get; } = model;
     public string Name => Model.Name;
-    public string DisplayName => Model.DisplayName;
+    public string DisplayName => PerUser.CleanDisplayName(Model.Name, Model.DisplayName);
     public string ClassText => Model.NoAccess ? "Нет доступа" : ChangeabilityText.Name(Model.Class);
     public string StartText => Model.NoAccess ? "Нет доступа" : ChangeabilityText.StartName(Model.Start);
     public Changeability Class => Model.Class;
     public string Reason => Model.Reason;
     public string ImagePath => Model.ImagePath;
     public string AutomationName => $"{DisplayName}, {StartText}, {ClassText}";
-    public string SearchText { get; } = $"{model.DisplayName} {model.Name} {model.ImagePath}";
+    public string SearchText { get; } = $"{PerUser.CleanDisplayName(model.Name, model.DisplayName)} {model.Name} {model.ImagePath}";
 
     /// <summary>Почему службу нельзя менять; пусто для изменяемых.</summary>
     public string NotChangeableText => ChangeabilityText.WhyNot(Class, Model.NoAccess, Reason);
@@ -131,7 +163,7 @@ public sealed class ServicesViewModel : ListPageViewModel<ServiceRowViewModel>
     {
         var data = await _source.GetServicesAsync(ct);
         ct.ThrowIfCancellationRequested();
-        SetRows(data.Select(x => new ServiceRowViewModel(x)));
+        SetRows(PerUser.CollapseInstances(data).Select(x => new ServiceRowViewModel(x)));
         return AllRows.Count;
     }, "Службы не найдены.");
 
