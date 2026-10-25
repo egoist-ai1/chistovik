@@ -13,7 +13,8 @@ public sealed record StartupSubject(
     string Id, string Name, string Command, string Origin, ChangeClass Class, string? ClassReason,
     string? ExePath = null, bool? FileMissing = null, bool? SignatureValid = null, bool? MicrosoftSigned = null);
 
-public sealed record ServiceSubject(string Name, string DisplayName, string ImagePath, ChangeClass Class, string? ClassReason);
+/// <param name="TriggerCount">Сколько триггеров запуска у службы (событие, устройство, сеть); больше нуля добавляет причину <c>trigger-start</c>.</param>
+public sealed record ServiceSubject(string Name, string DisplayName, string ImagePath, ChangeClass Class, string? ClassReason, int TriggerCount = 0);
 
 public sealed record TaskSubject(string Path, string Name, string Summary, ChangeClass Class, string? ClassReason);
 
@@ -146,7 +147,8 @@ public sealed class FindingClassifier
                 s.Class, "Службы");
 
         if (advice is not null)
-            return FromAdvice(id, FindingArea.Services, title, s.ImagePath, advice, s.Class, s.ClassReason, "Службы", StdUndoService);
+            return FromAdvice(id, FindingArea.Services, title, s.ImagePath, advice, s.Class, s.ClassReason, "Службы", StdUndoService,
+                s.TriggerCount > 0 ? ReasonCodes.Make(ReasonCodes.TriggerStart) : null);
 
         if (s.Class != ChangeClass.Modifiable)
             return Build(id, FindingArea.Services, title, s.ImagePath, VerdictKind.Unknown,
@@ -159,7 +161,8 @@ public sealed class FindingClassifier
                 s.Class, "Службы");
 
         return Build(id, FindingArea.Services, title, s.ImagePath, VerdictKind.Optional,
-            Reasons(PathReason(PathCode(s.ImagePath)), ReasonCodes.Make(ReasonCodes.ImpactUnknown)),
+            Reasons(PathReason(PathCode(s.ImagePath)), s.TriggerCount > 0 ? ReasonCodes.Make(ReasonCodes.TriggerStart) : null,
+                ReasonCodes.Make(ReasonCodes.ImpactUnknown)),
             Risk.Low, Reversibility.Undoable, Confidence.L3,
             new Explanation(
                 $"Служба «{title}» установленной программы.",
@@ -247,7 +250,7 @@ public sealed class FindingClassifier
     // ----- общее -----
 
     Finding FromAdvice(string id, FindingArea area, string title, string detail, ObjectAdvice a,
-        ChangeClass cls, string? classReason, string openIn, string undo)
+        ChangeClass cls, string? classReason, string openIn, string undo, Reason? extra = null)
     {
         var kind = Enum.Parse<VerdictKind>(a.Verdict);
         var risk = Enum.Parse<Risk>(a.Risk);
@@ -256,6 +259,7 @@ public sealed class FindingClassifier
         foreach (var code in a.Reasons) list.Add(ReasonCodes.Make(code));
         list.Add(ReasonCodes.Make(ReasonCodes.CatalogAdvice));
         if (a.WuMayRevert) list.Add(ReasonCodes.Make(ReasonCodes.WuMayRevert));
+        if (extra is not null) list.Add(extra);
         if (blocked)
             list.Add(ReasonCodes.Make(cls == ChangeClass.Forbidden ? ReasonCodes.ClassForbidden : ReasonCodes.ClassReadOnly, classReason));
 

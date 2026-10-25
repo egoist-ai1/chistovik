@@ -491,6 +491,62 @@ public class ServicesAndTasksViewModelTests
         Assert.Equal(@"\Vendor\B", req.TaskPath);
         Assert.False(req.Enabled);
     }
+
+    [Fact]
+    public async Task Carveout_service_allows_disable_and_downgrade_only_with_warning_text()
+    {
+        var agent = new FakeAgentClient();
+        var dialogs = new FakeDialogs();
+        var svc = new ServiceInfo("DiagTrack", "DiagTrack", StartMode.Automatic, Changeability.Modifiable, "r", @"C:\x.exe", "service-catalog-carveout");
+        var vm = new ServicesViewModel(new ServiceSrc(svc), Make.Changes(agent), dialogs);
+        await vm.Loaded;
+        vm.Selected = vm.Items[0];
+
+        Assert.False(vm.SetStartCommand.CanExecute("Automatic"));
+        Assert.False(vm.SetStartCommand.CanExecute("AutomaticDelayed"));
+        Assert.True(vm.SetStartCommand.CanExecute("Manual"));
+        Assert.True(vm.SetStartCommand.CanExecute("Disabled"));
+        await vm.SetStartAsync("AutomaticDelayed");
+        Assert.Empty(agent.Sent);
+
+        await vm.SetStartAsync("Disabled");
+        Assert.IsType<SetServiceStartRequest>(Assert.Single(agent.Sent));
+        Assert.Contains("не останавливает уже запущенную службу", dialogs.Confirms[0].Message);
+        Assert.Contains("Крупное обновление Windows", dialogs.Confirms[0].Message);
+    }
+
+    [Fact]
+    public async Task Carveout_service_cannot_go_manual_from_disabled()
+    {
+        var svc = new ServiceInfo("Fax", "Fax", StartMode.Disabled, Changeability.Modifiable, "r", @"C:\x.exe", "service-catalog-carveout");
+        var vm = new ServicesViewModel(new ServiceSrc(svc), Make.Changes(new FakeAgentClient()), new FakeDialogs());
+        await vm.Loaded;
+        vm.Selected = vm.Items[0];
+
+        Assert.False(vm.SetStartCommand.CanExecute("Manual"));
+    }
+
+    [Fact]
+    public async Task Carveout_task_can_be_disabled_but_never_enabled_directly()
+    {
+        var agent = new FakeAgentClient();
+        var task = new TaskInfo(@"\Microsoft\Windows\Maps\MapsUpdateTask", "MapsUpdateTask", false, Changeability.Modifiable, "r", "x.exe", "task-catalog-carveout");
+        var on = task with { Path = @"\Microsoft\Windows\Autochk\Proxy", Name = "Proxy", Enabled = true };
+        var vm = new TasksViewModel(new TaskSrc(task, on), Make.Changes(agent), new FakeDialogs());
+        await vm.Loaded;
+
+        vm.Selected = vm.Items.First(x => x.Name == "MapsUpdateTask");
+        Assert.False(vm.ShowEnableButton);
+        Assert.False(vm.SetEnabledCommand.CanExecute("on"));
+        await vm.SetEnabledAsync(true);
+        Assert.Empty(agent.Sent);
+
+        vm.Selected = vm.Items.First(x => x.Name == "Proxy");
+        Assert.True(vm.SetEnabledCommand.CanExecute("off"));
+        await vm.SetEnabledAsync(false);
+        var req = Assert.IsType<SetTaskEnabledRequest>(Assert.Single(agent.Sent));
+        Assert.False(req.Enabled);
+    }
 }
 
 public class JournalAndModesViewModelTests

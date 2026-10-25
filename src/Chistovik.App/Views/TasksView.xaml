@@ -118,6 +118,7 @@
                             ToolTip="{Binding ApplyTooltip}" ToolTipService.ShowOnDisabled="True"
                             Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
                     <Button Style="{StaticResource SecondaryButton}" Content="Включить" Margin="0,0,8,0"
+                            Visibility="{Binding ShowEnableButton, Converter={StaticResource BoolToVis}}"
                             Command="{Binding SetEnabledCommand}" CommandParameter="on"
                             AutomationProperties.Name="Включить задачу"/>
                     <Button Style="{StaticResource DangerButton}" Content="Выключить"

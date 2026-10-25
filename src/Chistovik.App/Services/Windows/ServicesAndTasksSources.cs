@@ -75,7 +75,7 @@ public sealed class ScmServiceSource : IServiceSource
         var mapped = Map(cls);
         var reason = ReasonTexts.ExplainOrKeep(mapped, rule, policyReason);
         if (mapped == Changeability.Modifiable && raw.TriggerCount > 0) reason += " (запускается по событию)";
-        return new ServiceInfo(name, display, ToPortStart(raw.StartType, raw.Delayed), mapped, reason, imageExpanded, rule);
+        return new ServiceInfo(name, display, ToPortStart(raw.StartType, raw.Delayed), mapped, reason, imageExpanded, rule, TriggerCount: raw.TriggerCount);
     }
 
     string DisplayNameOf(string name)
@@ -123,7 +123,8 @@ public sealed class ScmServiceSource : IServiceSource
 
 /// <summary>
 /// Задачи планировщика через COM (<see cref="ITaskScheduler"/>, в работе WindowsTaskScheduler; только чтение).
-/// Класс по <see cref="TaskPolicy"/>: «откат только собственного шага» для интерфейса это «только чтение».
+/// Класс по <see cref="TaskPolicy"/>: «откат только собственного шага» для интерфейса это «только чтение»,
+/// кроме задач каталога-исключения (<c>task-catalog-carveout</c>): их можно выключить.
 /// Задача, которую без прав прочитать нельзя, показывается как «нет доступа».
 /// </summary>
 public sealed class SchedulerTaskSource(ITaskScheduler scheduler, TaskPolicy policy) : ITaskSource
@@ -166,7 +167,9 @@ public sealed class SchedulerTaskSource(ITaskScheduler scheduler, TaskPolicy pol
         {
             ChangeClass.Modifiable => Changeability.Modifiable,
             ChangeClass.Forbidden => Changeability.Forbidden,
-            _ => Changeability.ReadOnly, // ReadOnly и RevertOnly: напрямую задачу не меняем
+            // Именованное исключение владельца: выключать можно (TaskInfo.DisableOnly запрещает включение напрямую).
+            ChangeClass.RevertOnly when rule == "task-catalog-carveout" => Changeability.Modifiable,
+            _ => Changeability.ReadOnly, // ReadOnly и остальной RevertOnly: напрямую задачу не меняем
         };
         return new TaskInfo(path, name, raw.Enabled, mapped, ReasonTexts.ExplainOrKeep(mapped, rule, policyReason), Summary(raw), rule);
     }

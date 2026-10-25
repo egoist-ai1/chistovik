@@ -29,6 +29,7 @@ public static class ReasonCodes
     public const string CatalogAdvice = "catalog-advice";
     public const string WuMayRevert = "wu-may-revert";
     public const string ImpactUnknown = "impact-unknown";
+    public const string TriggerStart = "trigger-start";
 
     // C2 и C3: очистка диска и записи реестра без файлов.
     public const string CacheRegenerable = "cache-regenerable";
@@ -65,6 +66,7 @@ public static class ReasonCodes
         [CatalogAdvice] = "Совет взят из встроенного каталога.",
         [WuMayRevert] = "Windows может вернуть настройку после обновления.",
         [ImpactUnknown] = "Влияние на время запуска не измерялось.",
+        [TriggerStart] = "Запускается по событию: отключение остановит и такие запуски.",
         [CacheRegenerable] = "Это кэш: программы создают его заново, когда он понадобится.",
         [EvidenceInstallDirMissing] = "Папки, куда программа была установлена, на диске нет.",
         [EvidenceUninstallerMissing] = "Файла удаления программы на диске нет, запустить его нечем.",

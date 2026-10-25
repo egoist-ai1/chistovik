@@ -24,11 +24,19 @@ public enum Changeability { Modifiable, ReadOnly, Forbidden }
 
 public sealed record ServiceInfo(
     string Name, string DisplayName, StartMode? Start, Changeability Class, string Reason, string ImagePath,
-    string Rule = "", bool NoAccess = false);
+    string Rule = "", bool NoAccess = false, int TriggerCount = 0)
+{
+    /// <summary>Служба из перечня исключений владельца: только «Отключить» или понижение с автозапуска на «Вручную».</summary>
+    public bool CarveOut => Rule == "service-catalog-carveout";
+}
 
 public sealed record TaskInfo(
     string Path, string Name, bool Enabled, Changeability Class, string Reason, string Summary,
-    string Rule = "", bool NoAccess = false);
+    string Rule = "", bool NoAccess = false)
+{
+    /// <summary>Задача из перечня исключений владельца: выключить можно, включить только откатом из журнала.</summary>
+    public bool DisableOnly => Rule == "task-catalog-carveout";
+}
 
 public sealed record JournalStep(long Id, string Title, string Detail, StepState State, string StateText);
 

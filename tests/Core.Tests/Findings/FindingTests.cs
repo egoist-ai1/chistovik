@@ -98,6 +98,45 @@ public sealed class AdviceCatalogTests
     }
 
     [Fact]
+    public void Controllable_flag_matches_policy_carveout_in_both_directions()
+    {
+        // Сторона 1: controllable только у точных имён из перечня исключений.
+        foreach (var s in Cat.Services.Where(s => s.Controllable))
+            Assert.True(ServicePolicy.CarveOut.Contains(s.Name), $"служба {s.Name}: controllable вне перечня исключений");
+        foreach (var t in Cat.Tasks.Where(t => t.Controllable))
+            Assert.True(TaskPolicy.CarveOutTasks.Contains(t.Name), $"задача {t.Name}: controllable вне перечня исключений");
+
+        // Сторона 2: каждый элемент перечня есть в каталоге с controllable.
+        foreach (var name in ServicePolicy.CarveOut)
+            Assert.True(Cat.FindService(name)?.Controllable == true, $"служба {name} не помечена controllable");
+        foreach (var path in TaskPolicy.CarveOutTasks)
+            Assert.True(Cat.Tasks.Any(t => t.Controllable && t.Name.Equals(path, StringComparison.OrdinalIgnoreCase)), $"задача {path} не помечена controllable");
+
+        // Остальные (Xbox, Spooler, SharedAccess, TermService) остаются только советами.
+        foreach (var name in new[] { "XblAuthManager", "Spooler", "SharedAccess", "TermService", "WSearch", "SysMain" })
+            Assert.False(Cat.FindService(name)!.Controllable, name);
+        Assert.Equal(ServicePolicy.CarveOut.Count, Cat.Services.Count(s => s.Controllable));
+        Assert.Equal(TaskPolicy.CarveOutTasks.Count, Cat.Tasks.Count(t => t.Controllable));
+    }
+
+    [Fact]
+    public void Parse_rejects_controllable_outside_carveout_and_incomplete_carveout()
+    {
+        const string spooler = """{"services":[{"name":"Spooler","controllable":true,"verdict":"Optional","risk":"Low","what":"a","why":"b","ifRemoved":"c","reasons":[]}],"tasks":[]}""";
+        const string wildcard = """{"services":[],"tasks":[{"name":"\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient*","controllable":true,"verdict":"Remove","risk":"Low","what":"a","why":"b","ifRemoved":"c","reasons":[]}]}""";
+        const string foreignTask = """{"services":[],"tasks":[{"name":"\\Vendor\\Task","controllable":true,"verdict":"Remove","risk":"Low","what":"a","why":"b","ifRemoved":"c","reasons":[]}]}""";
+        Assert.Throws<InvalidDataException>(() => AdviceCatalog.Parse(EmptyStartup, spooler));
+        Assert.Throws<InvalidDataException>(() => AdviceCatalog.Parse(EmptyStartup, wildcard));
+        Assert.Throws<InvalidDataException>(() => AdviceCatalog.Parse(EmptyStartup, foreignTask));
+
+        // Пустой каталог не содержит элементов перечня: обратная сторона проверки.
+        var ex = Assert.Throws<InvalidDataException>(() => AdviceCatalog.Parse(EmptyStartup, EmptyObjects));
+        Assert.Contains("controllable", ex.Message);
+        // Запись из перечня без controllable не засчитывается.
+        Assert.Throws<InvalidDataException>(() => AdviceCatalog.Parse(EmptyStartup, OneService("DiagTrack")));
+    }
+
+    [Fact]
     public void Parse_rejects_duplicates_and_bad_startup()
     {
         const string dup = """
@@ -302,7 +341,7 @@ public sealed class FindingClassifierTests
     [Fact]
     public void Service_in_catalog_keeps_advice_but_policy_class_is_untouched()
     {
-        // DiagTrack работает в общем svchost: политика сегодня даёт Forbidden. Совет остаётся, изменение недоступно.
+        // Класс приходит от политики и каталог его не меняет. Forbidden (как до исключения владельца) оставляет совет, но изменение недоступно.
         var blocked = C.Service(new ServiceSubject("DiagTrack", "Функциональные возможности для подключённых пользователей и телеметрия", @"C:\Windows\System32\svchost.exe -k utcsvc",
             ChangeClass.Forbidden, "Служба в общем процессе svchost"));
         Assert.Equal(VerdictKind.Remove, blocked.Verdict.Kind);
@@ -319,6 +358,31 @@ public sealed class FindingClassifierTests
         Assert.Equal(Reversibility.Undoable, open.Verdict.Reversibility);
         Assert.DoesNotContain("недоступно", open.Verdict.Headline);
         AssertComplete(open);
+    }
+
+    [Fact]
+    public void Service_with_triggers_gets_trigger_start_reason_only_when_triggers_exist()
+    {
+        var withTriggers = C.Service(new ServiceSubject("DiagTrack", "DiagTrack", "", ChangeClass.Modifiable, null, TriggerCount: 2));
+        var none = C.Service(new ServiceSubject("DiagTrack", "DiagTrack", "", ChangeClass.Modifiable, null));
+        Assert.Contains(withTriggers.Verdict.Reasons, r => r.Code == ReasonCodes.TriggerStart);
+        Assert.DoesNotContain(none.Verdict.Reasons, r => r.Code == ReasonCodes.TriggerStart);
+        Assert.Equal("Запускается по событию: отключение остановит и такие запуски.", ReasonCodes.TextOf(ReasonCodes.TriggerStart));
+        AssertComplete(withTriggers);
+
+        // Служба вне каталога тоже получает причину.
+        var generic = C.Service(new ServiceSubject("VendorSvc", "VendorSvc", @"C:\Program Files\V\a.exe", ChangeClass.Modifiable, null, TriggerCount: 1));
+        Assert.Contains(generic.Verdict.Reasons, r => r.Code == ReasonCodes.TriggerStart);
+    }
+
+    [Fact]
+    public void Carveout_task_with_modifiable_class_is_not_labelled_unavailable()
+    {
+        var f = C.Task(new TaskSubject(@"\Microsoft\Windows\Application Experience\ProgramDataUpdater", "ProgramDataUpdater", "", ChangeClass.Modifiable, null));
+        Assert.Equal(VerdictKind.Remove, f.Verdict.Kind);
+        Assert.DoesNotContain("недоступно", f.Verdict.Headline);
+        Assert.Equal(Reversibility.Undoable, f.Verdict.Reversibility);
+        AssertComplete(f);
     }
 
     [Fact]

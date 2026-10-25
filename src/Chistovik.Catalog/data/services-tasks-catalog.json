@@ -2,6 +2,7 @@
   "services": [
     {
       "name": "RetailDemo",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Служба демонстрационного режима для витринных компьютеров в магазинах.",
@@ -12,6 +13,7 @@
     },
     {
       "name": "WMPNetworkSvc",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Общий доступ к библиотеке проигрывателя Windows Media по сети (DLNA).",
@@ -22,6 +24,7 @@
     },
     {
       "name": "RemoteRegistry",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Позволяет другим компьютерам по сети читать и менять реестр этого компьютера.",
@@ -32,6 +35,7 @@
     },
     {
       "name": "Fax",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Служба отправки и приёма факсов через модем.",
@@ -42,6 +46,7 @@
     },
     {
       "name": "DiagTrack",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "«Функциональные возможности для подключённых пользователей и телеметрия»: собирает данные о работе Windows и отправляет их в Microsoft.",
@@ -52,6 +57,7 @@
     },
     {
       "name": "dmwappushservice",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Маршрутизация push-сообщений WAP: принимает служебные сообщения для управления устройством и телеметрии.",
@@ -62,6 +68,7 @@
     },
     {
       "name": "WerSvc",
+      "controllable": true,
       "verdict": "Optional",
       "risk": "Low",
       "what": "Служба отчётов об ошибках Windows: собирает сведения о сбоях программ и предлагает отправить их в Microsoft.",
@@ -72,6 +79,7 @@
     },
     {
       "name": "MapsBroker",
+      "controllable": true,
       "verdict": "Optional",
       "risk": "Low",
       "what": "Диспетчер скачанных карт: обновляет офлайн-карты для приложения «Карты».",
@@ -82,6 +90,7 @@
     },
     {
       "name": "lfsvc",
+      "controllable": true,
       "verdict": "Optional",
       "risk": "Low",
       "what": "Служба геолокации: определяет местоположение компьютера для приложений.",
@@ -182,18 +191,20 @@
     },
     {
       "name": "wisvc",
+      "controllable": true,
       "verdict": "Optional",
-      "risk": "Low",
+      "risk": "Medium",
       "what": "Служба программы предварительной оценки Windows (Windows Insider).",
       "why": "Нужна только участникам программы Insider.",
-      "ifRemoved": "Предварительные сборки Windows получать не получится. Обычные обновления не затрагиваются.",
+      "ifRemoved": "Предварительные сборки Windows получать не получится: если вы участник Insider, новые сборки перестанут приходить. Обычные обновления не затрагиваются.",
       "reasons": [],
-      "wuMayRevert": false
+      "wuMayRevert": true
     },
     {
       "name": "SCardSvr",
+      "controllable": true,
       "verdict": "Optional",
-      "risk": "Low",
+      "risk": "Medium",
       "what": "Смарт-карта: даёт доступ к считывателям смарт-карт и токенов.",
       "why": "Нужна, если вы входите в систему или подписываете документы смарт-картой или USB-токеном.",
       "ifRemoved": "Смарт-карты и токены перестанут читаться.",
@@ -294,6 +305,7 @@
   "tasks": [
     {
       "name": "\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Собирает сведения об установленных программах и драйверах и отправляет их Microsoft для оценки совместимости.",
@@ -304,6 +316,7 @@
     },
     {
       "name": "\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Обновляет данные совместимости программ и отправляет сведения об их использовании.",
@@ -314,6 +327,7 @@
     },
     {
       "name": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Задача Программы улучшения качества ПО: собирает и отправляет сведения о том, как вы используете Windows.",
@@ -324,6 +338,7 @@
     },
     {
       "name": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Отправляет Microsoft сведения об использовании USB-устройств в рамках Программы улучшения качества ПО.",
@@ -334,6 +349,7 @@
     },
     {
       "name": "\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Собирает данные о состоянии дисков и отправляет их в Microsoft.",
@@ -343,7 +359,19 @@
       "wuMayRevert": true
     },
     {
-      "name": "\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient*",
+      "name": "\\Microsoft\\Windows\\Feedback\\Siuf\\DmClient",
+      "controllable": true,
+      "verdict": "Remove",
+      "risk": "Low",
+      "what": "Задачи обратной связи Windows: запрашивают вашу оценку системы и отправляют ответы.",
+      "why": "Нужны Microsoft для опросов. На работу системы не влияют.",
+      "ifRemoved": "Windows перестанет просить оценить систему и отправлять отзывы.",
+      "reasons": ["role-telemetry"],
+      "wuMayRevert": true
+    },
+    {
+      "name": "\\Microsoft\\Windows\\Feedback\\Siuf\\DmClientOnScenarioDownload",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Задачи обратной связи Windows: запрашивают вашу оценку системы и отправляют ответы.",
@@ -354,6 +382,7 @@
     },
     {
       "name": "\\Microsoft\\Windows\\Windows Error Reporting\\QueueReporting",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Отправляет в Microsoft накопленные отчёты об ошибках программ.",
@@ -364,6 +393,7 @@
     },
     {
       "name": "\\Microsoft\\Windows\\Autochk\\Proxy",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Собирает данные о работе проверки диска при загрузке (autochk) для телеметрии.",
@@ -374,6 +404,7 @@
     },
     {
       "name": "\\Microsoft\\Windows\\Maps\\MapsUpdateTask",
+      "controllable": true,
       "verdict": "Remove",
       "risk": "Low",
       "what": "Обновляет скачанные офлайн-карты Windows.",

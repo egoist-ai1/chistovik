@@ -30,6 +30,11 @@ public sealed class ObjectAdvice
     public string IfRemoved { get; init; } = "";
     public string[] Reasons { get; init; } = [];
     public bool WuMayRevert { get; init; }
+    /// <summary>
+    /// Объект входит в именованное исключение владельца (<see cref="ServicePolicy.CarveOut"/> / <see cref="TaskPolicy.CarveOutTasks"/>)
+    /// и показывается как управляемый. Это пометка для интерфейса: права даёт только политика.
+    /// </summary>
+    public bool Controllable { get; init; }
 }
 
 sealed class ServicesTasksFile
@@ -87,6 +92,8 @@ public sealed class AdviceCatalog
         ValidateStartup(startup);
         ValidateObjects(st.Services, "службы", ServiceVerdicts, isTask: false);
         ValidateObjects(st.Tasks, "задачи", TaskVerdicts, isTask: true);
+        ValidateCarveOutComplete(st.Services, "службы", ServicePolicy.CarveOut);
+        ValidateCarveOutComplete(st.Tasks, "задачи", TaskPolicy.CarveOutTasks);
         return new AdviceCatalog(startup, st.Services, st.Tasks);
     }
 
@@ -186,6 +193,12 @@ public sealed class AdviceCatalog
                     throw Bad($"{w}: код причины «{code}» нельзя указывать в каталоге");
             if (a.Name.IndexOf('*') is var star && star >= 0 && star != a.Name.Length - 1)
                 throw Bad($"{w}: «*» допустима только в конце");
+            if (a.Controllable)
+            {
+                var carve = isTask ? TaskPolicy.CarveOutTasks : ServicePolicy.CarveOut;
+                if (a.Name.Contains('*') || !carve.Contains(a.Name))
+                    throw Bad($"{w}: controllable допустим только для точного имени из перечня исключений политики");
+            }
 
             if (isTask)
             {
@@ -200,6 +213,14 @@ public sealed class AdviceCatalog
                     throw Bad($"{w}: служба из списка «никогда не трогать»");
             }
         }
+    }
+
+    /// <summary>Каждый элемент перечня исключений должен быть в каталоге точной записью с controllable: иначе он невидим в интерфейсе.</summary>
+    static void ValidateCarveOutComplete(List<ObjectAdvice> list, string kind, IEnumerable<string> carveOut)
+    {
+        foreach (var name in carveOut)
+            if (!list.Any(a => a.Controllable && a.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                throw Bad($"{kind}: «{name}» входит в перечень исключений политики, но в каталоге нет записи с controllable");
     }
 
     static void Text(string? s, string field, string w)

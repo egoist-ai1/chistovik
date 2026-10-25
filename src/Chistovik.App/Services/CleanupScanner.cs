@@ -48,7 +48,7 @@ public sealed class CleanupScanner : ICleanupScanner
         s.EntryId, s.Name, s.Command, s.Origin, Map(s.Class), s.ReadOnlyReason ?? "",
         s.ExePath, s.FileMissing, s.SignatureValid, s.MicrosoftSigned);
 
-    internal static ServiceSubject ToSubject(ServiceInfo s) => new(s.Name, s.DisplayName, s.ImagePath, Map(s.Class), s.Reason);
+    internal static ServiceSubject ToSubject(ServiceInfo s) => new(s.Name, s.DisplayName, s.ImagePath, Map(s.Class), s.Reason, s.TriggerCount);
 
     internal static TaskSubject ToSubject(TaskInfo t) => new(t.Path, t.Name, t.Summary, Map(t.Class), t.Reason);
 

@@ -95,19 +95,19 @@
     },
     {
       "id": "wu-cleanup", "title": "Очистка обновлений Windows",
-      "description": "Размер неизвестен: очищается штатной очисткой диска Windows.",
+      "description": "Размер неизвестен: очищается штатной очисткой диска Windows. Чистильщик Windows можно запустить вручную: Win+R → cleanmgr, «Очистка системных файлов». Чистовик эту область не трогает.",
       "scope": "machine", "roots": [], "minAgeHours": 0,
       "mechanism": "handler", "risk": "medium", "defaultOn": false, "restart": "none"
     },
     {
       "id": "delivery-optimization", "title": "Оптимизация доставки",
-      "description": "Размер неизвестен: очищается штатной очисткой диска Windows.",
+      "description": "Размер неизвестен: очищается штатной очисткой диска Windows. Чистильщик Windows можно запустить вручную: Win+R → cleanmgr, «Очистка системных файлов». Чистовик эту область не трогает.",
       "scope": "machine", "roots": [], "minAgeHours": 0,
       "mechanism": "handler", "risk": "low", "defaultOn": false, "restart": "none"
     },
     {
       "id": "driver-packages", "title": "Пакеты драйверов",
-      "description": "Размер неизвестен: очищается штатной очисткой диска Windows.",
+      "description": "Размер неизвестен: очищается штатной очисткой диска Windows. Чистильщик Windows можно запустить вручную: Win+R → cleanmgr, «Очистка системных файлов». Чистовик эту область не трогает.",
       "scope": "machine", "roots": [], "minAgeHours": 0,
       "mechanism": "handler", "risk": "medium", "defaultOn": false, "restart": "none"
     }
