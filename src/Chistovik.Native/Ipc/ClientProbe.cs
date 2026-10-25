@@ -63,6 +63,13 @@ public static class ClientProbe
         finally { CloseHandle(h); }
     }
 
+    /// <summary>
+    /// Путь образа текущего процесса в том виде, в каком его видит ядро (ссылки и соединения папок уже раскрыты):
+    /// ровно так агент увидит нас на другом конце канала. Environment.ProcessPath этого не гарантирует.
+    /// </summary>
+    public static string SelfImagePath()
+        => ImagePathOf((uint)Environment.ProcessId) ?? Environment.ProcessPath ?? "";
+
     /// <summary>Сеанс текущего процесса.</summary>
     public static int CurrentSession()
         => ProcessIdToSessionId((uint)Environment.ProcessId, out var s) ? (int)s : throw new Win32Exception(Marshal.GetLastWin32Error());

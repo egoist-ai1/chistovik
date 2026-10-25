@@ -1,6 +1,6 @@
 using System.Security.AccessControl;
-using System.Security.Principal;
 using Chistovik.Core.Ports;
+using Chistovik.Native.Interop;
 
 namespace Chistovik.Native.Journal;
 
@@ -16,13 +16,6 @@ public sealed class WindowsJournalDirectory : IJournalDirectory
     /// </summary>
     internal const string ProtectedSddl = "O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)";
 
-    private const FileSystemRights WriteMask =
-        FileSystemRights.WriteData | FileSystemRights.AppendData | FileSystemRights.WriteExtendedAttributes |
-        FileSystemRights.WriteAttributes | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
-        FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
-
-    private const int GenericAll = 0x10000000, GenericWrite = 0x40000000;
-
     public DirFacts Inspect(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -31,16 +24,7 @@ public sealed class WindowsJournalDirectory : IJournalDirectory
 
         var reparse = (info.Attributes & FileAttributes.ReparsePoint) != 0;
         var security = info.GetAccessControl(AccessControlSections.Owner | AccessControlSections.Access);
-        var owner = (security.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier)?.Value;
-
-        var aces = new List<DirAce>();
-        foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
-        {
-            var allow = rule.AccessControlType == AccessControlType.Allow;
-            var mask = (int)rule.FileSystemRights;
-            var grantsWrite = allow && (((rule.FileSystemRights & WriteMask) != 0) || (mask & (GenericAll | GenericWrite)) != 0);
-            aces.Add(new DirAce(rule.IdentityReference.Value, allow, grantsWrite));
-        }
+        var (owner, aces) = AclReader.Read(security);
         return new DirFacts(true, reparse, owner, aces);
     }
 

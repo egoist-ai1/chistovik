@@ -10,6 +10,7 @@ using Chistovik.Native.Journal;
 using Chistovik.Native.Power;
 using Chistovik.Native.Registry;
 using Chistovik.Native.Services;
+using Chistovik.Native.Setup;
 using Chistovik.Native.Tasks;
 using Chistovik.Native.Trust;
 using Microsoft.Data.Sqlite;
@@ -24,6 +25,8 @@ public sealed record AgentPorts(
     IPowerControl Power,
     IUserFolders Folders,
     IFileSystem Files,
+    IFileSecurity Security,
+    IUninstaller Uninstaller,
     IFileTrust Trust,
     IJournalDirectory JournalDirectory,
     IClock Clock,
@@ -37,6 +40,8 @@ public sealed record AgentPorts(
         new WindowsPowerControl(),
         new WindowsUserFolders(),
         new WindowsFileSystem(),
+        new WindowsFileSecurity(),
+        new WindowsUninstaller(),
         new WindowsFileTrust(),
         new WindowsJournalDirectory(),
         new SystemClock(),
@@ -179,6 +184,8 @@ public sealed class AgentComposition : IDisposable
                 Power = ports.Power,
                 Folders = ports.Folders,
                 Files = ports.Files,
+                Security = ports.Security,
+                Uninstaller = ports.Uninstaller,
                 Clock = ports.Clock,
                 Ids = ports.Ids,
                 Journal = journal,

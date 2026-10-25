@@ -70,6 +70,8 @@ public sealed class AgentPipeServer(
                 var client = new ClientContext(actual.UserSid!, actual.Pid, actual.SessionId);
                 while (true)
                 {
+                    // Пока выполняется запрос (удаление программы длится минутами), простой не считается; таймер заново после ответа.
+                    idle.CancelAfter(Timeout.InfiniteTimeSpan);
                     var response = await dispatcher.HandleAsync(frame, client, ct).ConfigureAwait(false);
                     await FrameCodec.WriteAsync(pipe, AgentJson.Serialize(response), idle.Token).ConfigureAwait(false);
 

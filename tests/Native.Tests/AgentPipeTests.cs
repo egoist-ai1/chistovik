@@ -15,7 +15,7 @@ public class AgentPipeTests
 
     static ExpectedClient ExpectSelf(Func<ExpectedClient, ExpectedClient>? tweak = null)
     {
-        var image = Environment.ProcessPath!;
+        var image = ClientProbe.SelfImagePath();
         var e = new ExpectedClient(Environment.ProcessId, image, ClientVerifier.Sha256OfFile(image),
             ClientProbe.CurrentSession(), Me.Value);
         return tweak?.Invoke(e) ?? e;
