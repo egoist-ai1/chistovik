@@ -14,7 +14,7 @@ namespace Sandbox.Live;
 static class S10Ui
 {
     const string Sc = "S10 интерфейс";
-    static readonly string[] Sections = ["Обзор", "Чистка", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат"];
+    static readonly string[] Sections = ["Обзор", "Чистка", "Инвентарь", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат"];
 
     sealed record Target(string Kind, string Pattern, string File, string Args, string NamePrefix, string Probe);
 
@@ -180,30 +180,55 @@ static class S10Ui
         foreach (var t in installed)
         {
             var tag = $"{t.Kind} ({t.NamePrefix})";
-            var nav = FindListItem(main, "Чистка");
-            if (nav is null) { c.Report.Fail(Sc, $"{tag}: меню", "пункта «Чистка» не видно, окно недоступно"); DumpWhy(c, app, main, $"s10-why-{t.Kind}-nav.txt"); continue; }
+            // Inno (Git) удаляется с экрана «Инвентарь» (отметка строки и кнопка «Удалить»), остальные из «Чистки».
+            var viaInventory = t.Kind == "Inno";
+            var screen = viaInventory ? "Инвентарь" : "Чистка";
+            var nav = FindListItem(main, screen);
+            if (nav is null) { c.Report.Fail(Sc, $"{tag}: меню", $"пункта «{screen}» не видно, окно недоступно"); DumpWhy(c, app, main, $"s10-why-{t.Kind}-nav.txt"); continue; }
             Select(nav);
             await Task.Delay(1500);
-            WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(120));
+            AutomationElement? search;
+            AutomationElement? row;
+            if (viaInventory)
+            {
+                // Возврат на экран сам тихо перечитывает реестр (OnShown), отдельной кнопки обновления нет.
+                WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(120));
+                search = FindByName(main, "Поиск программ");
+                if (search is null) { c.Report.Fail(Sc, $"{tag}: поиск", "поля поиска нет"); continue; }
+                SetText(search, t.NamePrefix);
+                await Task.Delay(1200);
+                row = WaitFor(() => ListItems(main, "Список установленных программ").FirstOrDefault(i => i.Current.Name.StartsWith(t.NamePrefix, StringComparison.OrdinalIgnoreCase)), TimeSpan.FromSeconds(30));
+                c.Report.Check(Sc, $"{tag}: программа видна в «Инвентаре»", row is not null, row?.Current.Name ?? "", "строки нет в списке");
+                if (row is null) { Save(c, $"s10-miss-{t.Kind}.txt", Texts(main)); continue; }
+                var check = row.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.CheckBox));
+                if (check is null) { c.Report.Fail(Sc, $"{tag}: отметка", "у строки нет флажка"); continue; }
+                Invoke(check);
+                await Task.Delay(800);
+                Save(c, $"s10-detail-{t.Kind}.txt", Texts(main));
+            }
+            else
+            {
+                WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(120));
 
-            // Свежий скан: программа поставлена после первого просмотра.
-            var rescan = FindByName(main, "Сканировать систему заново");
-            if (rescan is not null) { Invoke(rescan); await Task.Delay(1500); }
-            WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(180));
+                // Свежий скан: программа поставлена после первого просмотра.
+                var rescan = FindByName(main, "Сканировать систему заново");
+                if (rescan is not null) { Invoke(rescan); await Task.Delay(1500); }
+                WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(180));
 
-            var search = FindByName(main, "Поиск в списке чистки");
-            if (search is null) { c.Report.Fail(Sc, $"{tag}: поиск", "поля поиска нет"); continue; }
-            SetText(search, t.NamePrefix);
-            await Task.Delay(1200);
+                search = FindByName(main, "Поиск в списке чистки");
+                if (search is null) { c.Report.Fail(Sc, $"{tag}: поиск", "поля поиска нет"); continue; }
+                SetText(search, t.NamePrefix);
+                await Task.Delay(1200);
 
-            var row = WaitFor(() => ListItems(main).FirstOrDefault(i => i.Current.Name.StartsWith(t.NamePrefix, StringComparison.OrdinalIgnoreCase)), TimeSpan.FromSeconds(30));
-            c.Report.Check(Sc, $"{tag}: программа видна в «Чистке»", row is not null, row?.Current.Name ?? "", "строки нет в списке");
-            if (row is null) { Save(c, $"s10-miss-{t.Kind}.txt", Texts(main)); continue; }
-            Select(row);
-            await Task.Delay(800);
-            Save(c, $"s10-detail-{t.Kind}.txt", Texts(main));
+                row = WaitFor(() => ListItems(main).FirstOrDefault(i => i.Current.Name.StartsWith(t.NamePrefix, StringComparison.OrdinalIgnoreCase)), TimeSpan.FromSeconds(30));
+                c.Report.Check(Sc, $"{tag}: программа видна в «Чистке»", row is not null, row?.Current.Name ?? "", "строки нет в списке");
+                if (row is null) { Save(c, $"s10-miss-{t.Kind}.txt", Texts(main)); continue; }
+                Select(row);
+                await Task.Delay(800);
+                Save(c, $"s10-detail-{t.Kind}.txt", Texts(main));
+            }
 
-            var button = FindByName(main, "Удалить выбранную программу через агента");
+            var button = FindByName(main, viaInventory ? "Удалить выбранные программы" : "Удалить выбранную программу через агента");
             var canClick = button is not null && button.Current.IsEnabled;
             c.Report.Check(Sc, $"{tag}: кнопка «Удалить программу» доступна", canClick, "кнопка есть", button is null ? "кнопки нет" : "кнопка выключена");
             if (!canClick) continue;
@@ -234,6 +259,13 @@ static class S10Ui
         Save(c, "s10-journal-after.txt", journal);
         c.Report.Check(Sc, "журнал показывает удаления программ", journal.Any(x => x.Contains("Удаление программы", StringComparison.OrdinalIgnoreCase)),
             "операция «Удаление программы» есть", "в журнале нет записи об удалении");
+        // Заголовок несёт имя программы, а не сырой ключ реестра («git_is1», «{GUID}»).
+        foreach (var t in installed)
+        {
+            var title = journal.FirstOrDefault(x => x.StartsWith("Удаление программы: " + t.NamePrefix, StringComparison.OrdinalIgnoreCase));
+            c.Report.Check(Sc, $"журнал: заголовок удаления {t.Kind} ({t.NamePrefix}) с именем программы", title is not null,
+                title ?? "", "в журнале нет заголовка с именем программы");
+        }
     }
 
     /// <summary>Edge и рантаймы: в подробностях не должно быть рабочей кнопки удаления.</summary>
@@ -282,9 +314,9 @@ static class S10Ui
             new PropertyCondition(AutomationElement.NameProperty, name),
             new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)));
 
-    static IEnumerable<AutomationElement> ListItems(AutomationElement main)
+    static IEnumerable<AutomationElement> ListItems(AutomationElement main, string listName = "Список объектов")
     {
-        var list = FindByName(main, "Список объектов");
+        var list = FindByName(main, listName);
         if (list is null) return [];
         return list.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)).Cast<AutomationElement>();
     }
