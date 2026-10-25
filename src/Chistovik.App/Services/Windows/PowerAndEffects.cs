@@ -35,13 +35,54 @@ public sealed class PowrProfPowerSource(PowerCatalog catalog) : IPowerSource
                         values[s.Id] = (ac, dc);
                 }
             }
-            return new PowerSnapshot(active, values, active is null ? "Не удалось прочитать активную схему питания" : null);
+            return new PowerSnapshot(active, values, active is null ? "Не удалось прочитать активную схему питания" : null,
+                EnumerateSchemes(), IsModernStandby());
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or Win32Exception)
         {
             return new PowerSnapshot(null, new Dictionary<string, (uint, uint)>(), "Чтение питания недоступно: " + e.Message);
         }
     });
+
+    /// <summary>Схемы, существующие в системе (PowerEnumerate, ACCESS_SCHEME). null: перечислить не удалось.</summary>
+    static IReadOnlyCollection<Guid>? EnumerateSchemes()
+    {
+        const uint accessScheme = 16, errorNoMoreItems = 259;
+        var result = new List<Guid>();
+        var mem = Marshal.AllocHGlobal(16);
+        try
+        {
+            for (uint i = 0; i < 1000; i++)
+            {
+                uint size = 16;
+                var rc = PowerEnumerate(IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, accessScheme, i, mem, ref size);
+                if (rc == errorNoMoreItems) return result;
+                if (rc != 0) return null;
+                result.Add(Marshal.PtrToStructure<Guid>(mem));
+            }
+            return null;
+        }
+        finally { Marshal.FreeHGlobal(mem); }
+    }
+
+    /// <summary>Modern Standby: поле AoAc (смещение 20) в SYSTEM_POWER_CAPABILITIES (76 байт). Не прочитано: false.</summary>
+    static bool IsModernStandby()
+    {
+        const int capsSize = 76, aoAcOffset = 20, systemPowerCapabilities = 4;
+        var mem = Marshal.AllocHGlobal(capsSize);
+        try
+        {
+            for (var i = 0; i < capsSize; i++) Marshal.WriteByte(mem, i, 0);
+            return CallNtPowerInformation(systemPowerCapabilities, IntPtr.Zero, 0, mem, capsSize) == 0 && Marshal.ReadByte(mem, aoAcOffset) != 0;
+        }
+        finally { Marshal.FreeHGlobal(mem); }
+    }
+
+    [DllImport("powrprof.dll")]
+    static extern uint PowerEnumerate(IntPtr root, IntPtr scheme, IntPtr subGroup, uint flags, uint index, IntPtr buffer, ref uint size);
+
+    [DllImport("powrprof.dll")]
+    static extern int CallNtPowerInformation(int level, IntPtr input, uint inputLength, IntPtr output, uint outputLength);
 
     [DllImport("powrprof.dll")]
     static extern uint PowerGetActiveScheme(IntPtr userRootPowerKey, out IntPtr activePolicyGuid);

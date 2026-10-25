@@ -25,7 +25,7 @@ public class SnapshotPlanTests
     {
         var names = SnapshotPlan.Build().Select(s => s.FileName).ToList();
         Assert.Equal(names.Count, names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.All(names, n => Assert.Matches(new Regex("^[a-z]+(-[a-z]+)*_(\\d+x\\d+|auto)_(96|192)\\.png$"), n));
+        Assert.All(names, n => Assert.Matches(new Regex("^[a-z]+(-[a-z]+)*_(\\d+x\\d+|auto)_(96|120|168|192)\\.png$"), n));
     }
 
     [Fact]

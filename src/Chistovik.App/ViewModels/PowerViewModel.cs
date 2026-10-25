@@ -12,12 +12,17 @@ public sealed class PowerSchemeRowViewModel : ObservableObject
 {
     private bool _isActive;
 
-    public PowerSchemeRowViewModel(PowerSchemeEntry entry, bool isActive, RelayCommand apply)
+    public PowerSchemeRowViewModel(PowerSchemeEntry entry, bool isActive, RelayCommand apply, bool isAvailable = true)
     {
         Entry = entry;
         _isActive = isActive;
         ApplyCommand = apply;
+        IsAvailable = isAvailable;
     }
+
+    /// <summary>false: схемы нет на этом устройстве (Modern Standby и т. п.), выбрать её нельзя.</summary>
+    public bool IsAvailable { get; }
+    public bool IsMissing => !IsAvailable;
 
     public PowerSchemeEntry Entry { get; }
     public string Title => Entry.Title;
@@ -33,7 +38,7 @@ public sealed class PowerSchemeRowViewModel : ObservableObject
         set { if (SetProperty(ref _isActive, value)) OnPropertyChanged(nameof(CanChoose)); }
     }
 
-    public bool CanChoose => !IsActive;
+    public bool CanChoose => !IsActive && IsAvailable;
 }
 
 public sealed class PowerSettingRowViewModel : ObservableObject
@@ -149,8 +154,8 @@ public sealed class PowerViewModel : StatefulPageViewModel
         Schemes = _catalog.Schemes.Select(s =>
         {
             PowerSchemeRowViewModel? row = null;
-            var cmd = new RelayCommand(() => LastAction = ApplySchemeAsync(row!.Entry), () => CanApply && row is { IsActive: false });
-            row = new PowerSchemeRowViewModel(s, snap.ActiveScheme == s.Guid, cmd);
+            var cmd = new RelayCommand(() => LastAction = ApplySchemeAsync(row!.Entry), () => CanApply && row is { IsActive: false, IsAvailable: true });
+            row = new PowerSchemeRowViewModel(s, snap.ActiveScheme == s.Guid, cmd, IsSchemeAvailable(s, snap));
             return row;
         }).ToList();
 
@@ -163,6 +168,16 @@ public sealed class PowerViewModel : StatefulPageViewModel
         }).ToList();
         return Schemes.Count + Settings.Count;
     }, "Каталог питания пуст.");
+
+    /// <summary>
+    /// Встроенная схема доступна, если она есть в системе; схема из шаблона (ultimate) не создаётся на Modern Standby.
+    /// Список схем не прочитан (null): считаем доступной, окончательно решает агент.
+    /// </summary>
+    internal static bool IsSchemeAvailable(PowerSchemeEntry s, PowerSnapshot snap)
+    {
+        if (s.CreateFromTemplate is not null) return !snap.ModernStandby;
+        return snap.InstalledSchemes is null || snap.InstalledSchemes.Contains(s.Guid);
+    }
 
     protected override void OnCanApplyChanged()
     {
@@ -181,6 +196,7 @@ public sealed class PowerViewModel : StatefulPageViewModel
     public async Task ApplySchemeAsync(PowerSchemeEntry scheme)
     {
         if (Changes is null || !CanApply) return;
+        if (Schemes.FirstOrDefault(r => r.Entry.Id == scheme.Id) is { IsAvailable: false }) return;
         if (!scheme.BuiltIn)
         {
             var ok = _dialogs.Confirm(new ConfirmContent($"Включить «{scheme.Title}»?",

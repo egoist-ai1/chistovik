@@ -77,11 +77,7 @@ public sealed class WindowsFileSecurity : IFileSecurity
         }
     }
 
-    static string StripPrefix(string p)
-    {
-        if (p.StartsWith(@"\\?\UNC\", StringComparison.Ordinal)) return @"\\" + p[8..];
-        return p.StartsWith(@"\\?\", StringComparison.Ordinal) ? p[4..] : p;
-    }
+    static string StripPrefix(string p) => ExtendedPath.Strip(p);
 
     static byte[] Descriptor(SafeFileHandle h)
     {

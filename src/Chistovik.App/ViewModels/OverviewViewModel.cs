@@ -119,7 +119,9 @@ public sealed class OverviewViewModel : StatefulPageViewModel
     public string RightsText => _agent?.Access switch
     {
         AgentAccess.Connected => "Права администратора есть, изменения применяются и пишутся в журнал.",
-        AgentAccess.ViewOnly => "Права не выданы: смотреть можно, менять нельзя.",
+        AgentAccess.ViewOnly => _agent?.ViewOnlyReason ==AgentViewOnlyReason.NoAdminAccount
+            ? "Учётная запись без прав администратора: смотреть можно, менять нельзя."
+            : "Права не выданы: смотреть можно, менять нельзя.",
         AgentAccess.Lost => "Агент не отвечает, следующее изменение подключит его заново.",
         _ => "Права не запрашивались, окно UAC появится при первом изменении.",
     };

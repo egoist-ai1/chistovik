@@ -74,7 +74,7 @@ public abstract class StatefulPageViewModel : PageViewModel
         Navigator = navigator;
         ReloadCommand = new RelayCommand(() => _ = ReloadAsync());
         CancelLoadCommand = new RelayCommand(CancelLoad, () => IsLoading);
-        RequestRightsCommand = new RelayCommand(RequestRights, () => ViewOnly);
+        RequestRightsCommand = new RelayCommand(RequestRights, () => ViewOnly && !NoAdminAccount);
         OpenJournalCommand = new RelayCommand(() => Navigator?.Open("Журнал и откат"));
         if (changes is not null) changes.Agent.AccessChanged += (_, _) => Post(OnAccessChanged);
     }
@@ -191,7 +191,11 @@ public abstract class StatefulPageViewModel : PageViewModel
     public bool ViewOnly => Changes?.Agent.Access == AgentAccess.ViewOnly;
     /// <summary>Общая полоса «режим просмотра» в PageBanner; экран, у которого своя полоса прав, отключает её.</summary>
     public virtual bool ShowViewOnlyBanner => ViewOnly;
-    public string ViewOnlyText => "Режим просмотра: права администратора не выданы, изменения отключены.";
+    /// <summary>Обычный пользователь без прав администратора: запрос прав бесполезен.</summary>
+    public bool NoAdminAccount => Changes?.Agent.ViewOnlyReason == AgentViewOnlyReason.NoAdminAccount;
+    public string ViewOnlyText => NoAdminAccount
+        ? LaunchMessages.NoAdminAccount
+        : "Режим просмотра: права администратора не выданы, изменения отключены.";
 
     public bool IsBusy
     {
@@ -208,7 +212,8 @@ public abstract class StatefulPageViewModel : PageViewModel
     /// <summary>Кнопки применения доступны: не режим просмотра и нет запроса в работе.</summary>
     public bool CanApply => Changes is not null && !ViewOnly && !IsBusy;
 
-    public string ApplyHint => ViewOnly ? "Режим просмотра: изменения отключены" : "";
+    public string ApplyHint => NoAdminAccount ? "Только просмотр: нужна учётная запись администратора"
+        : ViewOnly ? "Режим просмотра: изменения отключены" : "";
 
     private void OnAccessChanged()
     {

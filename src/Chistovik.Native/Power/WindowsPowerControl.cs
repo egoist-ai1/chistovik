@@ -132,6 +132,21 @@ public sealed class WindowsPowerControl : IPowerControl
         finally { Marshal.FreeHGlobal(buf); }
     }
 
+    /// <summary>Modern Standby: поле AoAc (смещение 20) структуры SYSTEM_POWER_CAPABILITIES (76 байт). Не удалось прочитать: false.</summary>
+    public bool IsModernStandby()
+    {
+        const int capsSize = 76, aoAcOffset = 20;
+        var mem = Marshal.AllocHGlobal(capsSize);
+        try
+        {
+            for (var i = 0; i < capsSize; i++) Marshal.WriteByte(mem, i, 0);
+            var status = Win32.CallNtPowerInformation(Win32.SystemPowerCapabilities, IntPtr.Zero, 0, mem, capsSize);
+            return status == 0 && Marshal.ReadByte(mem, aoAcOffset) != 0;
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException) { return false; }
+        finally { Marshal.FreeHGlobal(mem); }
+    }
+
     private const uint ErrorMoreData = 234;
 
     private static void Check(uint rc, string what)

@@ -95,12 +95,14 @@ public sealed class DuplexStream(ByteChannel read, ByteChannel write) : Stream
 public sealed class FakeLauncher : IAgentLauncher
 {
     public AgentLaunchStatus Status { get; set; } = AgentLaunchStatus.Started;
+    /// <summary>Код выхода «запущенного» процесса агента; null — за процессом не следим.</summary>
+    public Task<int>? Exited { get; set; }
     public List<AgentLaunchArgs> Calls { get; } = new();
 
     public Task<AgentLaunchResult> LaunchAsync(AgentLaunchArgs args, CancellationToken ct)
     {
         Calls.Add(args);
-        return Task.FromResult(new AgentLaunchResult(Status, Status == AgentLaunchStatus.Failed ? "не запустился" : null));
+        return Task.FromResult(new AgentLaunchResult(Status, Status == AgentLaunchStatus.Failed ? "не запустился" : null, Exited));
     }
 }
 

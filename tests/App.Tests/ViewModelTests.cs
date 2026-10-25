@@ -383,6 +383,39 @@ public class PowerViewModelTests
         await vm.ApplySchemeAsync(high.Entry);
         Assert.Single(agent.Sent);
     }
+
+    [Fact]
+    public async Task Schemes_absent_on_modern_standby_device_are_marked_and_cannot_be_chosen()
+    {
+        var cat = PowerCatalog.Shared;
+        var bal = cat.FindScheme("bal")!;
+        var agent = new FakeAgentClient();
+        var snap = new PowerSnapshot(bal.Guid, new Dictionary<string, (uint Ac, uint Dc)>(), null,
+            InstalledSchemes: new[] { bal.Guid }, ModernStandby: true);
+        var vm = new PowerViewModel(cat, new PowerSrc(snap), Make.Changes(agent), new FakeDialogs());
+        await vm.Loaded;
+
+        Assert.True(vm.Schemes.First(x => x.Entry.Id == "bal").IsAvailable);
+        foreach (var id in new[] { "saver", "high", "ult" })
+        {
+            var row = vm.Schemes.First(x => x.Entry.Id == id);
+            Assert.True(row.IsMissing, id);
+            Assert.False(row.CanChoose, id);
+            Assert.False(row.ApplyCommand.CanExecute(null), id);
+            await vm.ApplySchemeAsync(row.Entry);
+        }
+        Assert.Empty(agent.Sent);
+    }
+
+    [Fact]
+    public async Task Unknown_scheme_list_keeps_builtin_schemes_available()
+    {
+        var snap = new PowerSnapshot(null, new Dictionary<string, (uint Ac, uint Dc)>(), null);
+        var vm = new PowerViewModel(PowerCatalog.Shared, new PowerSrc(snap), Make.Changes(new FakeAgentClient()), new FakeDialogs());
+        await vm.Loaded;
+
+        Assert.All(vm.Schemes, r => Assert.True(r.IsAvailable));
+    }
 }
 
 public class ServicesAndTasksViewModelTests

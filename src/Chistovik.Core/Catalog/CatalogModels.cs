@@ -6,6 +6,7 @@ namespace Chistovik.Core.Catalog;
 /// Твик реестра из каталога. OffValue = null означает «удалить значение».
 /// Editions: редакции Windows, на которых твик действует (null: на всех). RevertedBy: что возвращает значение
 /// (feature-update | cumulative-update | none; null: не указано). Scope: user | machine, совпадает с Hive.
+/// MinBuild/MaxBuild: номера сборок Windows (включительно), на которых твик действует (null: без ограничения).
 /// </summary>
 public sealed record TweakEntry(
     string Id,
@@ -27,7 +28,9 @@ public sealed record TweakEntry(
     bool Verified,
     string[]? Editions = null,
     string? RevertedBy = null,
-    string? Scope = null)
+    string? Scope = null,
+    int? MinBuild = null,
+    int? MaxBuild = null)
 {
     /// <summary>Полный путь ключа вида «HKCU\Software\...» для проверки политикой.</summary>
     public string FullKey => Hive + "\\" + Key;

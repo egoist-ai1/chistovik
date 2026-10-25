@@ -11,6 +11,11 @@ public static class ResponseText
     public static ChangeOutcome ViewOnly()
         => new(OutcomeKind.ViewOnly, "Права администратора не выданы: доступен только просмотр. Нажмите «Запросить права», чтобы менять настройки.");
 
+    public static ChangeOutcome ViewOnly(AgentViewOnlyReason reason)
+        => reason == AgentViewOnlyReason.NoAdminAccount
+            ? new(OutcomeKind.ViewOnly, LaunchMessages.NoAdminAccount + ".")
+            : ViewOnly();
+
     public static ChangeOutcome ForApply(AgentResponse r) => Map(r, undo: false);
 
     public static ChangeOutcome ForUndo(AgentResponse r) => Map(r, undo: true);
@@ -196,6 +201,10 @@ public static class ResponseText
                 return Make(OutcomeKind.Unavailable, "Журнал создан более новой версией программы. Обновите Чистовик.");
             case ClientCodes.Declined:
                 return ViewOnly() with { Response = r };
+            case ClientCodes.NoAdminAccount:
+                return ViewOnly(AgentViewOnlyReason.NoAdminAccount) with { Response = r };
+            case ClientCodes.AlreadyRunning:
+                return Make(OutcomeKind.Unavailable, LaunchMessages.AlreadyRunning);
             case ClientCodes.NotRunning:
             case ClientCodes.LaunchFailed:
                 return Make(OutcomeKind.Unavailable, "Не удалось запустить агент с правами." + Tail(r.Message));

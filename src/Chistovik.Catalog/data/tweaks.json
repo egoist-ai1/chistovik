@@ -117,7 +117,8 @@
     "requiresAdmin": false,
     "source": "known-setting",
     "verified": false,
-    "scope": "user"
+    "scope": "user",
+    "minBuild": 22000
   },
   {
     "id": "killsvc",
@@ -177,7 +178,8 @@
     "requiresAdmin": true,
     "source": "known-setting",
     "verified": false,
-    "scope": "machine"
+    "scope": "machine",
+    "minBuild": 19041
   },
   {
     "id": "respons",
@@ -926,7 +928,8 @@
     "source": "known-setting",
     "verified": false,
     "scope": "user",
-    "revertedBy": "none"
+    "revertedBy": "none",
+    "minBuild": 22621
   },
   {
     "id": "copilotMachine",
@@ -947,7 +950,8 @@
     "source": "known-setting",
     "verified": false,
     "scope": "machine",
-    "revertedBy": "none"
+    "revertedBy": "none",
+    "minBuild": 22621
   },
   {
     "id": "aiDataUser",
@@ -968,7 +972,8 @@
     "source": "known-setting",
     "verified": false,
     "scope": "user",
-    "revertedBy": "none"
+    "revertedBy": "none",
+    "minBuild": 26100
   },
   {
     "id": "aiDataMachine",
@@ -989,7 +994,8 @@
     "source": "known-setting",
     "verified": false,
     "scope": "machine",
-    "revertedBy": "none"
+    "revertedBy": "none",
+    "minBuild": 26100
   },
   {
     "id": "polConsumerFeatures",

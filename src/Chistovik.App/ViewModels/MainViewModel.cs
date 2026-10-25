@@ -162,7 +162,9 @@ public sealed class MainViewModel : ObservableObject, INavigator
     public string AgentStatusDetail => _agent.Access switch
     {
         AgentAccess.Connected => "Права администратора есть, изменения применяются и пишутся в журнал.",
-        AgentAccess.ViewOnly => "Права не выданы: смотреть можно, менять нельзя.",
+        AgentAccess.ViewOnly => _agent.ViewOnlyReason == AgentViewOnlyReason.NoAdminAccount
+            ? "Учётная запись без прав администратора: смотреть можно, менять нельзя."
+            : "Права не выданы: смотреть можно, менять нельзя.",
         AgentAccess.Lost => "Следующее изменение подключит агента заново.",
         _ => "Запустится при первом изменении: Windows покажет окно UAC.",
     };

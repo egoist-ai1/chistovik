@@ -10,7 +10,7 @@ namespace Chistovik.App.Services.Agent;
 /// <summary>Запускает Chistovik.Agent.exe рядом с приложением через ShellExecute runas (окно UAC).</summary>
 public sealed class ProcessAgentLauncher : IAgentLauncher
 {
-    const int ErrorCancelled = 1223; // пользователь отказал в UAC
+    const int ErrorCancelled = LaunchMessages.ErrorCancelled; // пользователь отказал в UAC
 
     readonly string _agentPath;
 
@@ -39,18 +39,51 @@ public sealed class ProcessAgentLauncher : IAgentLauncher
                     WorkingDirectory = Path.GetDirectoryName(_agentPath) ?? AppContext.BaseDirectory,
                     WindowStyle = ProcessWindowStyle.Hidden,
                 };
-                using var p = Process.Start(psi);
-                return new AgentLaunchResult(AgentLaunchStatus.Started);
+                var p = Process.Start(psi);
+                return new AgentLaunchResult(AgentLaunchStatus.Started, null, p is null ? null : WatchExit(p));
             }
-            catch (Win32Exception e) when (e.NativeErrorCode == ErrorCancelled)
+            catch (Win32Exception e)
             {
-                return new AgentLaunchResult(AgentLaunchStatus.Declined);
+                return FromNativeError(e.NativeErrorCode, e.Message);
             }
-            catch (Exception e) when (e is Win32Exception or InvalidOperationException)
+            catch (InvalidOperationException e)
             {
                 return new AgentLaunchResult(AgentLaunchStatus.Failed, e.Message);
             }
         }, ct);
+    }
+
+    /// <summary>1223 (отказ в UAC) это режим просмотра; 5 и 740 получают понятный русский текст; остальное остаётся текстом системы.</summary>
+    public static AgentLaunchResult FromNativeError(int code, string systemText)
+        => code == ErrorCancelled
+            ? new AgentLaunchResult(AgentLaunchStatus.Declined)
+            : new AgentLaunchResult(AgentLaunchStatus.Failed, LaunchMessages.ForNativeError(code) ?? systemText);
+
+    /// <summary>
+    /// Следит за процессом агента: код выхода нужен, чтобы отличить «уже запущен в другом сеансе» (3) от долгого ожидания канала.
+    /// Process освобождается только после чтения кода выхода, в обработчике Exited.
+    /// </summary>
+    static Task<int>? WatchExit(Process p)
+    {
+        var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            p.EnableRaisingEvents = true;
+            p.Exited += (_, _) =>
+            {
+                int code;
+                try { code = p.ExitCode; }
+                catch (Exception e) when (e is InvalidOperationException or Win32Exception) { code = -1; }
+                tcs.TrySetResult(code);
+                p.Dispose();
+            };
+            return tcs.Task;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Win32Exception)
+        {
+            p.Dispose(); // за процессом следить нельзя (например, нет права на дескриптор): остаётся обычное ожидание канала
+            return null;
+        }
     }
 }
 

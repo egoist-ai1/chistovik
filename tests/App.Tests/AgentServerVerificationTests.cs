@@ -210,6 +210,7 @@ public sealed class AgentServerVerificationTests : IDisposable
             ConnectTimeout = TimeSpan.FromSeconds(1),
             ReconnectTimeout = TimeSpan.FromMilliseconds(100),
             HeartbeatInterval = TimeSpan.FromMinutes(10),
+            CanElevate = true,
         }, () => "Chistovik.test");
 
         var r = await client.SendAsync(new SetPowerSchemeRequest { Id = Guid.NewGuid(), Plan = PowerPlan.Bal });
@@ -231,6 +232,7 @@ public sealed class AgentServerVerificationTests : IDisposable
             ParentPid = 1,
             AppPath = @"C:\app\Chistovik.App.exe",
             HeartbeatInterval = TimeSpan.FromMinutes(10),
+            CanElevate = true,
         }, () => "Chistovik.test");
 
         var r = await client.SendAsync(new SetPowerSchemeRequest { Id = Guid.NewGuid(), Plan = PowerPlan.Bal });

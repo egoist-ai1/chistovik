@@ -30,6 +30,9 @@ public sealed class AgentClientOptions
     /// <summary>Быстрая попытка вернуться в тот же канал, прежде чем просить UAC заново.</summary>
     public TimeSpan ReconnectTimeout { get; init; } = TimeSpan.FromSeconds(2);
 
+    /// <summary>false — обычный пользователь без прав администратора: только просмотр, runas не запускается (0.1).</summary>
+    public bool CanElevate { get; init; } = AdminAccountCheck.Windows().CanElevate();
+
     public string UserSid { get; init; } = CurrentSid();
     public int ParentPid { get; init; } = Environment.ProcessId;
     public string AppPath { get; init; } = Chistovik.Native.Ipc.ClientProbe.SelfImagePath();
@@ -67,9 +70,18 @@ public sealed class AgentClient : IAgentClient, IDisposable
         _transport = transport;
         _opt = options ?? new AgentClientOptions();
         _pipeNameFactory = pipeNameFactory ?? (() => "Chistovik." + Guid.NewGuid().ToString("N"));
+        if (!_opt.CanElevate)
+        {
+            _access = AgentAccess.ViewOnly;
+            _viewOnlyReason = AgentViewOnlyReason.NoAdminAccount;
+        }
     }
 
+    AgentViewOnlyReason _viewOnlyReason;
+
     public event EventHandler? AccessChanged;
+
+    public AgentViewOnlyReason ViewOnlyReason => _access == AgentAccess.ViewOnly ? _viewOnlyReason : AgentViewOnlyReason.None;
 
     public AgentAccess Access => _access;
 
@@ -77,8 +89,18 @@ public sealed class AgentClient : IAgentClient, IDisposable
 
     public void AllowElevationRetry()
     {
-        if (_access == AgentAccess.ViewOnly) SetAccess(AgentAccess.NotStarted);
+        // Обычному пользователю повторный запрос не поможет: нужна другая учётная запись.
+        if (_access == AgentAccess.ViewOnly && _viewOnlyReason != AgentViewOnlyReason.NoAdminAccount)
+        {
+            _viewOnlyReason = AgentViewOnlyReason.None;
+            SetAccess(AgentAccess.NotStarted);
+        }
     }
+
+    AgentResponse ViewOnlyFail(AgentRequest request)
+        => _viewOnlyReason == AgentViewOnlyReason.NoAdminAccount
+            ? Fail(request, ClientCodes.NoAdminAccount, LaunchMessages.NoAdminAccount)
+            : Fail(request, ClientCodes.Declined, "Права администратора не выданы: доступен только просмотр.");
 
     void SetAccess(AgentAccess a)
     {
@@ -94,14 +116,14 @@ public sealed class AgentClient : IAgentClient, IDisposable
             return Fail(request, ResponseCodes.BadRequest, problem ?? "Пустой Id запроса");
 
         if (_access == AgentAccess.ViewOnly)
-            return Fail(request, ClientCodes.Declined, "Права администратора не выданы: доступен только просмотр.");
+            return ViewOnlyFail(request);
 
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_disposed) return Fail(request, ClientCodes.NotRunning, "Связь с агентом закрыта.");
             if (_access == AgentAccess.ViewOnly)
-                return Fail(request, ClientCodes.Declined, "Права администратора не выданы: доступен только просмотр.");
+                return ViewOnlyFail(request);
 
             // Ping без связи ничего не запускает: UAC только по действию пользователя.
             if (request is PingRequest && _stream is null)
@@ -188,8 +210,9 @@ public sealed class AgentClient : IAgentClient, IDisposable
         switch (launch.Status)
         {
             case AgentLaunchStatus.Declined:
+                _viewOnlyReason = AgentViewOnlyReason.Declined;
                 SetAccess(AgentAccess.ViewOnly);
-                return Fail(request, ClientCodes.Declined, "Права администратора не выданы: доступен только просмотр.");
+                return ViewOnlyFail(request);
             case AgentLaunchStatus.Failed:
                 return Fail(request, ClientCodes.LaunchFailed, launch.Message ?? "Не удалось запустить агент.");
         }
@@ -197,9 +220,14 @@ public sealed class AgentClient : IAgentClient, IDisposable
         _pipeName = pipe;
         try
         {
-            _stream = await _transport.ConnectAsync(pipe, _opt.ConnectTimeout, ct).ConfigureAwait(false);
+            _stream = await ConnectWatchingExitAsync(pipe, launch.Exited, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (AgentAlreadyRunningException)
+        {
+            _pipeName = null;
+            return Fail(request, ClientCodes.AlreadyRunning, LaunchMessages.AlreadyRunning);
+        }
         catch (AgentUntrustedException e)
         {
             _pipeName = null;
@@ -212,6 +240,28 @@ public sealed class AgentClient : IAgentClient, IDisposable
         }
         SetConnected();
         return null;
+    }
+
+    sealed class AgentAlreadyRunningException : Exception;
+
+    /// <summary>
+    /// Подключается к каналу, но если процесс агента сразу вышел с кодом 3 (другой агент уже работает), не ждёт таймаут подключения.
+    /// </summary>
+    async Task<Stream> ConnectWatchingExitAsync(string pipe, Task<int>? exited, CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        // Обёртка превращает синхронное исключение транспорта в сбойную задачу: сначала нужно посмотреть на код выхода агента.
+        var connect = Task.Run(() => _transport.ConnectAsync(pipe, _opt.ConnectTimeout, cts.Token), CancellationToken.None);
+        if (exited is null) return await connect.ConfigureAwait(false);
+
+        await Task.WhenAny(connect, exited).ConfigureAwait(false);
+        if (exited.IsCompletedSuccessfully && exited.Result == Chistovik.Native.Ipc.AgentExitCodes.AlreadyRunning)
+        {
+            cts.Cancel();
+            try { (await connect.ConfigureAwait(false)).Dispose(); } catch (Exception) { /* подключение не удалось или отменено: так и нужно */ }
+            throw new AgentAlreadyRunningException();
+        }
+        return await connect.ConfigureAwait(false);
     }
 
     static AgentResponse Untrusted(AgentRequest request, AgentUntrustedException e)

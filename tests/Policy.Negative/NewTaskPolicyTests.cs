@@ -17,12 +17,13 @@ public class NewTaskPolicyTests
         string runLevel = "LeastPrivilege",
         string logon = "InteractiveToken",
         string xml = "<Task/>",
-        TaskAction[]? extra = null)
+        TaskAction[]? extra = null,
+        string? sid = "S-1-5-21-1-2-3-1001")
     {
         var actions = new List<TaskAction>();
         if (exe is not null) actions.Add(new TaskAction("Exec", exe, null));
         if (extra is not null) actions.AddRange(extra);
-        return new TaskRaw(path, true, xml, user, runLevel, logon, actions);
+        return new TaskRaw(path, true, xml, user, runLevel, logon, actions, sid);
     }
 
     // ---------- путь ----------
@@ -235,6 +236,40 @@ public class NewTaskPolicyTests
         var raw = Raw(user: user);
         Assert.Equal(ChangeClass.ReadOnly, Policy.Classify(raw).Class);
         Assert.True(Policy.CheckSetEnabled(raw, false, isRevertOfOwnStep: true).IsDenied);
+    }
+
+    [Theory]
+    [InlineData(@"PC\Egoist")]
+    [InlineData("Egoist")]
+    [InlineData(@"DOMAIN\ghost")]
+    [InlineData("S-9-9-9")]
+    public void Principal_name_that_did_not_resolve_to_sid_is_read_only(string user)
+    {
+        var raw = Raw(user: user, sid: null);
+        var (cls, _, rule) = Policy.Classify(raw);
+        Assert.Equal(ChangeClass.ReadOnly, cls);
+        Assert.Equal("task-unresolved-principal", rule);
+        Assert.True(Policy.CheckSetEnabled(raw, false).IsDenied);
+        Assert.True(Policy.CheckSetEnabled(raw, true).IsDenied);
+        Assert.True(Policy.CheckSetEnabled(raw, true, isRevertOfOwnStep: true).IsDenied);
+        Assert.True(Policy.CheckSetEnabled(raw, false, isRevertOfOwnStep: true).IsDenied);
+    }
+
+    [Fact]
+    public void Principal_given_as_sid_without_resolution_is_not_read_only()
+        => Assert.Equal(ChangeClass.Modifiable, Policy.Classify(Raw(user: "S-1-5-21-1-2-3-1001", sid: null)).Class);
+
+    [Fact]
+    public void Carve_out_task_with_unresolved_principal_is_still_decided_by_the_carve_out()
+    {
+        // Карв-аут проверяется до принципала: имя пользователя и SID на него не влияют (только выключение, включение откатом).
+        foreach (var path in TaskPolicy.CarveOutTasks)
+        {
+            var raw = Raw(path: path, user: @"PC\ghost", sid: null, exe: null);
+            Assert.Equal(ChangeClass.RevertOnly, Policy.Classify(raw).Class);
+            Assert.True(Policy.CheckSetEnabled(raw, false).IsAllowed);
+            Assert.True(Policy.CheckSetEnabled(raw, true).IsDenied);
+        }
     }
 
     [Fact]

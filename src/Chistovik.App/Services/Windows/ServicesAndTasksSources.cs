@@ -81,7 +81,23 @@ public sealed class ScmServiceSource : IServiceSource
     string DisplayNameOf(string name)
     {
         var v = _reg.ReadValues(RegistryHiveKind.LocalMachine, RegistryViewKind.Registry64, ServicesPath + "\\" + name);
-        return v is not null && v.TryGetValue("DisplayName", out var o) && o is string { Length: > 0 } s && !s.StartsWith('@') ? s : name;
+        if (v is null || !v.TryGetValue("DisplayName", out var o) || o is not string { Length: > 0 } s) return name;
+        if (!s.StartsWith('@')) return s;
+        // Ссылка на строковый ресурс («@%SystemRoot%\system32\x.dll,-100»): берём локализованное имя у системы, иначе короткое имя.
+        return ResolveIndirect(s) ?? name;
+    }
+
+    [System.Runtime.InteropServices.DllImport("shlwapi.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    static extern int SHLoadIndirectString(string source, System.Text.StringBuilder output, uint outputLength, IntPtr reserved);
+
+    static string? ResolveIndirect(string reference)
+    {
+        try
+        {
+            var sb = new System.Text.StringBuilder(260);
+            return SHLoadIndirectString(reference, sb, (uint)sb.Capacity, IntPtr.Zero) == 0 && sb.Length > 0 ? sb.ToString() : null;
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException) { return null; }
     }
 
     static bool IsUnder(string exe, string dir)

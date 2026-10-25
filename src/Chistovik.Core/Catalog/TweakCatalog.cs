@@ -110,6 +110,10 @@ public sealed class TweakCatalog
                 if (t.Scope != (t.Hive == "HKCU" ? "user" : "machine"))
                     throw Bad($"{w}: scope «{t.Scope}» не совпадает с hive «{t.Hive}»");
             }
+            if (t.MinBuild is <= 0) throw Bad($"{w}: minBuild должен быть положительным");
+            if (t.MaxBuild is <= 0) throw Bad($"{w}: maxBuild должен быть положительным");
+            if (t.MinBuild is { } lo && t.MaxBuild is { } hi && lo > hi)
+                throw Bad($"{w}: minBuild больше maxBuild");
             CheckValue(t.OnValue, t.ValueType, "onValue", w);
             if (t.OffValue is { } off && off.ValueKind != JsonValueKind.Null) CheckValue(off, t.ValueType, "offValue", w);
         }

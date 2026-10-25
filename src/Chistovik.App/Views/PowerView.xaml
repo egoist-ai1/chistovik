@@ -51,6 +51,11 @@
                                                     Visibility="{Binding CreatesCopy, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="создаст копию"/>
                                             </Border>
+                                            <Border Style="{StaticResource PillWarn}" Margin="6,0,0,0"
+                                                    Visibility="{Binding IsMissing, Converter={StaticResource BoolToVis}}"
+                                                    ToolTip="На этом устройстве такой схемы нет (например, на ноутбуках с Modern Standby доступна только «Сбалансированная»)">
+                                                <TextBlock Text="нет на этом устройстве"/>
+                                            </Border>
                                         </StackPanel>
                                         <TextBlock Text="{Binding Description}" Style="{StaticResource Subtle}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                     </StackPanel>

@@ -421,6 +421,41 @@ public class ApplyRevertTests
     }
 
     [Fact]
+    public void Power_ultimate_on_modern_standby_is_refused_not_found_without_duplicating()
+    {
+        var t = new TestEnv();
+        t.Power.ModernStandby = true;
+        var r = t.Plan(PowerPlan.Ult);
+        Assert.False(r.Ok);
+        Assert.Equal(Chistovik.Core.Ipc.ResponseCodes.NotFound, r.Code);
+        Assert.Equal(0, t.Power.DuplicateCount);
+        Assert.Equal(0, t.Power.WriteCount);
+        Assert.Equal(TestEnv.Balanced, t.Power.Active);
+    }
+
+    [Fact]
+    public void Power_builtin_scheme_on_modern_standby_still_works()
+    {
+        var t = new TestEnv();
+        t.Power.ModernStandby = true;
+        var r = t.Plan(PowerPlan.High);
+        Assert.True(r.Ok, r.Code + r.Message);
+        Assert.Equal(TestEnv.High, t.Power.Active);
+    }
+
+    [Fact]
+    public void Power_ultimate_on_modern_standby_reuses_our_existing_copy()
+    {
+        var t = new TestEnv();
+        Assert.True(t.Plan(PowerPlan.Ult).Ok);
+        Assert.True(t.Plan(PowerPlan.High).Ok);
+        t.Power.ModernStandby = true;
+        var r = t.Plan(PowerPlan.Ult);
+        Assert.True(r.Ok, r.Code + r.Message);
+        Assert.Equal(1, t.Power.DuplicateCount);
+    }
+
+    [Fact]
     public void Power_ultimate_second_time_reuses_our_existing_copy()
     {
         var t = new TestEnv();

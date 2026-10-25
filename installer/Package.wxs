@@ -12,13 +12,27 @@
 
     <!-- Обновление поверх старой версии; откат на более старую запрещён. -->
     <MajorUpgrade DowngradeErrorMessage="Уже установлена более новая версия Чистовика."
-                  Schedule="afterInstallValidate" />
+                  Schedule="afterInstallValidate" AllowSameVersionUpgrades="yes" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <!-- Нижняя граница .NET 10 (Windows 10 1607) проверяет сам запускаемый exe. Здесь только отсечка совсем старых систем:
          Windows Installer в некоторых контекстах (проверено в Windows Sandbox) сообщает VersionNT = 603 даже на Windows 11,
          поэтому условие «VersionNT >= 1000» блокировало установку на современной системе (код 1603). -->
-    <Launch Condition="Installed OR VersionNT &gt;= 603" Message="Чистовику нужна Windows 10 или новее." />
+    <Property Id="WINBUILD">
+      <RegistrySearch Id="WinBuildSearch" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+                      Name="CurrentBuildNumber" Type="raw" Bitness="always64" />
+    </Property>
+    <Launch Condition="Installed OR WINBUILD &gt;= 17763" Message="Чистовику нужна Windows 10 версии 1809 (сборка 17763) или новее." />
+
+    <?if $(sys.BUILDARCH) = x64?>
+    <!-- Windows 10 на ARM64 не умеет эмулировать x64 (эмуляция есть только с Windows 11, сборка 22000). -->
+    <Property Id="OSARCH">
+      <RegistrySearch Id="OsArchSearch" Root="HKLM" Key="SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
+                      Name="PROCESSOR_ARCHITECTURE" Type="raw" Bitness="always64" />
+    </Property>
+    <Launch Condition="Installed OR OSARCH &lt;&gt; &quot;ARM64&quot; OR WINBUILD &gt;= 22000"
+            Message="Эта сборка для процессоров x64 и не работает на Windows 10 для ARM64. Скачайте сборку arm64 или установите Windows 11." />
+    <?endif?>
 
     <Property Id="ARPCOMMENTS" Value="Лицензия GPL-3.0. Данные пользователя в %ProgramData%\Chistovik при удалении сохраняются." />
 

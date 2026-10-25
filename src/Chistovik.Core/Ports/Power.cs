@@ -22,4 +22,11 @@ public interface IPowerControl
     /// Реализация по умолчанию возвращает null (проверка имени пропускается, пока Native не реализует метод).
     /// </summary>
     string? GetName(Guid scheme) => null;
+
+    /// <summary>
+    /// true на устройстве с Modern Standby (S0 low power idle, поле AoAc в SYSTEM_POWER_CAPABILITIES): там есть только
+    /// «Сбалансированная», а копирование скрытых схем-шаблонов (ultimate) недоступно или даёт неизвестный результат.
+    /// Реализация по умолчанию возвращает false (старое поведение, пока порт не реализует метод).
+    /// </summary>
+    bool IsModernStandby() => false;
 }

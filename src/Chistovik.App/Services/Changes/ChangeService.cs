@@ -156,7 +156,7 @@ public sealed class ChangeService : IChangeService
             if (problem is not null)
                 outcome = new ChangeOutcome(OutcomeKind.Denied, "Запрос не прошёл проверку: " + problem);
             else if (_agent.Access == AgentAccess.ViewOnly)
-                outcome = ResponseText.ViewOnly();
+                outcome = ResponseText.ViewOnly(_agent.ViewOnlyReason);
             else
             {
                 var response = await _agent.SendAsync(request, ct);

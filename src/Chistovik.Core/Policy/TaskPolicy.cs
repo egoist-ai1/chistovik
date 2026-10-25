@@ -148,6 +148,10 @@ public sealed class TaskPolicy
         if (IsPrivilegedAccount(user))
             return (ChangeClass.RevertOnly, "Задача от SYSTEM или служебной учётной записи: только откат собственного шага", "task-privileged-principal");
 
+        // Имя не превратилось в SID и само не SID: проверить, что это не служебная запись, нельзя, значит только просмотр.
+        if (sid.Length == 0 && !user.StartsWith("S-1-", StringComparison.OrdinalIgnoreCase))
+            return (ChangeClass.ReadOnly, "Учётная запись задачи не распознана", "task-unresolved-principal");
+
         return (ChangeClass.Modifiable, "", "");
     }
 

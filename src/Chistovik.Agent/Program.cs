@@ -8,12 +8,13 @@ namespace Chistovik.Agent;
 /// <summary>
 /// Агент с правами администратора. Запускается приложением через ShellExecute runas:
 /// Chistovik.Agent.exe --pipe NAME --parent-pid PID --user-sid SID --app-path PATH
-/// Порядок старта: мьютекс → граф (<see cref="AgentComposition"/>: каталог журнала и ACL, журнал, восстановление, очистка)
+/// Порядок старта: машинный мьютекс Global\Chistovik.Agent (занят — выход с кодом 3) → граф (<see cref="AgentComposition"/>: каталог журнала и ACL, журнал, восстановление, очистка)
 /// → только затем канал. Если журналом пользоваться нельзя, канал открывается, но кроме Ping отвечает кодом ошибки.
 /// </summary>
 public static class Program
 {
-    const int ExitOk = 0, ExitBadArgs = 2, ExitAlreadyRunning = 3, ExitIdle = 4, ExitBadEnvironment = 5;
+    const int ExitOk = AgentExitCodes.Ok, ExitBadArgs = AgentExitCodes.BadArgs, ExitAlreadyRunning = AgentExitCodes.AlreadyRunning,
+        ExitIdle = AgentExitCodes.Idle, ExitBadEnvironment = AgentExitCodes.BadEnvironment;
 
     public static async Task<int> Main(string[] args)
     {
@@ -23,8 +24,13 @@ public static class Program
             return ExitBadArgs;
         }
 
-        using var mutex = new Mutex(true, @"Global\Chistovik.Agent." + userSid.Value, out var created);
-        if (!created) return ExitAlreadyRunning;
+        // Один агент на компьютер (не на пользователя): второй выходит до восстановления журнала и любых записей.
+        using var instance = AgentInstanceLock.TryAcquire();
+        if (instance is null)
+        {
+            Console.Error.WriteLine("[agent] already-running");
+            return ExitAlreadyRunning;
+        }
 
         // Весь граф строится до открытия канала: восстановление после обрыва выполняется раньше, чем придёт первый запрос.
         PolicyContext policy;

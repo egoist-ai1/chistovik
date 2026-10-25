@@ -62,6 +62,14 @@ internal static class PowerPlanner
         try { installed = env.Power.ListSchemes(); }
         catch (Exception e) when (e is not OperationCanceledException) { throw new PlanException(ErrorCodes.From(e), ErrorCodes.Text(e)); }
         if (OwnSchemes.Find(env, template, installed) is { } own) return [new PowerActiveStep(entry, own)];
+
+        // Modern Standby (S0): скрытые схемы-шаблоны не дублируются, вместо попытки с неизвестным исходом даём понятный отказ.
+        bool modernStandby;
+        try { modernStandby = env.Power.IsModernStandby(); }
+        catch (Exception e) when (e is not OperationCanceledException) { throw new PlanException(ErrorCodes.From(e), ErrorCodes.Text(e)); }
+        if (modernStandby)
+            throw new PlanException(StepCodes.NotFound, "Схемы нет на этом устройстве: на ноутбуках с Modern Standby доступна только «Сбалансированная»");
+
         var fresh = env.Ids.NewGuid();
         return [new PowerCreateStep(entry, fresh, true), new PowerActiveStep(entry, fresh)];
     }

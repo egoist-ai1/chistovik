@@ -6,6 +6,8 @@
     <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     <ctl:InverseBoolToVisibilityConverter x:Key="InvBoolToVis"/>
     <ctl:HueConverter x:Key="Hue"/>
+    <!-- Слой свечения (BlurEffect). При программной отрисовке (RDP, ВМ без GPU) App.xaml.cs подменяет значение на Collapsed. -->
+    <Visibility x:Key="GlowVisibility">Visible</Visibility>
 
     <!-- Фокус-кольцо для клавиатуры -->
     <Style x:Key="FocusRing">
@@ -80,7 +82,7 @@
                         <Grid.RenderTransform>
                             <ScaleTransform x:Name="Scale" ScaleX="1" ScaleY="1"/>
                         </Grid.RenderTransform>
-                        <Border x:Name="Glow" Margin="3,7,3,-3" Opacity="0" IsHitTestVisible="False"
+                        <Border x:Name="Glow" Margin="3,7,3,-3" Opacity="0" IsHitTestVisible="False" Visibility="{DynamicResource GlowVisibility}"
                                 CornerRadius="{DynamicResource RadiusMd}" Background="{TemplateBinding BorderBrush}">
                             <Border.Effect>
                                 <BlurEffect Radius="18" RenderingBias="Performance"/>
@@ -337,7 +339,7 @@
                         <Grid.RenderTransform>
                             <TranslateTransform x:Name="Lift" Y="0"/>
                         </Grid.RenderTransform>
-                        <Border x:Name="Glow" Margin="10,16,10,-8" Opacity="0" IsHitTestVisible="False"
+                        <Border x:Name="Glow" Margin="10,16,10,-8" Opacity="0" IsHitTestVisible="False" Visibility="{DynamicResource GlowVisibility}"
                                 CornerRadius="{DynamicResource RadiusLg}"
                                 Background="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource Hue}, ConverterParameter=Line}">
                             <Border.Effect>
@@ -781,5 +783,79 @@
                 </Setter>
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!-- Подсказки: тёмные, в токенах темы (без них WPF рисует светлые системные) -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource Surface2Brush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="FontFamily" Value="{DynamicResource FontText}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FsSm}"/>
+        <Setter Property="HasDropShadow" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource RadiusSm}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter MaxWidth="420" TextElement.Foreground="{TemplateBinding Foreground}">
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping" Value="Wrap"/>
+                                </Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Контекстное меню и пункты -->
+    <Style TargetType="ContextMenu">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource Surface2Brush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="4"/>
+        <Setter Property="FontFamily" Value="{DynamicResource FontText}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FsBase}"/>
+        <Setter Property="HasDropShadow" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource RadiusMd}"
+                            Padding="{TemplateBinding Padding}">
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        <Setter Property="Padding" Value="12,7"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{DynamicResource RadiusSm}" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface3Brush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 </ResourceDictionary>

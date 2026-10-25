@@ -47,6 +47,9 @@ public static class SnapshotPlan
     /// <summary>Самое маленькое окно, которое разрешает программа: проверка, что ничего не обрезается.</summary>
     public static readonly (int Width, int Height) MinimumSize = (900, 600);
 
+    /// <summary>Минимальное окно при масштабе 125 % и 175 % (1366×768 и 1080p с рамками): 1093×576 и 1097×590.</summary>
+    public static readonly (int Width, int Height, int Dpi)[] MinimumAtScale = { (1093, 576, 120), (1097, 590, 168) };
+
     private static readonly SnapshotState[] ListStates = { SnapshotState.Empty, SnapshotState.Loading, SnapshotState.Error };
     private static readonly SnapshotState[] LoadStates = { SnapshotState.Loading, SnapshotState.Error };
     private static readonly SnapshotState[] OverviewStates = { SnapshotState.Loading, SnapshotState.Error, SnapshotState.Welcome };
@@ -85,6 +88,8 @@ public static class SnapshotPlan
                 foreach (var dpi in Dpis)
                     list.Add(new SnapshotSpec(screen.Id, SnapshotState.Ready, w, h, dpi));
             list.Add(new SnapshotSpec(screen.Id, SnapshotState.Ready, MinimumSize.Width, MinimumSize.Height, 96));
+            foreach (var (w, h, dpi) in MinimumAtScale)
+                list.Add(new SnapshotSpec(screen.Id, SnapshotState.Ready, w, h, dpi));
             foreach (var state in screen.ExtraStates)
                 list.Add(new SnapshotSpec(screen.Id, state, Sizes[0].Width, Sizes[0].Height, 96));
         }

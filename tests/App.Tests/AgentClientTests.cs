@@ -8,6 +8,7 @@ public class AgentClientTests
 {
     static AgentClientOptions Opts(TimeSpan? request = null, TimeSpan? heartbeat = null) => new()
     {
+        CanElevate = true,
         UserSid = "S-1-5-21-test",
         ParentPid = 4242,
         AppPath = @"C:\app\Chistovik.App.exe",
@@ -282,7 +283,7 @@ public class AgentClientTests
     {
         var opt = new AgentClientOptions
         {
-            UserSid = "S-1-5-21-test", ParentPid = 1, AppPath = @"C:\app\Chistovik.App.exe",
+            CanElevate = true, UserSid = "S-1-5-21-test", ParentPid = 1,AppPath = @"C:\app\Chistovik.App.exe",
             RequestTimeout = TimeSpan.FromMilliseconds(100),
             CleanupTimeout = TimeSpan.FromSeconds(30),
             HeartbeatInterval = TimeSpan.FromMinutes(10),

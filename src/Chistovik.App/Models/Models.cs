@@ -45,4 +45,9 @@ public sealed record JournalOperation(
 
 public enum TweakState { Unknown, On, Off }
 
-public sealed record PowerSnapshot(Guid? ActiveScheme, IReadOnlyDictionary<string, (uint Ac, uint Dc)> Settings, string? Problem);
+/// <summary>
+/// InstalledSchemes: схемы, реально существующие в системе (null: список не прочитан, считаем доступными все);
+/// ModernStandby: устройство с S0, где схемы-шаблоны (ultimate) создать нельзя.
+/// </summary>
+public sealed record PowerSnapshot(Guid? ActiveScheme, IReadOnlyDictionary<string, (uint Ac, uint Dc)> Settings, string? Problem,
+    IReadOnlyCollection<Guid>? InstalledSchemes = null, bool ModernStandby = false);

@@ -140,6 +140,7 @@ public class UiPolishTests : IDisposable
         "task-action-not-exec", "task-action-unresolved", "task-bad-path", "task-disable-or-revert", "task-elevated", "task-exec-in-windows",
         "task-exec-outside-roots", "task-exec-system-zone", "task-modifiable", "task-no-actions", "task-not-found", "task-path-mismatch",
         "task-privileged-principal", "task-protected-tree", "task-unknown-principal", "task-unknown-runlevel",
+        "task-unresolved-principal",
         "tweak-bad-hive", "tweak-not-in-catalog",
         "not-elevated",
         "cleanup-bad-catalog", "cleanup-browser-running", "cleanup-keep-name", "cleanup-not-under-root", "cleanup-pattern",

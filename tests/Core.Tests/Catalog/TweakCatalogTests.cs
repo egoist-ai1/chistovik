@@ -130,6 +130,35 @@ public sealed class TweakCatalogTests
         Assert.Equal("Pro,Enterprise", string.Join(",", c.Tweaks[0].Editions!));
     }
 
+    [Theory]
+    [InlineData("\"minBuild\":0")]
+    [InlineData("\"minBuild\":-5")]
+    [InlineData("\"maxBuild\":0")]
+    [InlineData("\"minBuild\":22621,\"maxBuild\":22000")]
+    [InlineData("\"minBuild\":\"22000\"")]
+    public void Bad_build_limits_are_rejected(string extra)
+        => Fails("[" + Tweak("a", "," + extra) + "]");
+
+    [Fact]
+    public void Build_limits_parse_and_default_to_null()
+    {
+        var c = TweakCatalog.Parse("[" + Tweak("a", ",\"minBuild\":22000,\"maxBuild\":26100") + "," + Tweak("b") + "]", GoodMode);
+        Assert.Equal(22000, c.Tweaks[0].MinBuild);
+        Assert.Equal(26100, c.Tweaks[0].MaxBuild);
+        Assert.Null(c.Tweaks[1].MinBuild);
+        Assert.Null(c.Tweaks[1].MaxBuild);
+    }
+
+    [Theory]
+    [InlineData("taskbarAl", 22000)]
+    [InlineData("hags", 19041)]
+    [InlineData("copilotUser", 22621)]
+    [InlineData("copilotMachine", 22621)]
+    [InlineData("aiDataUser", 26100)]
+    [InlineData("aiDataMachine", 26100)]
+    public void Builtin_catalog_has_build_limits(string id, int minBuild)
+        => Assert.Equal(minBuild, TweakCatalog.Shared.FindTweak(id)!.MinBuild);
+
     // ---------- валидация на испорченных данных ----------
 
     const string GoodMode = """[{"id":"m","name":"M","tag":"t","description":"d","powerPlan":"bal","requiresAdmin":false,"tweaks":{}}]""";

@@ -11,6 +11,7 @@ namespace Chistovik.App.Services;
 internal static class WindowStyling
 {
     private const int DwmUseImmersiveDarkMode = 20;
+    private const int DwmUseImmersiveDarkModeLegacy = 19;
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
@@ -27,7 +28,9 @@ internal static class WindowStyling
                 var hwnd = new WindowInteropHelper(window).Handle;
                 if (hwnd == IntPtr.Zero) return;
                 var on = 1;
-                _ = DwmSetWindowAttribute(hwnd, DwmUseImmersiveDarkMode, ref on, sizeof(int));
+                // Windows 10 1809-1909 знает только старый номер атрибута (19).
+                if (DwmSetWindowAttribute(hwnd, DwmUseImmersiveDarkMode, ref on, sizeof(int)) != 0)
+                    _ = DwmSetWindowAttribute(hwnd, DwmUseImmersiveDarkModeLegacy, ref on, sizeof(int));
             }
             catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException) { }
         }

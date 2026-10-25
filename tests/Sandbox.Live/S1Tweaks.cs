@@ -319,7 +319,8 @@ static class S1bTweaksV2
         if (Is("ProfessionalEducation") || Is("Education")) return "Education";
         if (Is("Professional")) return "Pro";
         if (Is("Core")) return "Home";
-        if (Is("Enterprise") || Is("IoT")) return "Enterprise";
+        if (Is("Enterprise") || Is("IoT") || Is("Server")) return "Enterprise";
+        if (Is("Cloud")) return "Pro";
         return null;
     }
 

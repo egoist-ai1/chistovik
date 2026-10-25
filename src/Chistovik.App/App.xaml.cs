@@ -10,6 +10,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // В самопроверке и снимках окон с сообщением быть не должно: запись в журнал есть, диалога нет.
+        _silentCrash = e.Args.Contains("--selftest") || e.Args.Contains("--snapshots");
+        InstallCrashHandlers();
+
+        // Программная отрисовка (RDP, ВМ без GPU): размытие слоёв свечения там очень медленное, слои скрываем.
+        if (System.Windows.Media.RenderCapability.Tier >> 16 == 0)
+            Resources["GlowVisibility"] = Visibility.Collapsed;
+
         // Анимации и контраст по настройкам Windows: до создания окон, чтобы шаблоны взяли нужные токены.
         Motion.Apply(this);
         Motion.Watch(this);
@@ -49,6 +57,48 @@ public partial class App : Application
         }
 
         window.Show();
+    }
+
+    private readonly CrashLog _crashLog = new();
+    private int _crashShown;
+    private bool _silentCrash;
+
+    private void InstallCrashHandlers()
+    {
+        DispatcherUnhandledException += (_, args) =>
+        {
+            // Состояние интерфейса после необработанной ошибки неизвестно: сообщаем и завершаем работу.
+            args.Handled = true;
+            ReportCrash("Dispatcher", args.Exception, exit: true);
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            ReportCrash("AppDomain", args.ExceptionObject as Exception, exit: false);
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            // Не фатальна: только пишем в журнал и помечаем наблюдённой.
+            _crashLog.Write("UnobservedTask", args.Exception);
+            args.SetObserved();
+        };
+    }
+
+    private void ReportCrash(string source, Exception? error, bool exit)
+    {
+        try
+        {
+            _crashLog.Write(source, error);
+            // Окно показываем один раз: каскад ошибок при закрытии не должен плодить диалоги.
+            if (!_silentCrash && Interlocked.Exchange(ref _crashShown, 1) == 0)
+                MessageBox.Show(_crashLog.UserMessage(), "Чистовик", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        catch
+        {
+            // Обработчик ошибок сам не должен бросать.
+        }
+        if (exit)
+        {
+            try { Shutdown(1); }
+            catch { Environment.Exit(1); }
+        }
     }
 
     private async void RunSnapshots(string directory)

@@ -76,6 +76,11 @@
                                                                     ToolTip="Для этого твика нужна другая редакция Windows: запись останется, но ничего не изменит">
                                                                 <TextBlock Text="{Binding NotApplicableText}"/>
                                                             </Border>
+                                                            <Border Style="{StaticResource PillWarn}" Margin="6,0,0,0"
+                                                                    Visibility="{Binding IsUnavailable, Converter={StaticResource BoolToVis}}"
+                                                                    ToolTip="На этой сборке Windows твик ничего не изменит, применить его нельзя">
+                                                                <TextBlock Text="{Binding UnavailableText}"/>
+                                                            </Border>
                                                             <Border Style="{StaticResource Pill}" Margin="6,0,0,0"
                                                                     Visibility="{Binding IsMachineWide, Converter={StaticResource BoolToVis}}">
                                                                 <TextBlock Text="{Binding ScopeText}"/>
@@ -96,11 +101,13 @@
                                                                        Visibility="{Binding RevertsAfterUpdate, Converter={StaticResource BoolToVis}}"/>
                                                         </StackPanel>
                                                     </StackPanel>
-                                                    <CheckBox Grid.Column="1" Style="{StaticResource SwitchToggle}"
-                                                              IsChecked="{Binding IsOn, Mode=TwoWay}" Margin="16,0,0,0"
-                                                              VerticalAlignment="Center"
-                                                              IsEnabled="{Binding DataContext.CanApply, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                              AutomationProperties.Name="{Binding Title, StringFormat=Включить: {0}}"/>
+                                                    <Border Grid.Column="1" IsEnabled="{Binding IsAvailable}" VerticalAlignment="Center">
+                                                        <CheckBox Style="{StaticResource SwitchToggle}"
+                                                                  IsChecked="{Binding IsOn, Mode=TwoWay}" Margin="16,0,0,0"
+                                                                  VerticalAlignment="Center"
+                                                                  IsEnabled="{Binding DataContext.CanApply, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                  AutomationProperties.Name="{Binding Title, StringFormat=Включить: {0}}"/>
+                                                    </Border>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>

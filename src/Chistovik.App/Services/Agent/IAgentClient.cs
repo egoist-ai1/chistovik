@@ -25,7 +25,14 @@ public static class ClientCodes
     public const string Disconnected = "client-disconnected";
     /// <summary>На другом конце канала не наш установленный Chistovik.Agent.exe: запрос не отправлялся.</summary>
     public const string Untrusted = "agent-untrusted";
+    /// <summary>Агент вышел с кодом 3: другой агент уже работает на компьютере (другой сеанс Windows).</summary>
+    public const string AlreadyRunning = "agent-already-running";
+    /// <summary>Пользователь без прав администратора: режим просмотра, запрос прав не показывается.</summary>
+    public const string NoAdminAccount = "agent-no-admin-account";
 }
+
+/// <summary>Почему включён режим просмотра.</summary>
+public enum AgentViewOnlyReason { None, Declined, NoAdminAccount }
 
 /// <summary>Транспорт не принял сервер канала: образ процесса не совпал с установленным агентом. Данные по каналу не передавались.</summary>
 public sealed class AgentUntrustedException(string reason) : Exception("Сервер канала не прошёл проверку: " + reason)
@@ -43,6 +50,9 @@ public interface IAgentClient
 
     event EventHandler? AccessChanged;
 
+    /// <summary>Причина режима просмотра (имеет смысл при <see cref="AgentAccess.ViewOnly"/>).</summary>
+    AgentViewOnlyReason ViewOnlyReason => AgentViewOnlyReason.None;
+
     /// <summary>
     /// Отправляет запрос и ждёт ответ. Агент запускается лениво, при первом запросе на изменение. Отказ UAC даёт
     /// ответ с кодом <see cref="ClientCodes.Declined"/> и режим просмотра; в этом режиме запросы не отправляются.
@@ -58,7 +68,8 @@ public sealed record AgentLaunchArgs(string PipeName, int ParentPid, string User
 
 public enum AgentLaunchStatus { Started, Declined, Failed }
 
-public sealed record AgentLaunchResult(AgentLaunchStatus Status, string? Message = null);
+/// <param name="Exited">Завершится кодом выхода процесса агента, если процесс запущен и за ним удалось следить; иначе null.</param>
+public sealed record AgentLaunchResult(AgentLaunchStatus Status, string? Message = null, Task<int>? Exited = null);
 
 /// <summary>Запуск процесса агента с правами (ShellExecute runas). За интерфейсом, чтобы тестировать без процесса.</summary>
 public interface IAgentLauncher

@@ -216,6 +216,11 @@ public sealed class FakePowerControl : IPowerControl
 
     public Guid GetActive() => Active;
 
+    /// <summary>Устройство с Modern Standby (S0): IsModernStandby возвращает true.</summary>
+    public bool ModernStandby { get; set; }
+
+    public bool IsModernStandby() => ModernStandby;
+
     /// <summary>Если задано, GetName бросает это исключение (проверка непредвиденных отказов порта).</summary>
     public Exception? GetNameFailure { get; set; }
 

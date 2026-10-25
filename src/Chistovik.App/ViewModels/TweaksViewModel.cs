@@ -28,6 +28,10 @@ public static class WindowsEdition
         if (Is("Professional")) return "Pro";
         if (Is("Core")) return "Home";
         if (Is("Enterprise") || Is("IoT")) return "Enterprise";
+        // Серверные редакции и Enterprise multi-session (ServerRdsh) ведут себя как Enterprise для политик.
+        if (Is("Server")) return "Enterprise";
+        // Windows 11 SE (CloudEdition, CloudEditionN): не Home, политики действуют как на Pro.
+        if (Is("Cloud")) return "Pro";
         return null;
     }
 
@@ -45,15 +49,26 @@ public static class WindowsEdition
     }
 }
 
+/// <summary>Номер сборки Windows (Environment.OSVersion.Version.Build); подменяется в тестах.</summary>
+public static class WindowsBuild
+{
+    /// <summary>Источник номера сборки; тесты могут подставить свой. 0 или меньше: сборка неизвестна.</summary>
+    public static Func<int> Provider { get; set; } = static () => Environment.OSVersion.Version.Build;
+
+    public static int Current => Provider();
+}
+
 public sealed class TweakRowViewModel : ObservableObject
 {
     private readonly Action _changed;
     private bool _isOn;
     private readonly string? _edition;
+    private readonly int _build;
 
-    public TweakRowViewModel(TweakEntry entry, TweakState current, Action changed, string? edition = null)
+    public TweakRowViewModel(TweakEntry entry, TweakState current, Action changed, string? edition = null, int? build = null)
     {
         _edition = edition ?? WindowsEdition.Current;
+        _build = build ?? WindowsBuild.Current;
         Entry = entry;
         _changed = changed;
         Current = current;
@@ -74,6 +89,23 @@ public sealed class TweakRowViewModel : ObservableObject
     public bool IsNotApplicable => Entry.Editions is { Length: > 0 } eds && _edition is not null
         && !eds.Contains(_edition, StringComparer.Ordinal);
     public string NotApplicableText => "не действует на этой редакции Windows";
+
+    /// <summary>Твик привязан к сборке Windows (minBuild/maxBuild), и текущая сборка не подходит. Неизвестная сборка (≤ 0) подходит.</summary>
+    public bool IsUnavailable => _build > 0
+        && ((Entry.MinBuild is { } lo && _build < lo) || (Entry.MaxBuild is { } hi && _build > hi));
+    public bool IsAvailable => !IsUnavailable;
+
+    /// <summary>Причина недоступности по-русски; пусто, если твик доступен.</summary>
+    public string UnavailableText
+    {
+        get
+        {
+            if (!IsUnavailable) return "";
+            if (Entry.MinBuild is { } lo && _build < lo)
+                return lo >= 22000 ? $"Нужна Windows 11 (сборка {lo}+)" : $"Нужна Windows сборки {lo}+ (у вас {_build})";
+            return $"Не действует на сборке Windows выше {Entry.MaxBuild} (у вас {_build})";
+        }
+    }
 
     public bool RevertsAfterUpdate => Entry.RevertedBy is "feature-update" or "cumulative-update";
     public string RevertText => RevertsAfterUpdate ? "после обновления Windows может вернуться" : "";
@@ -104,10 +136,14 @@ public sealed class TweakRowViewModel : ObservableObject
     public bool IsOn
     {
         get => _isOn;
-        set { if (SetProperty(ref _isOn, value)) { OnPropertyChanged(nameof(IsPending)); _changed(); } }
+        set
+        {
+            if (IsUnavailable) return;   // на этой сборке твик ничего не меняет: желаемое состояние не выставляется
+            if (SetProperty(ref _isOn, value)) { OnPropertyChanged(nameof(IsPending)); _changed(); }
+        }
     }
 
-    public bool IsPending => IsOn != (Current == TweakState.On);
+    public bool IsPending => IsAvailable && IsOn != (Current == TweakState.On);
 
     public void Reset() => IsOn = Current == TweakState.On;
 }
@@ -155,7 +191,7 @@ public sealed class TweaksViewModel : StatefulPageViewModel
 
     public IReadOnlyList<TweakGroupViewModel> Groups { get => _groups; private set => SetProperty(ref _groups, value); }
 
-    public int PendingCount => _rows.Count(r => r.IsPending);
+    public int PendingCount => _rows.Count(r => r.IsPending && !r.IsUnavailable);
     public string ApplyText => PendingCount == 0 ? "Применить" : $"Применить ({PendingCount})";
     public bool NeedsExplorerRestart { get; private set; }
 
@@ -208,7 +244,7 @@ public sealed class TweaksViewModel : StatefulPageViewModel
     public async Task ApplyAsync()
     {
         if (Changes is null || !CanApply) return;
-        var pending = _rows.Where(r => r.IsPending).ToList();
+        var pending = _rows.Where(r => r.IsPending && !r.IsUnavailable).ToList();
         if (pending.Count == 0) return;
 
         if (pending.Any(NeedsConfirmation))

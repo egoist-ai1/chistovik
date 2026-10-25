@@ -180,6 +180,7 @@ public static class ReasonTexts
         ["task-privileged-principal"] = "Задача от имени SYSTEM или служебной учётной записи: напрямую не меняем.",
         ["task-unknown-runlevel"] = "Уровень прав задачи не распознан.",
         ["task-unknown-principal"] = "Не указана учётная запись задачи.",
+        ["task-unresolved-principal"] = "Не удалось определить учётную запись задачи: напрямую не меняем.",
         [TaskNoAccess] = "Планировщик не даёт прочитать эту задачу без прав администратора.",
         // автозагрузка
         ["startup-security-component"] = "Компонент безопасности Windows: защиту не отключаем.",

@@ -24,7 +24,8 @@ public sealed class WindowsCleanupFiles : ICleanupFiles
         // нельзя подменить путь на junction. OPEN_REPARSE_POINT: ссылка на самом path открывается как ссылка (IsReparse=true, а её цель
         // не раскрывается); ссылки в родительских компонентах пути раскрываются, и FinalPath показывает реальное место, которое Core
         // сверяет с запрошенным.
-        using var h = Win32Cleanup.CreateFile(path, Win32Setup.ReadControl | Win32Cleanup.FileReadAttributes, Win32Cleanup.FileShareAll,
+        // Префикс «\\?\» (пути длиннее 260 символов) добавляется только здесь, у вызова Win32; `..` и `/` убраны до него.
+        using var h = Win32Cleanup.CreateFile(ExtendedPath.Extend(path), Win32Setup.ReadControl | Win32Cleanup.FileReadAttributes, Win32Cleanup.FileShareAll,
             IntPtr.Zero, Win32Cleanup.OpenExisting, Win32Cleanup.FileFlagBackupSemantics | Win32Cleanup.FileFlagOpenReparsePoint, IntPtr.Zero);
         if (h.IsInvalid)
         {
@@ -119,7 +120,8 @@ public sealed class WindowsCleanupFiles : ICleanupFiles
         ArgumentException.ThrowIfNullOrEmpty(path);
 
         // BACKUP_SEMANTICS нужен для каталогов и безвреден для файлов. OPEN_REPARSE_POINT: ссылка открывается сама, а не её цель.
-        var h = Win32Cleanup.CreateFile(path, Win32Cleanup.Delete | Win32Cleanup.FileReadAttributes, Win32Cleanup.FileShareAll, IntPtr.Zero,
+        // Префикс «\\?\» добавляется только здесь, у вызова Win32; проверки Core идут над обычным путём и FinalPath хэндла.
+        var h = Win32Cleanup.CreateFile(ExtendedPath.Extend(path), Win32Cleanup.Delete | Win32Cleanup.FileReadAttributes, Win32Cleanup.FileShareAll, IntPtr.Zero,
             Win32Cleanup.OpenExisting, Win32Cleanup.FileFlagBackupSemantics | Win32Cleanup.FileFlagOpenReparsePoint, IntPtr.Zero);
         if (!h.IsInvalid) return new Handle(h, path);
 

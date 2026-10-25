@@ -54,6 +54,12 @@ internal static class Win32
     public static extern int RegEnumValue(SafeRegistryHandle key, uint index, char[] name, ref uint nameLen, IntPtr reserved,
         IntPtr type, IntPtr data, IntPtr dataLen);
 
+    /// <summary>POWER_INFORMATION_LEVEL.SystemPowerCapabilities.</summary>
+    public const int SystemPowerCapabilities = 4;
+
+    [DllImport("powrprof.dll")]
+    public static extern int CallNtPowerInformation(int level, IntPtr input, uint inputLength, IntPtr output, uint outputLength);
+
     [DllImport("ntdll.dll")]
     public static extern int NtQueryKey(SafeRegistryHandle key, int infoClass, IntPtr buffer, uint length, out uint resultLength);
 

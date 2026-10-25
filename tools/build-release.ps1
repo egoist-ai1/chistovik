@@ -52,6 +52,32 @@ New-Item -ItemType Directory -Force -Path $out, $work | Out-Null
 
 $rid = @{ 'x64' = 'win-x64'; 'arm64' = 'win-arm64' }
 
+# PE header Machine field: x64 = 0x8664, arm64 = 0xAA64. Mismatch fails the build.
+function Get-PeMachine([string]$Path) {
+  $fs = [System.IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite')
+  try {
+    $br = New-Object System.IO.BinaryReader($fs)
+    if ($fs.Length -lt 64) { return $null }
+    $fs.Position = 0x3C
+    $peOffset = $br.ReadInt32()
+    if ($peOffset -le 0 -or ($peOffset + 6) -gt $fs.Length) { return $null }
+    $fs.Position = $peOffset
+    if ($br.ReadUInt32() -ne 0x00004550) { return $null }
+    return [int]$br.ReadUInt16()
+  } finally { $fs.Dispose() }
+}
+
+function Assert-PeArchitecture([string]$Folder, [string]$Arch) {
+  $expected = @{ 'x64' = 0x8664; 'arm64' = 0xAA64 }[$Arch]
+  $files = @(Get-ChildItem -LiteralPath $Folder -Recurse -File | Where-Object { $_.Name -like 'Chistovik.*.exe' -or $_.Name -ieq 'e_sqlite3.dll' })
+  if ($files.Count -eq 0) { throw "No Chistovik exe or e_sqlite3.dll found in $Folder ($Arch)." }
+  foreach ($f in $files) {
+    $m = Get-PeMachine $f.FullName
+    if ($null -eq $m) { throw "Not a PE file: $($f.FullName)" }
+    if ($m -ne $expected) { throw ('Architecture mismatch ({0}): {1} has Machine=0x{2:X4}, expected 0x{3:X4}' -f $Arch, $f.FullName, $m, $expected) }
+  }
+}
+
 # Лицензия для мастера: GPL-3 в RTF
 $rtf = Join-Path $work 'License.rtf'
 $text = Get-Content -LiteralPath (Join-Path $root 'LICENSE') -Raw -Encoding UTF8
@@ -67,6 +93,8 @@ foreach ($arch in $Archs) {
   foreach ($f in 'Chistovik.App.exe', 'Chistovik.Agent.exe', 'Chistovik.Agent.dll', 'Chistovik.Core.dll') {
     if (-not (Test-Path -LiteralPath (Join-Path $pub $f))) { throw "В publish-папке нет $f ($arch)." }
   }
+
+  Assert-PeArchitecture $pub $arch
 
   if ($SignCommand) {
     Get-ChildItem -LiteralPath $pub -Recurse -Include 'Chistovik.*.exe', 'Chistovik.*.dll' | ForEach-Object { & $SignCommand $_.FullName }
