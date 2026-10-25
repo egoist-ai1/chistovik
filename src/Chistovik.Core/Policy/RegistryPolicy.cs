@@ -138,6 +138,7 @@ public static partial class RegistryPolicy
     [
         (["CurrentControlSet", "Control"], false, ["WaitToKillServiceTimeout"]),
         (["CurrentControlSet", "Control", "GraphicsDrivers"], false, ["HwSchMode"]),
+        (["CurrentControlSet", "Control", "Remote Assistance"], false, ["fAllowToGetHelp"]),
         (["CurrentControlSet", "Control", "Power"], true, null),
         (["CurrentControlSet", "Control", "Session Manager", "Power"], true, null),
     ];
@@ -157,6 +158,16 @@ public static partial class RegistryPolicy
     [
         ([RegHive.CurrentUser, RegHive.Users], ["Policies", "Microsoft", "Windows", "Explorer"], "DisableSearchBoxSuggestions"),
         ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "DataCollection"], "AllowTelemetry"),
+        // Твики v2 «Приватность»: по одной строке на каждое значение, без подстановок и целых веток.
+        ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "System"], "EnableActivityFeed"),
+        ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "System"], "PublishUserActivities"),
+        ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "System"], "UploadUserActivities"),
+        ([RegHive.CurrentUser, RegHive.Users], ["Policies", "Microsoft", "Windows", "WindowsCopilot"], "TurnOffWindowsCopilot"),
+        ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "WindowsCopilot"], "TurnOffWindowsCopilot"),
+        ([RegHive.CurrentUser, RegHive.Users], ["Policies", "Microsoft", "Windows", "WindowsAI"], "DisableAIDataAnalysis"),
+        ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "WindowsAI"], "DisableAIDataAnalysis"),
+        ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "CloudContent"], "DisableWindowsConsumerFeatures"),
+        ([RegHive.LocalMachine], ["Policies", "Microsoft", "Windows", "Windows Search"], "DisableWebSearch"),
     ];
 
     static bool IsPoliciesMicrosoft(string[] rel)
@@ -607,6 +618,9 @@ public static partial class RegistryPolicy
                 return PolicyDecision.Deny("Ключи автозапуска Run* не изменяются как значения реестра (автозагрузка идёт через StartupApproved)", "reg-run-keys");
             foreach (var d in PersistenceDenyUnder)
                 if (StartsWith(rel, 0, d)) return PolicyDecision.Deny("Узел, запускающий код при входе или старте проводника", "reg-persistence");
+            // Согласия приложений на доступ меняются только в профиле пользователя; машинный ConsentStore не трогаем.
+            if (k.Hive == RegHive.LocalMachine && StartsWith(rel, 0, "Microsoft", "Windows", "CurrentVersion", "CapabilityAccessManager"))
+                return PolicyDecision.Deny("Машинные согласия приложений не изменяются", "reg-consent-machine");
             if (IsPoliciesMicrosoft(rel))
             {
                 foreach (var (hives, relKey, value) in PoliciesMicrosoftWriteAllow)

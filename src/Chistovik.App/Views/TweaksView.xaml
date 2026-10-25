@@ -59,7 +59,7 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel>
-                                                        <StackPanel Orientation="Horizontal">
+                                                        <WrapPanel>
                                                             <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}"
                                                                        FontWeight="Medium" VerticalAlignment="Center"/>
                                                             <Border Style="{StaticResource PillWarn}" Margin="10,0,0,0"
@@ -68,14 +68,19 @@
                                                             </Border>
                                                             <Border Style="{StaticResource PillWarn}" Margin="6,0,0,0"
                                                                     Visibility="{Binding IsUnverified, Converter={StaticResource BoolToVis}}"
-                                                                    ToolTip="Этот твик ещё не проверялся в песочнице">
-                                                                <TextBlock Text="не проверено"/>
+                                                                    ToolTip="Этот твик ещё не проверялся на живой системе и в песочнице">
+                                                                <TextBlock Text="{Binding UnverifiedText}"/>
+                                                            </Border>
+                                                            <Border Style="{StaticResource PillWarn}" Margin="6,0,0,0"
+                                                                    Visibility="{Binding IsNotApplicable, Converter={StaticResource BoolToVis}}"
+                                                                    ToolTip="Для этого твика нужна другая редакция Windows: запись останется, но ничего не изменит">
+                                                                <TextBlock Text="{Binding NotApplicableText}"/>
                                                             </Border>
                                                             <Border Style="{StaticResource Pill}" Margin="6,0,0,0"
                                                                     Visibility="{Binding IsMachineWide, Converter={StaticResource BoolToVis}}">
                                                                 <TextBlock Text="{Binding ScopeText}"/>
                                                             </Border>
-                                                        </StackPanel>
+                                                        </WrapPanel>
                                                         <TextBlock Text="{Binding Description}" Style="{StaticResource Subtle}"
                                                                    TextWrapping="Wrap" Margin="0,4,0,0"/>
                                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
@@ -85,6 +90,10 @@
                                                                        Foreground="{DynamicResource WarnBrush}" FontSize="{DynamicResource FsXs}"
                                                                        Margin="12,0,0,0"
                                                                        Visibility="{Binding HasRestart, Converter={StaticResource BoolToVis}}"/>
+                                                            <TextBlock Text="{Binding RevertText}" Style="{StaticResource MonoText}"
+                                                                       Foreground="{DynamicResource WarnBrush}" FontSize="{DynamicResource FsXs}"
+                                                                       Margin="12,0,0,0"
+                                                                       Visibility="{Binding RevertsAfterUpdate, Converter={StaticResource BoolToVis}}"/>
                                                         </StackPanel>
                                                     </StackPanel>
                                                     <CheckBox Grid.Column="1" Style="{StaticResource SwitchToggle}"

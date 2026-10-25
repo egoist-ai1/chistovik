@@ -2,7 +2,11 @@ using System.Text.Json;
 
 namespace Chistovik.Core.Catalog;
 
-/// <summary>Твик реестра из каталога. OffValue = null означает «удалить значение».</summary>
+/// <summary>
+/// Твик реестра из каталога. OffValue = null означает «удалить значение».
+/// Editions: редакции Windows, на которых твик действует (null: на всех). RevertedBy: что возвращает значение
+/// (feature-update | cumulative-update | none; null: не указано). Scope: user | machine, совпадает с Hive.
+/// </summary>
 public sealed record TweakEntry(
     string Id,
     string Title,
@@ -20,7 +24,10 @@ public sealed record TweakEntry(
     string Effect,
     bool RequiresAdmin,
     string Source,
-    bool Verified)
+    bool Verified,
+    string[]? Editions = null,
+    string? RevertedBy = null,
+    string? Scope = null)
 {
     /// <summary>Полный путь ключа вида «HKCU\Software\...» для проверки политикой.</summary>
     public string FullKey => Hive + "\\" + Key;

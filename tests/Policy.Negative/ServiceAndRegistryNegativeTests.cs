@@ -352,6 +352,17 @@ public class RegistryPolicyNegativeTests
     public void Ordinary_tweak_targets_are_not_vetoed(string key, string value)
         => Assert.True(RegistryPolicy.CheckSetValue(key, value).IsAllowed);
 
+    [Theory]
+    [InlineData(@"HKLM\SOFTWARE\WOW6432Node\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]
+    [InlineData(@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location", "Value")]
+    [InlineData(@"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location", "Value")]
+    public void Delivery_optimization_policy_and_hklm_consent_store_writes_are_denied(string key, string value)
+    {
+        var d = RegistryPolicy.CheckSetValue(key, value);
+        Assert.True(d.IsDenied, $"{key}::{value} -> {d.Verdict} ({d.Rule})");
+    }
+
     // ---------- HKLM\SYSTEM: запрет по умолчанию ----------
 
     [Theory]
@@ -443,6 +454,97 @@ public class RegistryPolicyNegativeTests
         Assert.True(RegistryPolicy.CheckSetValue(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry").IsAllowed);
         Assert.True(RegistryPolicy.CheckSetValue(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection", "allowtelemetry").IsAllowed);
     }
+
+    // ---------- твики v2: политики приватности (по одной allow-строке на значение) ----------
+
+    // Все исключения Policies\Microsoft: (куст, ключ, значение). Каждому соответствует ровно одна запись tweaks.json.
+    static readonly (string Hive, string Key, string Value)[] PinnedPolicyRows =
+    [
+        ("HKCU", @"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions"),
+        ("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry"),
+        ("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\System", "EnableActivityFeed"),
+        ("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\System", "PublishUserActivities"),
+        ("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\System", "UploadUserActivities"),
+        ("HKCU", @"Software\Policies\Microsoft\Windows\WindowsCopilot", "TurnOffWindowsCopilot"),
+        ("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot", "TurnOffWindowsCopilot"),
+        ("HKCU", @"Software\Policies\Microsoft\Windows\WindowsAI", "DisableAIDataAnalysis"),
+        ("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\WindowsAI", "DisableAIDataAnalysis"),
+        ("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableWindowsConsumerFeatures"),
+        ("HKLM", @"SOFTWARE\Policies\Microsoft\Windows\Windows Search", "DisableWebSearch"),
+    ];
+
+    [Fact]
+    public void Every_policy_row_matches_exactly_one_catalog_tweak_and_back()
+    {
+        var catalog = Chistovik.Core.Catalog.TweakCatalog.Load();
+        var fromCatalog = catalog.Tweaks
+            .Where(t => t.Key.Contains(@"Policies\Microsoft", StringComparison.OrdinalIgnoreCase))
+            .Select(t => (t.Hive, t.Key, t.Value))
+            .ToList();
+        Assert.Equal(fromCatalog.Count, fromCatalog.Distinct().Count());
+        Assert.Equal(
+            PinnedPolicyRows.OrderBy(x => x.ToString(), StringComparer.Ordinal),
+            fromCatalog.OrderBy(x => x.ToString(), StringComparer.Ordinal));
+        foreach (var (hive, key, value) in PinnedPolicyRows)
+        {
+            Assert.True(RegistryPolicy.CheckSetValue(hive + @"\" + key, value).IsAllowed, $"{hive}\\{key}::{value}");
+            Assert.True(RegistryPolicy.CheckSetValue(hive + @"\" + key, value.ToLowerInvariant()).IsAllowed, $"{hive}\\{key}::{value} (регистр)");
+            Assert.True(RegistryPolicy.CheckDeleteValue(hive + @"\" + key, value).IsAllowed, $"{hive}\\{key}::{value} (удаление значения)");
+        }
+    }
+
+    [Theory]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\System", "DisableLockWorkstation")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot", "Foo")]
+    [InlineData(@"HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot", "Foo")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI", "AllowRecallEnablement")]
+    [InlineData(@"HKCU\Software\Policies\Microsoft\Windows\WindowsAI", "AllowRecallEnablement")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableSoftLanding")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Search", "AllowCortana")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection", "DoNotShowFeedbackNotifications")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]
+    [InlineData(@"HKCU\Software\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\System\Sub", "EnableActivityFeed")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot\Sub", "TurnOffWindowsCopilot")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Search\Sub", "DisableWebSearch")]
+    // куст: строки только для HKLM не пропускают HKCU и HKU
+    [InlineData(@"HKCU\Software\Policies\Microsoft\Windows\System", "EnableActivityFeed")]
+    [InlineData(@"HKCU\Software\Policies\Microsoft\Windows\System", "PublishUserActivities")]
+    [InlineData(@"HKCU\Software\Policies\Microsoft\Windows\System", "UploadUserActivities")]
+    [InlineData(@"HKCU\Software\Policies\Microsoft\Windows\CloudContent", "DisableWindowsConsumerFeatures")]
+    [InlineData(@"HKCU\Software\Policies\Microsoft\Windows\Windows Search", "DisableWebSearch")]
+    [InlineData(@"HKU\S-1-5-21-1-2-3-1001\Software\Policies\Microsoft\Windows\System", "EnableActivityFeed")]
+    [InlineData(@"HKU\S-1-5-21-1-2-3-1001\Software\Policies\Microsoft\Windows\CloudContent", "DisableWindowsConsumerFeatures")]
+    [InlineData(@"HKU\S-1-5-21-1-2-3-1001\Software\Policies\Microsoft\Windows\Windows Search", "DisableWebSearch")]
+    [InlineData(@"HKU\S-1-5-21-1-2-3-1001\Software\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry")]
+    // и наоборот: строка только для HKCU не пропускает HKLM
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions")]
+    public void V2_policy_neighbours_and_wrong_hive_are_denied(string key, string value)
+    {
+        var d = RegistryPolicy.CheckSetValue(key, value);
+        Assert.True(d.IsDenied, $"{key}::{value} -> {d.Verdict} ({d.Rule})");
+        Assert.True(RegistryPolicy.CheckDeleteValue(key, value).IsDenied, $"delete {key}::{value}");
+    }
+
+    [Theory]
+    [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Control\Remote Assistance", "fAllowFullControl")]
+    [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Control\Remote Assistance", "MaxTicketExpiry")]
+    [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Control\Remote Assistance\Sub", "fAllowToGetHelp")]
+    [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server", "fDenyTSConnections")]
+    [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server", "fAllowToGetHelp")]
+    [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Control", "fAllowToGetHelp")]
+    [InlineData(@"HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services", "fAllowToGetHelp")]
+    public void Remote_assistance_neighbours_are_denied(string key, string value)
+    {
+        var d = RegistryPolicy.CheckSetValue(key, value);
+        Assert.True(d.IsDenied, $"{key}::{value} -> {d.Verdict} ({d.Rule})");
+    }
+
+    [Theory]
+    [InlineData(@"HKLM\SYSTEM\CurrentControlSet\Control\Remote Assistance", "fAllowToGetHelp")]
+    [InlineData(@"HKLM\SYSTEM\ControlSet001\Control\Remote Assistance", "fallowtogethelp")]
+    public void Remote_assistance_allow_row_is_exact(string key, string value)
+        => Assert.True(RegistryPolicy.CheckSetValue(key, value).IsAllowed);
 
     // ---------- новые защищённые узлы Software ----------
 

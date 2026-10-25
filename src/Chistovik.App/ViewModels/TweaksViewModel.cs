@@ -7,13 +7,53 @@ using Chistovik.Core.Ipc;
 
 namespace Chistovik.App.ViewModels;
 
+/// <summary>
+/// Редакция Windows для подсказок «не действует на этой редакции». Только чтение EditionID из реестра;
+/// агент редакцию не проверяет и от неё ничего не зависит.
+/// </summary>
+public static class WindowsEdition
+{
+    private static readonly Lazy<string?> CurrentLazy = new(ReadCurrent);
+
+    /// <summary>Home | Pro | Enterprise | Education, либо null, если определить не удалось.</summary>
+    public static string? Current => CurrentLazy.Value;
+
+    /// <summary>Сводит EditionID к одной из четырёх редакций каталога; неизвестное даёт null.</summary>
+    public static string? Normalize(string? editionId)
+    {
+        if (string.IsNullOrWhiteSpace(editionId)) return null;
+        var id = editionId.Trim();
+        bool Is(string prefix) => id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        if (Is("ProfessionalEducation") || Is("Education")) return "Education";
+        if (Is("Professional")) return "Pro";
+        if (Is("Core")) return "Home";
+        if (Is("Enterprise") || Is("IoT")) return "Enterprise";
+        return null;
+    }
+
+    private static string? ReadCurrent()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            return Normalize(key?.GetValue("EditionID") as string);
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or System.IO.IOException)
+        {
+            return null;
+        }
+    }
+}
+
 public sealed class TweakRowViewModel : ObservableObject
 {
     private readonly Action _changed;
     private bool _isOn;
+    private readonly string? _edition;
 
-    public TweakRowViewModel(TweakEntry entry, TweakState current, Action changed)
+    public TweakRowViewModel(TweakEntry entry, TweakState current, Action changed, string? edition = null)
     {
+        _edition = edition ?? WindowsEdition.Current;
         Entry = entry;
         _changed = changed;
         Current = current;
@@ -28,6 +68,15 @@ public sealed class TweakRowViewModel : ObservableObject
     public string Description => Entry.Description;
     public bool IsCareful => Entry.Risk == "careful";
     public bool IsUnverified => !Entry.Verified;
+    public string UnverifiedText => "не проверено на живой системе";
+
+    /// <summary>Твик привязан к редакциям, и текущая в список не входит (неизвестная редакция не считается несовпадением).</summary>
+    public bool IsNotApplicable => Entry.Editions is { Length: > 0 } eds && _edition is not null
+        && !eds.Contains(_edition, StringComparer.Ordinal);
+    public string NotApplicableText => "не действует на этой редакции Windows";
+
+    public bool RevertsAfterUpdate => Entry.RevertedBy is "feature-update" or "cumulative-update";
+    public string RevertText => RevertsAfterUpdate ? "после обновления Windows может вернуться" : "";
     public bool IsMachineWide => Entry.Hive == "HKLM";
     public string RiskText => IsCareful ? "Осторожно" : "Безопасно";
     public string ScopeText => IsMachineWide ? "Для всех пользователей" : "Только для вас";
@@ -198,6 +247,8 @@ public sealed class TweaksViewModel : StatefulPageViewModel
             if (r.IsMachineWide) sb.Append("   Касается всех пользователей этого компьютера.\n");
             if (r.IsCareful) sb.Append("   ").Append(e.Description).Append('\n');
             if (r.HasRestart) sb.Append("   После применения: ").Append(r.RestartText).Append(".\n");
+            if (r.IsNotApplicable) sb.Append("   Внимание: ").Append(r.NotApplicableText).Append(".\n");
+            if (r.RevertsAfterUpdate) sb.Append("   Учтите: ").Append(r.RevertText).Append(".\n");
         }
         sb.Append("\nОткуда вернуть: раздел «Журнал и откат», кнопка «Откатить». Прежнее значение записывается в журнал до изменения.");
         if (rows.Any(r => !r.Entry.Verified))

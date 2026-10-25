@@ -15,6 +15,12 @@ public sealed class TweakCatalog
     /// <summary>Что приложение делает в сеансе после применения: none, SystemParametersInfo (spi-*) или WM_SETTINGCHANGE (broadcast).</summary>
     public static readonly IReadOnlySet<string> Effects = new HashSet<string> { "none", "spi-animation", "spi-dragfull", "spi-mouse", "broadcast" };
 
+    /// <summary>Редакции Windows, к которым привязан твик (EditionID сведён к четырём).</summary>
+    public static readonly IReadOnlySet<string> Editions = new HashSet<string> { "Home", "Pro", "Enterprise", "Education" };
+    /// <summary>Что возвращает значение после установки обновления Windows.</summary>
+    public static readonly IReadOnlySet<string> RevertedByValues = new HashSet<string> { "feature-update", "cumulative-update", "none" };
+    public static readonly IReadOnlySet<string> Scopes = new HashSet<string> { "user", "machine" };
+
     static readonly Lazy<TweakCatalog> SharedLazy = new(Load);
 
     /// <summary>Общий экземпляр встроенного каталога (для проверки запросов).</summary>
@@ -92,6 +98,18 @@ public sealed class TweakCatalog
             OneOf(t.Effect, Effects, "effect", w);
             if (t.Key.StartsWith('\\') || t.Key.EndsWith('\\') || t.Key.Contains(':'))
                 throw Bad($"{w}: key должен быть путём без куста и без «:» («{t.Key}»)");
+            if (t.Editions is { } eds)
+            {
+                if (eds.Length == 0) throw Bad($"{w}: editions не может быть пустым");
+                foreach (var ed in eds) OneOf(ed, Editions, "editions", w);
+            }
+            if (t.RevertedBy is not null) OneOf(t.RevertedBy, RevertedByValues, "revertedBy", w);
+            if (t.Scope is not null)
+            {
+                OneOf(t.Scope, Scopes, "scope", w);
+                if (t.Scope != (t.Hive == "HKCU" ? "user" : "machine"))
+                    throw Bad($"{w}: scope «{t.Scope}» не совпадает с hive «{t.Hive}»");
+            }
             CheckValue(t.OnValue, t.ValueType, "onValue", w);
             if (t.OffValue is { } off && off.ValueKind != JsonValueKind.Null) CheckValue(off, t.ValueType, "offValue", w);
         }

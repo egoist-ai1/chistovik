@@ -67,6 +67,69 @@ public sealed class TweakCatalogTests
                 Assert.NotNull(Cat.FindTweak(id));
     }
 
+    [Fact]
+    public void Every_tweak_has_scope_matching_hive()
+    {
+        foreach (var t in Cat.Tweaks)
+            Assert.Equal(t.Hive == "HKCU" ? "user" : "machine", t.Scope);
+    }
+
+    [Fact]
+    public void Editions_and_reverted_by_use_closed_sets()
+    {
+        foreach (var t in Cat.Tweaks)
+        {
+            if (t.Editions is not null) Assert.All(t.Editions, e => Assert.Contains(e, TweakCatalog.Editions));
+            if (t.RevertedBy is not null) Assert.Contains(t.RevertedBy, TweakCatalog.RevertedByValues);
+        }
+    }
+
+    [Fact]
+    public void Content_delivery_tweaks_are_reverted_by_feature_update_and_policies_are_not()
+    {
+        foreach (var t in Cat.Tweaks.Where(t => t.Key.EndsWith("ContentDeliveryManager", StringComparison.OrdinalIgnoreCase)))
+            Assert.Equal("feature-update", t.RevertedBy);
+        foreach (var t in Cat.Tweaks.Where(t => t.Key.Contains(@"Policies\Microsoft", StringComparison.OrdinalIgnoreCase)))
+            Assert.True(t.RevertedBy is null or "none", t.Id);
+    }
+
+    [Fact]
+    public void Tweaks_never_touch_delivery_optimization_or_windows_update()
+    {
+        foreach (var t in Cat.Tweaks)
+        {
+            Assert.DoesNotContain("DeliveryOptimization", t.Key, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("WindowsUpdate", t.Key, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void Consent_store_tweaks_restore_allow()
+    {
+        foreach (var t in Cat.Tweaks.Where(t => t.Key.Contains("ConsentStore", StringComparison.OrdinalIgnoreCase)))
+        {
+            Assert.Equal("careful", t.Risk);
+            Assert.Equal("Deny", t.OnValue.GetString());
+            Assert.Equal("Allow", t.OffValue!.Value.GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData("\"editions\":[\"Server\"]")]
+    [InlineData("\"editions\":[]")]
+    [InlineData("\"revertedBy\":\"sometimes\"")]
+    [InlineData("\"scope\":\"machine\"")]
+    [InlineData("\"scope\":\"all\"")]
+    public void Bad_v2_fields_are_rejected(string extra)
+        => Fails("[" + Tweak("a", "," + extra) + "]");
+
+    [Fact]
+    public void Valid_v2_fields_parse()
+    {
+        var c = TweakCatalog.Parse("[" + Tweak("a", ",\"editions\":[\"Pro\",\"Enterprise\"],\"revertedBy\":\"none\",\"scope\":\"user\"") + "]", GoodMode);
+        Assert.Equal("Pro,Enterprise", string.Join(",", c.Tweaks[0].Editions!));
+    }
+
     // ---------- валидация на испорченных данных ----------
 
     const string GoodMode = """[{"id":"m","name":"M","tag":"t","description":"d","powerPlan":"bal","requiresAdmin":false,"tweaks":{}}]""";
