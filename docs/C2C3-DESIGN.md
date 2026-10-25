@@ -70,7 +70,7 @@ public sealed class CleanupPolicy(PolicyContext ctx)
 }
 ```
 
-Коды правил: `cleanup-bad-catalog`, `cleanup-root-outside`, `cleanup-root-reparse`, `cleanup-root-moved`, `cleanup-root-missing` (not-found, пропуск), `cleanup-profile-reparse`, `cleanup-profile-owner`, `cleanup-profile-location`, `cleanup-reparse`, `cleanup-keep-name`, `cleanup-pattern`, `cleanup-too-fresh`, `cleanup-not-under-root`, `cleanup-browser-running`, `recyclebin-foreign-user`.
+Коды правил: `cleanup-bad-catalog`, `cleanup-root-outside`, `cleanup-root-reparse`, `cleanup-root-moved`, `cleanup-root-missing` (not-found, пропуск), `cleanup-root-volume-unknown` (том запрошенной буквы не определён: subst, сеть, виртуальный диск; fail-closed), `cleanup-profile-reparse`, `cleanup-profile-owner`, `cleanup-profile-location`, `cleanup-reparse`, `cleanup-keep-name`, `cleanup-pattern`, `cleanup-too-fresh`, `cleanup-not-under-root`, `cleanup-browser-running`, `recyclebin-foreign-user`.
 
 **Порты** (`src/Chistovik.Core/Ports/Cleanup.cs`):
 

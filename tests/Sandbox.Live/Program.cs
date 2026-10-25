@@ -66,6 +66,8 @@ public static class Program
             ("S7", S7Agent.Run),
             ("S9", S9Uninstall.Run),
             ("S10", S10Ui.Run),
+            ("S11", S11Disk.Run),
+            ("S12", S12Registry.Run),
         };
         var only = o.Get("--only")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var (name, run) in all)

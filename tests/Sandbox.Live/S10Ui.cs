@@ -63,6 +63,7 @@ static class S10Ui
             await UninstallThroughUi(c, app, main, installed);
             await ProtectedHasNoButton(c, app, main);
             await BatchThroughUi(c, app, main, targets);
+            await CleanupExtension(c, app, main);
         }
         finally
         {
@@ -370,6 +371,205 @@ static class S10Ui
             Save(c, $"s10-protected-{prefix.Replace(' ', '_').Replace("+", "p")}.txt", Texts(main));
         }
         SetText(search, "");
+    }
+
+    /// <summary>
+    /// Расширение для «Чистки» (C2/C3): чипы «Диск» и «Реестр»; категория «Временные файлы пользователя» очищается кнопкой и
+    /// подтверждением; запись реестра (сирота) удаляется с подтверждением про копию, затем откатывается из «Журнала и отката»
+    /// и снова видна после пересканирования; защищённые строки (системный компонент, живая программа) без флажка.
+    /// </summary>
+    static async Task CleanupExtension(LiveContext c, Process app, AutomationElement main)
+    {
+        const string tag = "чистка диска и реестра";
+        const string diskTitle = "Временные файлы пользователя";
+        var userTemp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp");
+        var oldFile = Path.Combine(userTemp, "s10-old.tmp");
+        var orphanKey = S12Registry.UninstallKey + "\\" + S12Registry.Orphan;
+        try
+        {
+            Directory.CreateDirectory(userTemp);
+            File.WriteAllBytes(oldFile, new byte[256 * 1024]);
+            var old = DateTime.UtcNow - TimeSpan.FromDays(3);
+            File.SetCreationTimeUtc(oldFile, old);
+            File.SetLastWriteTimeUtc(oldFile, old);
+            S12Registry.MakeOrphan(S12Registry.Orphan);
+            S12Registry.MakeLive(S12Registry.Live);
+            S12Registry.MakeUninstall(S12Registry.Sys, @"C:\Program Files\" + S12Registry.Sys, "\"C:\\Program Files\\" + S12Registry.Sys + "\\unins.exe\"", systemComponent: true);
+
+            // Уход с экрана и возврат, затем свежий скан: фикстуры созданы уже после первого просмотра.
+            Select(FindListItem(main, "Журнал и откат")!);
+            await Task.Delay(1000);
+            Select(FindListItem(main, "Чистка")!);
+            await Task.Delay(1500);
+            WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(120));
+            await Rescan(main);
+            var search = FindByName(main, "Поиск в списке чистки");
+            if (search is null) { c.Report.Fail(Sc, $"{tag}: поиск", "поля поиска нет"); return; }
+
+            var diskChip = FindChip(main, "Диск");
+            var regChip = FindChip(main, "Реестр");
+            c.Report.Check(Sc, $"{tag}: чипы «Диск» и «Реестр» есть", diskChip is not null && regChip is not null, "оба чипа найдены",
+                $"«Диск»: {(diskChip is null ? "нет" : "есть")}; «Реестр»: {(regChip is null ? "нет" : "есть")}");
+            if (diskChip is null || regChip is null) { DumpWhy(c, app, main, "s10-why-chips.txt"); return; }
+
+            // ----- диск -----
+            Invoke(diskChip);
+            await Task.Delay(800);
+            var row = await RowFor(main, search, diskTitle);
+            c.Report.Check(Sc, $"{tag}: категория «{diskTitle}» видна в области «Диск»", row is not null, row?.Current.Name ?? "", "строки нет в списке");
+            if (row is not null)
+            {
+                var box = row.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.CheckBox));
+                if (box is null) c.Report.Fail(Sc, $"{tag}: флажок категории", "у строки нет флажка");
+                else
+                {
+                    EnsureChecked(box);
+                    await Task.Delay(500);
+                    var clean = FindByName(main, "Очистить выбранные категории");
+                    var canClean = clean is { Current.IsEnabled: true };
+                    c.Report.Check(Sc, $"{tag}: кнопка «Очистить выбранные категории» доступна", canClean, "доступна", clean is null ? "кнопки нет" : "выключена");
+                    if (canClean)
+                    {
+                        Invoke(clean!);
+                        var ok = WaitFor(() => FindDialogOk(app, "Очистить: "), TimeSpan.FromSeconds(20));
+                        c.Report.Check(Sc, $"{tag}: диалог подтверждения очистки", ok is not null, "диалог показан", "диалога нет");
+                        if (ok is not null)
+                        {
+                            DumpDialogs(c, app, "s10-dialog-clean.txt");
+                            Invoke(ok);
+                            var gone = WaitFor(() => File.Exists(oldFile) ? null : "gone", TimeSpan.FromSeconds(120)) is not null;
+                            c.Report.Check(Sc, $"{tag}: старый файл из Temp профиля удалён агентом", gone, "файла нет", "файл остался через 120 с");
+                            var summary = WaitFor(() => Texts(main).FirstOrDefault(x => x.Contains("Освобождено", StringComparison.Ordinal)), TimeSpan.FromSeconds(60));
+                            c.Report.Check(Sc, $"{tag}: итог очистки показан", summary is not null, summary ?? "", "строки «Освобождено…» нет");
+                            Save(c, "s10-after-clean.txt", Texts(main));
+                        }
+                    }
+                }
+            }
+
+            // ----- реестр -----
+            Invoke(regChip);
+            await Task.Delay(800);
+            await Rescan(main);
+            var orphanRow = await RowFor(main, search, S12Registry.Orphan);
+            c.Report.Check(Sc, $"{tag}: сирота реестра видна в области «Реестр»", orphanRow is not null, orphanRow?.Current.Name ?? "", "строки нет в списке");
+            if (orphanRow is not null)
+            {
+                var box = orphanRow.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.CheckBox));
+                if (box is null) c.Report.Fail(Sc, $"{tag}: флажок записи реестра", "у строки нет флажка");
+                else
+                {
+                    EnsureChecked(box);
+                    await Task.Delay(500);
+                    var del = FindByName(main, "Удалить выбранные записи реестра");
+                    var canDel = del is { Current.IsEnabled: true };
+                    c.Report.Check(Sc, $"{tag}: кнопка «Удалить выбранные записи реестра» доступна", canDel, "доступна", del is null ? "кнопки нет" : "выключена");
+                    if (canDel)
+                    {
+                        Invoke(del!);
+                        var ok = WaitFor(() => FindDialogOk(app, "Удалить из реестра: "), TimeSpan.FromSeconds(20));
+                        c.Report.Check(Sc, $"{tag}: диалог удаления из реестра", ok is not null, "диалог показан", "диалога нет");
+                        if (ok is not null)
+                        {
+                            DumpDialogs(c, app, "s10-dialog-registry.txt");
+                            var dialogText = string.Join(" ", DialogTexts(app));
+                            c.Report.Check(Sc, $"{tag}: диалог говорит про копию", dialogText.Contains("копия", StringComparison.OrdinalIgnoreCase), "«копия» названа", "в тексте диалога нет слова «копия»");
+                            Invoke(ok);
+                            var gone = WaitFor(() => S12Registry.Snap(false, "", orphanKey) is null ? "gone" : null, TimeSpan.FromSeconds(120)) is not null;
+                            c.Report.Check(Sc, $"{tag}: ключ сироты удалён агентом", gone, "ключа нет", "ключ остался через 120 с");
+                            var summary = WaitFor(() => Texts(main).FirstOrDefault(x => x.Contains("Убрано записей реестра", StringComparison.Ordinal)), TimeSpan.FromSeconds(60));
+                            c.Report.Check(Sc, $"{tag}: итог удаления показан", summary is not null, summary ?? "", "строки «Убрано записей реестра…» нет");
+                            Save(c, "s10-after-registry.txt", Texts(main));
+                        }
+                    }
+                }
+            }
+
+            // ----- защищённые строки -----
+            foreach (var name in new[] { S12Registry.Sys, S12Registry.Live })
+            {
+                var prow = await RowFor(main, search, name);
+                if (prow is null) { c.Report.Info(Sc, $"{tag}: защищённая «{name}»", "в списке реестра строки нет (скрыта)"); continue; }
+                var pbox = prow.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.CheckBox));
+                var blocked = pbox is null || pbox.Current.IsOffscreen || !pbox.Current.IsEnabled;
+                c.Report.Check(Sc, $"{tag}: у защищённой «{name}» нет рабочего флажка", blocked, pbox is null ? "флажка нет" : "флажок скрыт или выключен", "флажок доступен");
+            }
+
+            // ----- откат из журнала -----
+            Select(FindListItem(main, "Журнал и откат")!);
+            await Task.Delay(2000);
+            var op = WaitFor(() => ListItems(main, "Список операций").FirstOrDefault(i => i.Current.Name.Contains("Реестр", StringComparison.Ordinal)), TimeSpan.FromSeconds(30));
+            c.Report.Check(Sc, $"{tag}: операция «Реестр» есть в журнале", op is not null, op?.Current.Name ?? "", "в списке операций нет «Реестр»");
+            if (op is null) { Save(c, "s10-journal-registry.txt", Texts(main)); return; }
+            Select(op);
+            await Task.Delay(800);
+            var undo = FindByName(main, "Откатить выбранную операцию");
+            var canUndo = undo is { Current.IsEnabled: true };
+            c.Report.Check(Sc, $"{tag}: кнопка «Откатить» для операции реестра доступна", canUndo, "доступна", undo is null ? "кнопки нет" : "выключена");
+            if (!canUndo) return;
+            Invoke(undo!);
+            var undoOk = WaitFor(() => FindDialogOk(app, "Откатить: "), TimeSpan.FromSeconds(20));
+            c.Report.Check(Sc, $"{tag}: диалог отката", undoOk is not null, "диалог показан", "диалога нет");
+            if (undoOk is null) return;
+            Invoke(undoOk);
+            var back = WaitFor(() => S12Registry.Snap(false, "", orphanKey) is not null ? "back" : null, TimeSpan.FromSeconds(120)) is not null;
+            c.Report.Check(Sc, $"{tag}: откат вернул ключ сироты", back, "ключ на месте", "ключа нет через 120 с");
+
+            Select(FindListItem(main, "Чистка")!);
+            await Task.Delay(1500);
+            WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(120));
+            await Rescan(main);
+            search = FindByName(main, "Поиск в списке чистки");
+            if (search is not null)
+            {
+                Invoke(FindChip(main, "Реестр") ?? regChip);
+                await Task.Delay(800);
+                var again = await RowFor(main, search, S12Registry.Orphan);
+                c.Report.Check(Sc, $"{tag}: после отката и скана сирота снова в списке", again is not null, again?.Current.Name ?? "", "строки нет");
+            }
+        }
+        finally
+        {
+            try { if (File.Exists(oldFile)) File.Delete(oldFile); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            S12Registry.RemoveUninstall(S12Registry.Orphan, S12Registry.Live, S12Registry.Sys);
+            c.Report.Check(Sc, $"{tag}: приложение живо", !app.HasExited && app.Responding, "отвечает", "не отвечает или закрылось");
+        }
+    }
+
+    static async Task Rescan(AutomationElement main)
+    {
+        var rescan = FindByName(main, "Сканировать систему заново");
+        if (rescan is not null) { Invoke(rescan); await Task.Delay(1500); }
+        WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(180));
+    }
+
+    static async Task<AutomationElement?> RowFor(AutomationElement main, AutomationElement search, string prefix)
+    {
+        SetText(search, prefix);
+        await Task.Delay(1200);
+        return WaitFor(() => ListItems(main).FirstOrDefault(i => i.Current.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)), TimeSpan.FromSeconds(30));
+    }
+
+    /// <summary>Чип области («Диск», «Реестр»): кнопка в «Фильтр по области» (или любая кнопка окна с таким именем).</summary>
+    static AutomationElement? FindChip(AutomationElement main, string text)
+    {
+        var scope = FindByName(main, "Фильтр по области") ?? main;
+        foreach (AutomationElement b in scope.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)))
+            if (b.Current.Name.StartsWith(text, StringComparison.Ordinal)) return b;
+        return null;
+    }
+
+    static void EnsureChecked(AutomationElement box)
+    {
+        if (box.TryGetCurrentPattern(TogglePattern.Pattern, out var p) && ((TogglePattern)p).Current.ToggleState != ToggleState.On) ((TogglePattern)p).Toggle();
+    }
+
+    static List<string> DialogTexts(Process app)
+    {
+        var all = new List<string>();
+        foreach (AutomationElement w in AutomationElement.RootElement.FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ProcessIdProperty, app.Id)))
+            all.AddRange(Texts(w));
+        return all;
     }
 
     // ---------- UI Automation ----------

@@ -145,10 +145,20 @@ static class RegLink
     [DllImport("ntdll.dll")]
     static extern int NtDeleteKey(IntPtr hKey);
 
+    static readonly IntPtr HkeyLocalMachine = new(unchecked((int)0x80000002));
+    const int Wow64Key = 0x100;
+
     /// <summary>Создаёт в HKU ключ-ссылку (volatile) на путь вида \Registry\Machine\... Возвращает код Win32 (0 = создано).</summary>
     public static int CreateInUsers(string pathUnderUsers, string targetNtPath)
+        => Create(HkeyUsers, pathUnderUsers, targetNtPath, OptionCreateLink | OptionVolatile, KeyAllAccess);
+
+    /// <summary>Создаёт в HKLM (64-битное представление) ключ-ссылку на путь вида \Registry\Machine\... Родитель должен существовать. 0 = создано.</summary>
+    public static int CreateInMachine(string pathUnderMachine, string targetNtPath)
+        => Create(HkeyLocalMachine, pathUnderMachine, targetNtPath, OptionCreateLink, KeyAllAccess | Wow64Key);
+
+    static int Create(IntPtr root, string path, string targetNtPath, int options, int sam)
     {
-        var rc = RegCreateKeyExW(HkeyUsers, pathUnderUsers, 0, null, OptionCreateLink | OptionVolatile, KeyAllAccess, IntPtr.Zero, out var h, out _);
+        var rc = RegCreateKeyExW(root, path, 0, null, options, sam, IntPtr.Zero, out var h, out _);
         if (rc != 0) return rc;
         try
         {
@@ -159,9 +169,14 @@ static class RegLink
     }
 
     /// <summary>Удаляет саму ссылку (ключ открывается с REG_OPTION_OPEN_LINK, иначе удалилась бы цель).</summary>
-    public static int DeleteInUsers(string pathUnderUsers)
+    public static int DeleteInUsers(string pathUnderUsers) => Delete(HkeyUsers, pathUnderUsers, DeleteRight);
+
+    /// <summary>Удаляет ссылку в HKLM, а не её цель.</summary>
+    public static int DeleteInMachine(string pathUnderMachine) => Delete(HkeyLocalMachine, pathUnderMachine, DeleteRight | Wow64Key);
+
+    static int Delete(IntPtr root, string path, int sam)
     {
-        var rc = RegOpenKeyExW(HkeyUsers, pathUnderUsers, OptionOpenLink, DeleteRight, out var h);
+        var rc = RegOpenKeyExW(root, path, OptionOpenLink, sam, out var h);
         if (rc != 0) return rc;
         try { return NtDeleteKey(h) == 0 ? 0 : -1; }
         finally { RegCloseKey(h); }
