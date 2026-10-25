@@ -14,22 +14,37 @@ namespace Chistovik.Agent;
 public static class Program
 {
     const int ExitOk = AgentExitCodes.Ok, ExitBadArgs = AgentExitCodes.BadArgs, ExitAlreadyRunning = AgentExitCodes.AlreadyRunning,
-        ExitIdle = AgentExitCodes.Idle, ExitBadEnvironment = AgentExitCodes.BadEnvironment;
+        ExitIdle = AgentExitCodes.Idle, ExitBadEnvironment = AgentExitCodes.BadEnvironment,
+        ExitNameTaken = AgentExitCodes.InstanceNameTaken, ExitLockError = AgentExitCodes.InstanceLockError;
 
     public static async Task<int> Main(string[] args)
     {
+        // Файловый журнал подключается позже, когда каталог данных проверен; до тех пор строки копятся в памяти. stderr остаётся как был.
+        var fileLog = new AgentFileLog();
+        void Log(string line) { Console.Error.WriteLine(line); fileLog.Write(line); }
+
         if (!TryParse(args, out var pipe, out var parentPid, out var userSid, out var appPath))
         {
-            Console.Error.WriteLine("Использование: Chistovik.Agent.exe --pipe NAME --parent-pid PID --user-sid SID --app-path PATH");
+            Log("Использование: Chistovik.Agent.exe --pipe NAME --parent-pid PID --user-sid SID --app-path PATH");
             return ExitBadArgs;
         }
 
         // Один агент на компьютер (не на пользователя): второй выходит до восстановления журнала и любых записей.
-        using var instance = AgentInstanceLock.TryAcquire();
+        using var instance = AgentInstanceLock.TryAcquire(AgentInstanceLock.MachineName, out var lockOutcome);
         if (instance is null)
         {
-            Console.Error.WriteLine("[agent] already-running");
-            return ExitAlreadyRunning;
+            switch (lockOutcome)
+            {
+                case InstanceLockOutcome.NameTaken:
+                    Log("[agent] instance-name-taken");
+                    return ExitNameTaken;
+                case InstanceLockOutcome.Error:
+                    Log("[agent] instance-lock-error");
+                    return ExitLockError;
+                default:
+                    Log("[agent] already-running");
+                    return ExitAlreadyRunning;
+            }
         }
 
         // Весь граф строится до открытия канала: восстановление после обрыва выполняется раньше, чем придёт первый запрос.
@@ -38,25 +53,29 @@ public static class Program
         catch (PolicyContextException e)
         {
             // Политику на неверных системных каталогах строить нельзя: безопаснее не стартовать.
-            Console.Error.WriteLine("Системные каталоги заданы неверно: " + e.Message);
+            Log("Системные каталоги заданы неверно: " + e.Message);
             return ExitBadEnvironment;
         }
 
-        using var composition = AgentComposition.Build(AgentPorts.Windows(), AgentComposition.DefaultJournalDirectory(),
-            policy, msg => Console.Error.WriteLine("[agent] " + msg));
+        var journalDir = AgentComposition.DefaultJournalDirectory();
+        using var composition = AgentComposition.Build(AgentPorts.Windows(), journalDir, policy, msg => Log("[agent] " + msg));
+
+        // Писать в каталог можно только если он доверенный (ACL проверен при сборке); иначе файловый журнал отключается.
+        if (composition.Mode is JournalMode.Ready or JournalMode.NewerSchema) fileLog.Attach(journalDir);
+        else fileLog.Close();
 
         string hash;
         try { hash = ClientVerifier.Sha256OfFile(appPath); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Console.Error.WriteLine("Не удалось прочитать образ приложения: " + e.Message);
+            Log("Не удалось прочитать образ приложения: " + e.GetType().Name);
             return ExitBadArgs;
         }
 
         var expected = new ExpectedClient(parentPid, appPath, hash, ClientProbe.CurrentSession(), userSid.Value);
-        // Причина отказа клиенту (client-rejected:pid и т. п.) идёт в stderr: только фиксированное слово, без путей и SID.
+        // Причина отказа клиенту (client-rejected:pid и т. п.) идёт в stderr и agent.log: только фиксированное слово, без путей и SID.
         var server = new AgentPipeServer(pipe, userSid, expected, new RequestDispatcher(composition.Handler), TimeSpan.FromMinutes(5),
-            msg => Console.Error.WriteLine("[agent] " + msg));
+            msg => Log("[agent] " + msg));
         var served = await server.RunAsync(CancellationToken.None);
         return served ? ExitOk : ExitIdle;
     }

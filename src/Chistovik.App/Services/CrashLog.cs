@@ -54,7 +54,11 @@ public sealed class CrashLog
             if (!info.Exists || info.Length <= MaxBytes) return;
             var bytes = File.ReadAllBytes(FilePath);
             var keep = (int)(MaxBytes / 4);
-            File.WriteAllBytes(FilePath, bytes.AsSpan(bytes.Length - keep).ToArray());
+            // Начало среза сдвигается к следующей строке: байт 0x0A не бывает внутри символа UTF-8, поэтому символ не разрезается.
+            var start = Math.Max(0, bytes.Length - keep);
+            var nl = Array.IndexOf(bytes, (byte)'\n', start);
+            var from = nl < 0 ? bytes.Length : nl + 1;
+            File.WriteAllBytes(FilePath, bytes.AsSpan(from).ToArray());
         }
         catch
         {

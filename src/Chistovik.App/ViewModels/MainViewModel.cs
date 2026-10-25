@@ -37,7 +37,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
     /// </summary>
     public static readonly IReadOnlyList<string> ReleaseSections = new[]
     {
-        "Обзор", "Чистка", "Инвентарь", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат",
+        "Обзор", "Чистка", "Программы", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат",
     };
 
     /// <summary>Значок и оттенок каждого раздела: имена из Themes/Icons.xaml и Themes/Tokens.xaml.</summary>
@@ -45,7 +45,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
     {
         ["Обзор"] = ("home", "Lime"),
         ["Чистка"] = ("trash", "Orange"),
-        ["Инвентарь"] = ("package", "Pink"),
+        ["Программы"] = ("package", "Pink"),
         ["Предпросмотр"] = ("eye", "Pink"),
         ["Выполнение"] = ("play", "Pink"),
         ["Карантин"] = ("archive", "Pink"),
@@ -88,7 +88,8 @@ public sealed class MainViewModel : ObservableObject, INavigator
         {
             ("Обзор", "", () => new OverviewViewModel(s.Startup, s.Journal, s.Changes, s.Services, s.Tasks, s.IsDemo, s.UiSettings, this)),
             ("Чистка", "", () => new CleanupViewModel(s.Scanner ?? new CleanupScanner(s.Programs, s.Startup, s.Services, s.Tasks), this, s.Changes, s.Dialogs)),
-            ("Инвентарь", "Программы", () => new ProgramsViewModel(s.Programs, s.Dialogs, s.Changes, this)),
+            // Единственный видимый пункт бывшей группы «Программы»: заголовок группы не нужен, пункт так и называется.
+            ("Программы", "", () => new ProgramsViewModel(s.Programs, s.Dialogs, s.Changes, this)),
             ("Предпросмотр", "Программы", () => Ph("Предпросмотр", "Что останется после штатного деинсталлятора и что уйдёт в карантин.")),
             ("Выполнение", "Программы", () => Ph("Выполнение", "Шаги операции с проверкой на каждом.")),
             ("Карантин", "Программы", () => Ph("Карантин", "Удалённое ждёт здесь. Срок виден на каждой операции.")),
@@ -97,7 +98,7 @@ public sealed class MainViewModel : ObservableObject, INavigator
             ("Автозагрузка", "Система", () => new StartupViewModel(s.Startup, s.Changes, this, s.Dialogs)),
             ("Службы", "Система", () => new ServicesViewModel(s.Services, s.Changes, s.Dialogs, this)),
             ("Задачи", "Система", () => new TasksViewModel(s.Tasks, s.Changes, s.Dialogs, this)),
-            ("Твики", "Система", () => new TweaksViewModel("Твики реестра",
+            ("Твики", "Система", () => new TweaksViewModel("Твики",
                 "Проверенные настройки Windows. Текущее значение читается из реестра; применение идёт через агента с записью в журнал.",
                 "tw", s.Tweaks, s.TweakState, s.Changes, s.Dialogs, s.Effects, this)),
             ("Журнал и откат", "Система", () => new JournalViewModel(s.Journal, s.Changes, s.Dialogs, this)),

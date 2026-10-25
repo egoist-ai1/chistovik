@@ -152,7 +152,7 @@
                             </Style>
                         </ctl:Icon.Style>
                     </ctl:Icon>
-                    <TextBlock Grid.Column="1" Text="{Binding StateMessage}" TextWrapping="Wrap" VerticalAlignment="Center">
+                    <TextBlock Grid.Column="1" Text="{Binding StateMessage}" ToolTip="{Binding ErrorDetails}" TextWrapping="Wrap" VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>

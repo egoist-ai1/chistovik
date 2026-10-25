@@ -83,6 +83,47 @@ public class UserServiceAndTaskSidTests
         Assert.Equal(ChangeClass.RevertOnly, Policy.Classify(Raw(user, null)).Class);
     }
 
+    // UserId, похожий на SID, но SID не являющийся, не доверяется: Native для таких строк SID не возвращает, значит это ReadOnly.
+    [Theory]
+    [InlineData("S-1-xyz")]
+    [InlineData("S-1-")]
+    [InlineData("S-1-5-")]
+    [InlineData("S-1-5")]                    // нет подавторитета
+    [InlineData("S-1-5--21")]
+    [InlineData("S-1-5-21-1-x")]
+    [InlineData("S-1-5-21-1-2-3 x")]
+    [InlineData("S-1-5-21-1 2-3")]
+    [InlineData("s-1-5-21-1-2-3")]           // SID пишется с заглавной S
+    [InlineData("S-1-٥-21")]            // арабско-индийская цифра не ASCII
+    [InlineData("S-1-5-21-1-2-3\n-4")]
+    [InlineData("S-1-5-21-1-2-3\0")]
+    public void User_id_that_only_starts_like_a_sid_is_read_only(string user)
+    {
+        var d = Policy.CheckSetEnabled(Raw(user, null), false);
+
+        Assert.Equal(ChangeClass.ReadOnly, Policy.Classify(Raw(user, null)).Class);
+        Assert.Equal("task-unresolved-principal", Policy.Classify(Raw(user, null)).Rule);
+        Assert.True(d.IsDenied);
+    }
+
+    [Theory]
+    [InlineData("S-1-5-21-1-2-3-1001")]
+    [InlineData("S-1-5-21-1-2-3")]
+    [InlineData("  S-1-12-1-1-2-3-4  ")]    // пробелы по краям срезаются
+    public void Well_formed_unprivileged_sid_in_user_id_is_still_modifiable(string user)
+    {
+        Assert.Equal(ChangeClass.Modifiable, Policy.Classify(Raw(user, null)).Class);
+    }
+
+    [Theory]
+    [InlineData("s-1-5-18 ")]
+    [InlineData(" S-1-5-18")]
+    [InlineData("S-1-5-80-1-2-3-4-5")]
+    public void Service_sid_with_stray_spaces_or_case_is_still_privileged(string user)
+    {
+        Assert.Equal(ChangeClass.RevertOnly, Policy.Classify(Raw(user, null)).Class);
+    }
+
     [Fact]
     public void Unrecognised_account_stays_read_only_and_ordinary_user_stays_modifiable()
     {

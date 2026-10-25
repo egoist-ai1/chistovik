@@ -1,3 +1,4 @@
+using System.IO;
 using Chistovik.App.Services.Agent;
 using Chistovik.App.Services.Changes;
 using Chistovik.Core.Ipc;
@@ -22,6 +23,7 @@ public class LaunchAndAccessTests
         AppPath = @"C:\app\Chistovik.App.exe",
         ConnectTimeout = TimeSpan.FromSeconds(1),
         ReconnectTimeout = TimeSpan.FromMilliseconds(100),
+        RelaunchDelay = TimeSpan.FromMilliseconds(20),
         HeartbeatInterval = TimeSpan.FromMinutes(10),
     };
 
@@ -67,9 +69,20 @@ public class LaunchAndAccessTests
     [Fact]
     public void Exit_code_3_has_the_agreed_message()
     {
-        Assert.Equal("Чистовик уже работает в другом сеансе Windows. Закройте его там и повторите.", LaunchMessages.ForAgentExit(3));
+        Assert.Equal("Служба Чистовика уже запущена, возможно в другом сеансе Windows. Закройте её там или подождите несколько секунд и повторите.",
+            LaunchMessages.ForAgentExit(3));
         Assert.Null(LaunchMessages.ForAgentExit(0));
         Assert.Null(LaunchMessages.ForAgentExit(4));
+    }
+
+    [Fact]
+    public void Exit_codes_have_specific_or_generic_messages()
+    {
+        Assert.Equal("Имя службы Чистовика занято другой программой. Перезапустите компьютер или обратитесь к администратору.",
+            LaunchMessages.ForAgentExit(6));
+        Assert.Contains("Подробности в журнале агента", LaunchMessages.ForAgentExit(7));
+        Assert.Contains("(код 42)", LaunchMessages.ForAgentExit(42));
+        Assert.Equal("Служба Чистовика завершилась с ошибкой (код 42). Подробности в журнале агента.", LaunchMessages.ForAgentExit(42));
     }
 
     [Fact]
@@ -89,16 +102,72 @@ public class LaunchAndAccessTests
     }
 
     [Fact]
-    public async Task Agent_exiting_with_other_code_does_not_claim_already_running()
+    public async Task Exit_code_3_is_retried_exactly_once_then_reported()
     {
-        var launcher = new FakeLauncher { Exited = Task.FromResult(5) };
+        var launcher = new FakeLauncher { Exited = Task.FromResult(3) };
         var host = new FakeAgentHost { FailConnect = _ => true };
         using var client = new AgentClient(launcher, host, Opts(), () => "Chistovik.test");
 
         var r = await client.SendAsync(Change());
 
+        Assert.Equal(ClientCodes.AlreadyRunning, r.Code);
+        Assert.Equal(2, launcher.Calls.Count); // один повтор, не бесконечный
+    }
+
+    [Fact]
+    public async Task Exit_code_3_then_a_healthy_agent_connects_on_the_single_retry()
+    {
+        var launcher = new FakeLauncher();
+        launcher.ExitedSequence.Enqueue(Task.FromResult(3));
+        launcher.ExitedSequence.Enqueue(null); // второй запуск: процесс жив, канал доступен
+        var host = new FakeAgentHost { FailConnect = attempt => attempt == 1 };
+        using var client = new AgentClient(launcher, host, Opts(), () => "Chistovik.test");
+
+        var r = await client.SendAsync(Change());
+
+        Assert.True(r.Ok);
+        Assert.Equal(2, launcher.Calls.Count);
+        Assert.Equal(AgentAccess.Connected, client.Access);
+    }
+
+    /// <summary>Транспорт, который не подключается, пока его не отменят (процесс агента уже вышел, канала нет).</summary>
+    sealed class NeverConnects : IAgentTransport
+    {
+        public async Task<Stream> ConnectAsync(string pipeName, TimeSpan timeout, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException();
+        }
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    [InlineData(99)]
+    public async Task Agent_exit_with_error_code_stops_waiting_and_is_translated(int exitCode)
+    {
+        var launcher = new FakeLauncher { Exited = Task.FromResult(exitCode) };
+        using var client = new AgentClient(launcher, new NeverConnects(), Opts(), () => "Chistovik.test");
+
+        var r = await client.SendAsync(Change()).WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.False(r.Ok);
-        Assert.NotEqual(ClientCodes.AlreadyRunning, r.Code);
+        Assert.Equal(ClientCodes.LaunchFailed, r.Code);
+        Assert.Equal(LaunchMessages.ForAgentExit(exitCode), r.Message);
+        Assert.Single(launcher.Calls); // повтор только для кода 3
+    }
+
+    [Fact]
+    public async Task Unknown_exit_code_message_names_the_code_and_the_agent_journal()
+    {
+        var launcher = new FakeLauncher { Exited = Task.FromResult(99) };
+        using var client = new AgentClient(launcher, new NeverConnects(), Opts(), () => "Chistovik.test");
+
+        var r = await client.SendAsync(Change()).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("Служба Чистовика завершилась с ошибкой (код 99). Подробности в журнале агента.", r.Message);
     }
 
     [Fact]

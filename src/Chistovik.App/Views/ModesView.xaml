@@ -3,19 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:Chistovik.App.Views">
     <Grid Margin="{DynamicResource PageMargin}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <StackPanel Grid.Row="0">
+        <!-- Вся страница, шапка тоже, прокручивается одним ScrollViewer -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+          <StackPanel>
             <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}"
                        AutomationProperties.HeadingLevel="Level1"/>
-            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Subtle}" Margin="0,6,0,16" TextWrapping="Wrap"/>
-        </StackPanel>
-
-        <StackPanel Grid.Row="1">
+            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource PageSubtitle}"/>
             <views:PageBanner/>
             <Button Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,0,0,12"
                     Content="{Binding UndoLastText}" Command="{Binding UndoLastCommand}"
@@ -28,11 +21,9 @@
                     </DataTemplate>
                 </Button.ContentTemplate>
             </Button>
-        </StackPanel>
 
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Focusable="False"
-                      Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
-            <ItemsControl ItemsSource="{Binding Items}" Focusable="False" AutomationProperties.Name="Режимы">
+            <ItemsControl ItemsSource="{Binding Items}" Focusable="False" AutomationProperties.Name="Режимы"
+                          Visibility="{Binding IsReady, Converter={StaticResource BoolToVis}}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border Style="{StaticResource Card}" Margin="0,0,0,12">
@@ -67,6 +58,7 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+          </StackPanel>
         </ScrollViewer>
     </Grid>
 </UserControl>

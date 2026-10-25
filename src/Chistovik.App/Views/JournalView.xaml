@@ -103,7 +103,7 @@
                                FontSize="{DynamicResource FsLg}" Foreground="{DynamicResource TextBrush}"
                                TextWrapping="Wrap"/>
                     <WrapPanel Margin="0,8,0,20">
-                        <TextBlock Text="{Binding Id}" Style="{StaticResource MonoText}"
+                        <TextBlock Text="{Binding Id}" ToolTip="{Binding DetailsTip}" Style="{StaticResource MonoText}"
                                    Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
                         <TextBlock Text="{Binding WhenText}" Style="{StaticResource MonoText}"
                                    Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>

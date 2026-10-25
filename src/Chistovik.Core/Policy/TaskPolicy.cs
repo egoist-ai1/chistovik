@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Text.RegularExpressions;
 using Chistovik.Core.Ports;
 
 namespace Chistovik.Core.Policy;
@@ -7,8 +8,12 @@ namespace Chistovik.Core.Policy;
 /// Политика задач планировщика (DESIGN-0.1 §7). Единственное разрешённое действие над задачей это включить или выключить;
 /// решение принимается по свежему <see cref="TaskRaw"/> того же хэндла. Всё неопознанное это ReadOnly или Forbidden.
 /// </summary>
-public sealed class TaskPolicy
+public sealed partial class TaskPolicy
 {
+    // Текстовый SID: S-1-<авторитет>(-<подавторитет>)+, только ASCII-цифры, заглавная S, без пробелов.
+    [GeneratedRegex(@"^S-1-[0-9]+(-[0-9]+)+\z", RegexOptions.CultureInvariant)]
+    private static partial Regex SidFormat();
+
     static readonly string[] ForbiddenRoots = ["Microsoft", "Chistovik"];
     /// <summary>Задачи Windows каталога Чистовика, которые можно выключать (именованное исключение владельца).</summary>
     public static readonly FrozenSet<string> CarveOutTasks = new[]
@@ -149,7 +154,8 @@ public sealed class TaskPolicy
             return (ChangeClass.RevertOnly, "Задача от SYSTEM или служебной учётной записи: только откат собственного шага", "task-privileged-principal");
 
         // Имя не превратилось в SID и само не SID: проверить, что это не служебная запись, нельзя, значит только просмотр.
-        if (sid.Length == 0 && !user.StartsWith("S-1-", StringComparison.OrdinalIgnoreCase))
+        // Формат SID проверяется целиком (как в CleanupPolicy): «S-1-xyz» и «S-1-» SID не являются, Native для них тоже возвращает null.
+        if (sid.Length == 0 && !SidFormat().IsMatch(user))
             return (ChangeClass.ReadOnly, "Учётная запись задачи не распознана", "task-unresolved-principal");
 
         return (ChangeClass.Modifiable, "", "");

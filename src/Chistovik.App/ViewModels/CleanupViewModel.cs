@@ -93,6 +93,12 @@ public sealed class FindingRowViewModel : ObservableObject
         }
     }
 
+    /// <summary>Переключение отметки с клавиатуры (Пробел/Enter на строке): только если строку можно отметить.</summary>
+    public void Toggle()
+    {
+        if (CanSelect) IsChecked = !IsChecked;
+    }
+
     /// <summary>Идентификатор категории каталога очистки (находка диска называется «cleanup:{id}»).</summary>
     public string CategoryId => Finding.Id.StartsWith("cleanup:", StringComparison.Ordinal) ? Finding.Id["cleanup:".Length..] : Finding.Id;
 
@@ -250,8 +256,8 @@ public sealed class CleanupViewModel : StatefulPageViewModel
             new FilterChip("all", "Любой совет", true), new FilterChip("Remove", "Можно убрать"), new FilterChip("Optional", "На усмотрение"),
             new FilterChip("Keep", "Лучше оставить"), new FilterChip("Protected", "Защищено"), new FilterChip("Unknown", "Мало данных"),
         };
-        AreaCommand = new RelayCommand(p => { _area = p as string ?? "all"; Mark(AreaChips, _area); Refilter(); });
-        VerdictCommand = new RelayCommand(p => { _verdict = p as string ?? "all"; Mark(VerdictChips, _verdict); Refilter(); });
+        AreaCommand = new RelayCommand(p => ApplyArea(p as string ?? "all"));
+        VerdictCommand = new RelayCommand(p => ApplyVerdict(p as string ?? "all"));
         Loaded = ReloadAsync();
     }
 
@@ -573,6 +579,36 @@ public sealed class CleanupViewModel : StatefulPageViewModel
     public IReadOnlyList<FilterChip> VerdictChips { get; }
     public RelayCommand AreaCommand { get; }
     public RelayCommand VerdictCommand { get; }
+
+    /// <summary>Выбранная область для выпадающего списка; то же, что отмечает команда AreaCommand.</summary>
+    public FilterChip? SelectedArea
+    {
+        get => AreaChips.FirstOrDefault(c => c.Key == _area);
+        set { if (value is not null) ApplyArea(value.Key); }
+    }
+
+    /// <summary>Выбранный совет для выпадающего списка; то же, что отмечает команда VerdictCommand.</summary>
+    public FilterChip? SelectedVerdict
+    {
+        get => VerdictChips.FirstOrDefault(c => c.Key == _verdict);
+        set { if (value is not null) ApplyVerdict(value.Key); }
+    }
+
+    private void ApplyArea(string key)
+    {
+        _area = key;
+        Mark(AreaChips, key);
+        Refilter();
+        OnPropertyChanged(nameof(SelectedArea));
+    }
+
+    private void ApplyVerdict(string key)
+    {
+        _verdict = key;
+        Mark(VerdictChips, key);
+        Refilter();
+        OnPropertyChanged(nameof(SelectedVerdict));
+    }
 
     public IReadOnlyList<FindingRowViewModel> Items
     {

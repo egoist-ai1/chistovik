@@ -68,7 +68,7 @@ public class SnapshotPlanTests
     [Fact]
     public void Screen_nav_titles_exist_in_main_navigation()
     {
-        var titles = new[] { "Обзор", "Чистка", "Инвентарь", "Автозагрузка", "Службы", "Задачи", "Твики", "Режимы", "Питание", "Журнал и откат" };
+        var titles = new[] { "Обзор", "Чистка", "Программы", "Автозагрузка", "Службы", "Задачи", "Твики", "Режимы", "Питание", "Журнал и откат" };
         Assert.Equal(titles, SnapshotPlan.Screens.Select(s => s.NavTitle).ToArray());
     }
 

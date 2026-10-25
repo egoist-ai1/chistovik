@@ -11,7 +11,12 @@ public static class LaunchMessages
     public const int ErrorElevationRequired = 740;
     public const int ErrorCancelled = 1223;
 
-    public const string AlreadyRunning = "Чистовик уже работает в другом сеансе Windows. Закройте его там и повторите.";
+    public const string AlreadyRunning = "Служба Чистовика уже запущена, возможно в другом сеансе Windows. Закройте её там или подождите несколько секунд и повторите.";
+    public const string InstanceNameTaken = "Имя службы Чистовика занято другой программой. Перезапустите компьютер или обратитесь к администратору.";
+    public const string InstanceLockError = "Служба Чистовика не смогла занять своё имя в системе. Подробности в журнале агента.";
+    public const string BadArguments = "Служба Чистовика не приняла параметры запуска. Переустановите Чистовик.";
+    public const string BadEnvironment = "Служба Чистовика не запустилась: системные каталоги заданы неверно. Подробности в журнале агента.";
+    public static string UnknownExit(int code) => $"Служба Чистовика завершилась с ошибкой (код {code}). Подробности в журнале агента.";
     public const string AccessDenied = "Windows отклонила запрос прав администратора (возможно, действует политика организации).";
     public const string ElevationRequired = "Для запуска нужны права администратора.";
     public const string NoAdminAccount = "Только просмотр: для изменений нужна учётная запись администратора";
@@ -24,8 +29,20 @@ public static class LaunchMessages
         _ => null,
     };
 
-    /// <summary>Текст для кода выхода агента; null — код не требует особого сообщения.</summary>
-    public static string? ForAgentExit(int exitCode) => exitCode == AgentExitCodes.AlreadyRunning ? AlreadyRunning : null;
+    /// <summary>
+    /// Текст для кода выхода агента до подключения; null — для 0 (штатно) и 4 (простой), когда сообщение не нужно.
+    /// Любой другой код даёт общий текст с номером.
+    /// </summary>
+    public static string? ForAgentExit(int exitCode) => exitCode switch
+    {
+        AgentExitCodes.Ok or AgentExitCodes.Idle => null,
+        AgentExitCodes.AlreadyRunning => AlreadyRunning,
+        AgentExitCodes.InstanceNameTaken => InstanceNameTaken,
+        AgentExitCodes.InstanceLockError => InstanceLockError,
+        AgentExitCodes.BadArgs => BadArguments,
+        AgentExitCodes.BadEnvironment => BadEnvironment,
+        _ => UnknownExit(exitCode),
+    };
 }
 
 /// <summary>Вид токена процесса приложения (TOKEN_ELEVATION_TYPE).</summary>

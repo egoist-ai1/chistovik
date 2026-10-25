@@ -30,7 +30,12 @@ public sealed class JournalOperationViewModel
     public JournalOperation Model { get; }
     public string Title => Model.Title;
     public string Status => Model.StatusText;
+    /// <summary>Короткий технический идентификатор: только для подробностей (ToolTip), не как основной текст.</summary>
     public string Id => Model.Id.ToString("D")[..8];
+    /// <summary>Полный идентификатор операции для ToolTip и диагностики.</summary>
+    public string FullId => Model.Id.ToString("D");
+    /// <summary>Подсказка к строке: название, время и идентификатор.</summary>
+    public string DetailsTip => $"{Model.Title}\n{WhenText}\nИдентификатор операции: {FullId}";
     public string WhenText { get; }
     public bool CanRollback => Model.Reversible;
     public string AutomationName { get; }
@@ -115,7 +120,7 @@ public sealed class JournalViewModel : StatefulPageViewModel
         catch (Exception e) when (e is not OperationCanceledException)
         {
             Steps = Array.Empty<JournalStepViewModel>();
-            SetResult(ResultKind.Error, "Не удалось прочитать шаги операции: " + e.Message, "");
+            SetResult(ResultKind.Error, "Не удалось прочитать шаги операции. " + ErrorText.Describe(e).Text, "");
         }
     }
 

@@ -86,6 +86,20 @@
     <Thickness x:Key="PadLg">24</Thickness>
     <Thickness x:Key="PageMargin">32,28,32,24</Thickness>
 
+    <!--
+        Плотность. MainWindow.xaml.cs подменяет эти значения в ресурсах окна, когда область содержимого ниже 620 DIP
+        («компактно»): тогда заголовок меньше, подзаголовок в одну строку, меню плотнее. Здесь — обычные значения.
+    -->
+    <sys:Boolean x:Key="CompactMode">False</sys:Boolean>
+    <sys:Double x:Key="FsPageTitle">28</sys:Double>
+    <Thickness x:Key="SubtitleMargin">0,6,0,16</Thickness>
+    <TextWrapping x:Key="SubtitleWrap">Wrap</TextWrapping>
+    <TextTrimming x:Key="SubtitleTrim">None</TextTrimming>
+    <Thickness x:Key="NavRowPadding">10,6,14,6</Thickness>
+    <Thickness x:Key="NavGroupMargin">22,18,0,6</Thickness>
+    <Thickness x:Key="NavLogoMargin">20,24,0,12</Thickness>
+    <Thickness x:Key="NavListMargin">0,0,0,12</Thickness>
+
     <!-- Шрифты встроены в сборку (папка Fonts); запасной стек — на случай сбоя загрузки -->
     <FontFamily x:Key="FontDisplay">pack://application:,,,/Fonts/#Unbounded, Segoe UI Variable Display, Segoe UI</FontFamily>
     <FontFamily x:Key="FontText">pack://application:,,,/Fonts/#Onest, Segoe UI Variable Text, Segoe UI</FontFamily>

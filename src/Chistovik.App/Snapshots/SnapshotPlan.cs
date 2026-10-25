@@ -63,7 +63,7 @@ public static class SnapshotPlan
     {
         new("overview", "Обзор", OverviewStates),
         new("cleanup", "Чистка", ListStates),
-        new("programs", "Инвентарь", ListStates),
+        new("programs", "Программы", ListStates),
         new("startup", "Автозагрузка", ListAndChange),
         new("services", "Службы", ListAndChange),
         new("tasks", "Задачи", ListAndChange),

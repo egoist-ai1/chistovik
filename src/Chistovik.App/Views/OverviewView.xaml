@@ -138,7 +138,7 @@
                             <ctl:Icon Kind="arrow-right" Size="18" Foreground="{DynamicResource TextMutedBrush}"
                                       HorizontalAlignment="Right" VerticalAlignment="Top"/>
                         </Grid>
-                        <TextBlock Text="Задачи планировщика" Style="{StaticResource CardLabel}" Margin="0,16,0,0"/>
+                        <TextBlock Text="Задачи" Style="{StaticResource CardLabel}" Margin="0,16,0,0"/>
                         <TextBlock Text="{Binding TasksText}" Style="{StaticResource BigNumber}" Margin="0,4,0,4" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{Binding TasksHint}" Style="{StaticResource Subtle}"/>
                     </StackPanel>

@@ -35,6 +35,9 @@ public sealed class ProgramRowViewModel : ObservableObject
         get => _isChecked;
         set { if (SetProperty(ref _isChecked, value)) _changed(); }
     }
+
+    /// <summary>Переключение отметки с клавиатуры (Пробел/Enter на строке).</summary>
+    public void Toggle() => IsChecked = !IsChecked;
 }
 
 public sealed class ProgramsViewModel : StatefulPageViewModel
@@ -51,7 +54,7 @@ public sealed class ProgramsViewModel : StatefulPageViewModel
     private bool _suppress;
 
     public ProgramsViewModel(IProgramsSource source, IDialogService dialogs, IChangeService? changes = null, INavigator? navigator = null)
-        : base("Установленные программы",
+        : base("Программы",
             "Всё, что установлено на этом компьютере. Список читается из реестра без прав администратора; удалить можно программы, которые разрешает политика Чистовика.",
             changes, navigator)
     {

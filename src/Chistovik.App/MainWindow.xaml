@@ -26,7 +26,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="FontSize" Value="{DynamicResource FsXs}"/>
             <Setter Property="FontWeight" Value="Medium"/>
-            <Setter Property="Margin" Value="22,18,0,6"/>
+            <Setter Property="Margin" Value="{DynamicResource NavGroupMargin}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding GroupStart}" Value="True">
                     <Setter Property="Visibility" Value="Visible"/>
@@ -42,7 +42,7 @@
             <StackPanel>
                 <TextBlock Text="{Binding Group}" Style="{StaticResource GroupHeader}"/>
                 <Grid>
-                    <Border x:Name="Row" Margin="10,1" Padding="10,6,14,6" CornerRadius="{DynamicResource RadiusMd}"
+                    <Border x:Name="Row" Margin="10,1" Padding="{DynamicResource NavRowPadding}" CornerRadius="{DynamicResource RadiusMd}"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="2">
                         <StackPanel Orientation="Horizontal">
                             <!-- Значок раздела в своём оттенке; у активного раздела на плашке той же тонировки -->
@@ -130,6 +130,8 @@
         <KeyBinding Key="D6" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="6"/>
         <KeyBinding Key="D7" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="7"/>
         <KeyBinding Key="D8" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="8"/>
+        <KeyBinding Key="D9" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="9"/>
+        <KeyBinding Key="D0" Modifiers="Control" Command="{Binding OpenByIndexCommand}" CommandParameter="10"/>
         <KeyBinding Key="F5" Command="{Binding ReloadCurrentCommand}"/>
     </Window.InputBindings>
 
@@ -152,7 +154,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal" Margin="20,24,0,12">
+                    <StackPanel Orientation="Horizontal" Margin="{DynamicResource NavLogoMargin}">
                         <!-- Знак: лаймовая плашка с галочкой («набело, начисто») -->
                         <Border Width="32" Height="32" CornerRadius="10" Background="{DynamicResource AccentBrush}"
                                 VerticalAlignment="Center">
@@ -163,11 +165,11 @@
                                    FontWeight="ExtraBold" FontSize="{DynamicResource FsLg}"
                                    Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <ListBox Grid.Row="1" Style="{StaticResource PlainList}" ItemsSource="{Binding NavItems}"
+                    <ListBox x:Name="NavList" Grid.Row="1" Style="{StaticResource PlainList}" ItemsSource="{Binding NavItems}"
                              SelectedItem="{Binding SelectedNav, Mode=TwoWay}"
                              ItemTemplate="{StaticResource NavTemplate}"
                              ItemContainerStyle="{StaticResource NavItemContainer}"
-                             AutomationProperties.Name="Разделы" Margin="0,0,0,12"/>
+                             AutomationProperties.Name="Разделы" Margin="{DynamicResource NavListMargin}"/>
                 </Grid>
             </Border>
 
@@ -250,8 +252,8 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <TextBlock Text="Ctrl+1 … Ctrl+8" Style="{StaticResource MonoText}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,18,6"/>
-                            <TextBlock Grid.Column="1" Text="разделы по порядку в меню" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                            <TextBlock Text="Ctrl+1 … 9, Ctrl+0" Style="{StaticResource MonoText}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,18,6"/>
+                            <TextBlock Grid.Column="1" Text="разделы по порядку в меню (0 — десятый)" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
                             <TextBlock Grid.Row="1" Text="F5" Style="{StaticResource MonoText}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,18,6"/>
                             <TextBlock Grid.Row="1" Grid.Column="1" Text="перечитать текущий раздел" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
                             <TextBlock Grid.Row="2" Text="Ctrl+F" Style="{StaticResource MonoText}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,18,6"/>

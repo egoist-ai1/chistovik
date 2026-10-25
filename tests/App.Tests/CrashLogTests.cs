@@ -40,6 +40,23 @@ public class CrashLogTests : IDisposable
     }
 
     [Fact]
+    public void Trim_cuts_on_a_line_boundary_and_keeps_valid_utf8()
+    {
+        Directory.CreateDirectory(_dir);
+        var path = Path.Combine(_dir, "crash.log");
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; sb.Length < CrashLog.MaxBytes + 1000; i++) sb.Append("ошибка номер ").Append(i).Append(" ёжик\n");
+        File.WriteAllText(path, sb.ToString(), new System.Text.UTF8Encoding(false));
+        Assert.True(new FileInfo(path).Length > CrashLog.MaxBytes);
+
+        Assert.True(new CrashLog(path).Write("Dispatcher", new Exception("свежая")));
+
+        var text = new System.Text.UTF8Encoding(false, true).GetString(File.ReadAllBytes(path)); // бросит на разрезанном символе
+        Assert.StartsWith("ошибка номер ", text); // первая строка целая
+        Assert.Contains("свежая", text);
+    }
+
+    [Fact]
     public void Write_returns_false_instead_of_throwing_when_path_is_unusable()
     {
         Directory.CreateDirectory(_dir);

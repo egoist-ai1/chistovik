@@ -14,7 +14,7 @@ namespace Sandbox.Live;
 static class S10Ui
 {
     const string Sc = "S10 интерфейс";
-    static readonly string[] Sections = ["Обзор", "Чистка", "Инвентарь", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат"];
+    static readonly string[] Sections = ["Обзор", "Чистка", "Программы", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат"];
 
     sealed record Target(string Kind, string Pattern, string File, string Args, string NamePrefix, string Probe);
 
@@ -113,7 +113,7 @@ static class S10Ui
         names.AddRange(again.Select(t => t.NamePrefix));
         Select(FindListItem(main, "Чистка")!);   // уход с экрана и возврат: «Инвентарь» перечитывает реестр при показе
         await Task.Delay(1500);
-        Select(FindListItem(main, "Инвентарь")!);
+        Select(FindListItem(main, "Программы")!);
         await Task.Delay(1500);
         WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(120));
         var search = FindByName(main, "Поиск программ");
@@ -264,7 +264,7 @@ static class S10Ui
             var tag = $"{t.Kind} ({t.NamePrefix})";
             // Inno (Git) удаляется с экрана «Инвентарь» (отметка строки и кнопка «Удалить»), остальные из «Чистки».
             var viaInventory = t.Kind == "Inno";
-            var screen = viaInventory ? "Инвентарь" : "Чистка";
+            var screen = viaInventory ? "Программы" : "Чистка";
             var nav = FindListItem(main, screen);
             if (nav is null) { c.Report.Fail(Sc, $"{tag}: меню", $"пункта «{screen}» не видно, окно недоступно"); DumpWhy(c, app, main, $"s10-why-{t.Kind}-nav.txt"); continue; }
             Select(nav);

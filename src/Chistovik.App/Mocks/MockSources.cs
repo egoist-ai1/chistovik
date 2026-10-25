@@ -60,8 +60,8 @@ public sealed class MockStartupSource : IStartupSource
 
 public sealed class MockJournalSource : IJournalSource
 {
-    private static readonly Guid A = new("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid B = new("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid A = new("7f3c9a2e-5b14-4d68-9e07-a1c2d3e4f5b6");
+    private static readonly Guid B = new("c84e1d06-92a7-4b3f-8d55-0e6f7a8b9c10");
 
     public Task<IReadOnlyList<JournalOperation>> GetOperationsAsync()
     {

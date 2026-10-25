@@ -91,6 +91,10 @@ internal static class SnapshotRunner
             var count = 0;
             foreach (var spec in specs)
             {
+                // Как при запуске: минимум окна не больше рабочей области (MainWindow.ApplySavedBounds), поэтому
+                // кадры 1093×576 и 1097×590 (малые экраны с масштабом 125 % и 175 %) не упираются в MinHeight 600.
+                window.MinWidth = Math.Min(window.MinWidth, spec.Width);
+                window.MinHeight = Math.Min(window.MinHeight, spec.Height);
                 window.Width = spec.Width;
                 window.Height = spec.Height;
                 await FlushAsync(window);

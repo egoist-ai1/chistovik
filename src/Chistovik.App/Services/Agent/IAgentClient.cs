@@ -26,8 +26,7 @@ public static class ClientCodes
     /// <summary>На другом конце канала не наш установленный Chistovik.Agent.exe: запрос не отправлялся.</summary>
     public const string Untrusted = "agent-untrusted";
     /// <summary>Агент вышел с кодом 3: другой агент уже работает на компьютере (другой сеанс Windows).</summary>
-    public const string AlreadyRunning = "agent-already-running";
-    /// <summary>Пользователь без прав администратора: режим просмотра, запрос прав не показывается.</summary>
+    public const string AlreadyRunning = "agent-already-running";    /// <summary>Пользователь без прав администратора: режим просмотра, запрос прав не показывается.</summary>
     public const string NoAdminAccount = "agent-no-admin-account";
 }
 

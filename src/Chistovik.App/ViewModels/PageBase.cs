@@ -115,6 +115,9 @@ public abstract class StatefulPageViewModel : PageViewModel
     }
 
     public string StateMessage { get => _stateMessage; private set => SetProperty(ref _stateMessage, value); }
+    /// <summary>Техническая строка ошибки (тип и исходное сообщение) для ToolTip и диагностики; в основной текст не выводится.</summary>
+    public string ErrorDetails { get => _errorDetails; private set => SetProperty(ref _errorDetails, value); }
+    private string _errorDetails = "";
     public bool IsLoading => State == PageState.Loading;
     public bool IsReady => State == PageState.Ready;
     public bool IsEmpty => State == PageState.Empty;
@@ -161,7 +164,9 @@ public abstract class StatefulPageViewModel : PageViewModel
         }
         catch (Exception e) when (version == _loadVersion && e is not OperationCanceledException)
         {
-            StateMessage = "Не удалось загрузить данные: " + e.Message;
+            var info = ErrorText.Describe(e);
+            StateMessage = info.Text;
+            ErrorDetails = info.Details;
             State = PageState.Error;
         }
         catch (Exception)

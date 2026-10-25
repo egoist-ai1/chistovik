@@ -25,7 +25,8 @@
                                     <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" FontWeight="Medium" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding Current}" Style="{StaticResource MonoText}" TextWrapping="Wrap"
                                                Foreground="{DynamicResource TextMutedBrush}" FontSize="{DynamicResource FsXs}"/>
-                                    <TextBlock Text="{Binding Cause}" Style="{StaticResource Subtle}" FontSize="{DynamicResource FsXs}"/>
+                                    <TextBlock Text="{Binding Cause}" Style="{StaticResource Subtle}" FontSize="{DynamicResource FsXs}"
+                                               ToolTip="{Binding CauseDetail}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
                                     <CheckBox Style="{StaticResource SwitchToggle}" IsChecked="{Binding Overwrite, Mode=TwoWay}"

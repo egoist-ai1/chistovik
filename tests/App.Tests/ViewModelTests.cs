@@ -670,7 +670,8 @@ public class JournalAndModesViewModelTests
         var broken = new JournalViewModel(new ThrowingJournal(), null, new FakeDialogs());
         await broken.Loaded;
         Assert.Equal(PageState.Error, broken.State);
-        Assert.Contains("база повреждена", broken.StateMessage);
+        Assert.DoesNotContain("база повреждена", broken.StateMessage);
+        Assert.Contains("база повреждена", broken.ErrorDetails);
     }
 
     [Fact]
@@ -771,7 +772,7 @@ public class NavigationTests
         var vm = Create();
 
         Assert.Equal(
-            new[] { "Обзор", "Чистка", "Инвентарь", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат" },
+            new[] { "Обзор", "Чистка", "Программы", "Режимы", "Питание", "Автозагрузка", "Службы", "Задачи", "Твики", "Журнал и откат" },
             vm.NavItems.Select(n => n.Title).ToArray());
         Assert.Equal(MainViewModel.ReleaseSections, vm.NavItems.Select(n => n.Title).ToArray());
     }
@@ -783,11 +784,11 @@ public class NavigationTests
 
         Assert.Contains(vm.AllNavItems, n => n.Title == "Предпросмотр");
         Assert.DoesNotContain(vm.NavItems, n => n.Title == "Предпросмотр");
-        Assert.Equal(new[] { "Инвентарь", "Режимы" }, vm.NavItems.Where(n => n.GroupStart).Select(n => n.Title).ToArray());
+        Assert.Equal(new[] { "Режимы" }, vm.NavItems.Where(n => n.GroupStart).Select(n => n.Title).ToArray());
         vm.Open("Предпросмотр");
         Assert.Equal("Обзор", vm.SelectedNav!.Title);
-        vm.Open("Инвентарь");
-        Assert.Equal("Инвентарь", vm.SelectedNav!.Title);
+        vm.Open("Программы");
+        Assert.Equal("Программы", vm.SelectedNav!.Title);
         vm.Open("Журнал и откат");
         Assert.Equal("Журнал и откат", vm.SelectedNav!.Title);
     }

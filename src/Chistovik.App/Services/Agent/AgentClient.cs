@@ -27,6 +27,9 @@ public sealed class AgentClientOptions
     /// <summary>Ожидание канала после запуска агента (UAC уже пройден).</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
+    /// <summary>Пауза перед единственным повтором запуска, если агент вышел с кодом 3 («уже запущен»).</summary>
+    public TimeSpan RelaunchDelay { get; init; } = TimeSpan.FromSeconds(1);
+
     /// <summary>Быстрая попытка вернуться в тот же канал, прежде чем просить UAC заново.</summary>
     public TimeSpan ReconnectTimeout { get; init; } = TimeSpan.FromSeconds(2);
 
@@ -198,54 +201,71 @@ public sealed class AgentClient : IAgentClient, IDisposable
             catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException or UnauthorizedAccessException) { }
         }
 
-        var pipe = _pipeNameFactory();
-        AgentLaunchResult launch;
-        try
+        // Код 3 (другой агент ещё живёт, например дорабатывает операцию после потери связи) повторяем один раз через RelaunchDelay.
+        for (var attempt = 0; ; attempt++)
         {
-            launch = await _launcher.LaunchAsync(new AgentLaunchArgs(pipe, _opt.ParentPid, _opt.UserSid, _opt.AppPath), ct)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            var pipe = _pipeNameFactory();
+            AgentLaunchResult launch;
+            try
+            {
+                launch = await _launcher.LaunchAsync(new AgentLaunchArgs(pipe, _opt.ParentPid, _opt.UserSid, _opt.AppPath), ct)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
 
-        switch (launch.Status)
-        {
-            case AgentLaunchStatus.Declined:
-                _viewOnlyReason = AgentViewOnlyReason.Declined;
-                SetAccess(AgentAccess.ViewOnly);
-                return ViewOnlyFail(request);
-            case AgentLaunchStatus.Failed:
-                return Fail(request, ClientCodes.LaunchFailed, launch.Message ?? "Не удалось запустить агент.");
-        }
+            switch (launch.Status)
+            {
+                case AgentLaunchStatus.Declined:
+                    _viewOnlyReason = AgentViewOnlyReason.Declined;
+                    SetAccess(AgentAccess.ViewOnly);
+                    return ViewOnlyFail(request);
+                case AgentLaunchStatus.Failed:
+                    return Fail(request, ClientCodes.LaunchFailed, launch.Message ?? "Не удалось запустить агент.");
+            }
 
-        _pipeName = pipe;
-        try
-        {
-            _stream = await ConnectWatchingExitAsync(pipe, launch.Exited, ct).ConfigureAwait(false);
+            _pipeName = pipe;
+            try
+            {
+                _stream = await ConnectWatchingExitAsync(pipe, launch.Exited, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (AgentExitedException e)
+            {
+                _pipeName = null;
+                if (e.Code == Chistovik.Native.Ipc.AgentExitCodes.AlreadyRunning)
+                {
+                    if (attempt == 0)
+                    {
+                        await Task.Delay(_opt.RelaunchDelay, ct).ConfigureAwait(false);
+                        continue;
+                    }
+                    return Fail(request, ClientCodes.AlreadyRunning, LaunchMessages.AlreadyRunning);
+                }
+                return Fail(request, ClientCodes.LaunchFailed, e.Message);
+            }
+            catch (AgentUntrustedException e)
+            {
+                _pipeName = null;
+                return Untrusted(request, e);
+            }
+            catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException or UnauthorizedAccessException)
+            {
+                _pipeName = null;
+                return Fail(request, ClientCodes.LaunchFailed, "Агент запущен, но не отвечает.");
+            }
+            SetConnected();
+            return null;
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (AgentAlreadyRunningException)
-        {
-            _pipeName = null;
-            return Fail(request, ClientCodes.AlreadyRunning, LaunchMessages.AlreadyRunning);
-        }
-        catch (AgentUntrustedException e)
-        {
-            _pipeName = null;
-            return Untrusted(request, e);
-        }
-        catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException or UnauthorizedAccessException)
-        {
-            _pipeName = null;
-            return Fail(request, ClientCodes.LaunchFailed, "Агент запущен, но не отвечает.");
-        }
-        SetConnected();
-        return null;
     }
 
-    sealed class AgentAlreadyRunningException : Exception;
+    /// <summary>Процесс агента завершился до подключения; <see cref="Exception.Message"/> это готовый русский текст.</summary>
+    sealed class AgentExitedException(int code, string message) : Exception(message)
+    {
+        public int Code { get; } = code;
+    }
 
     /// <summary>
-    /// Подключается к каналу, но если процесс агента сразу вышел с кодом 3 (другой агент уже работает), не ждёт таймаут подключения.
+    /// Подключается к каналу, но если процесс агента вышел с ошибкой (код 3 и любые другие, кроме штатных 0 и 4), не ждёт таймаут подключения.
     /// </summary>
     async Task<Stream> ConnectWatchingExitAsync(string pipe, Task<int>? exited, CancellationToken ct)
     {
@@ -255,11 +275,11 @@ public sealed class AgentClient : IAgentClient, IDisposable
         if (exited is null) return await connect.ConfigureAwait(false);
 
         await Task.WhenAny(connect, exited).ConfigureAwait(false);
-        if (exited.IsCompletedSuccessfully && exited.Result == Chistovik.Native.Ipc.AgentExitCodes.AlreadyRunning)
+        if (exited.IsCompletedSuccessfully && LaunchMessages.ForAgentExit(exited.Result) is { } text)
         {
             cts.Cancel();
             try { (await connect.ConfigureAwait(false)).Dispose(); } catch (Exception) { /* подключение не удалось или отменено: так и нужно */ }
-            throw new AgentAlreadyRunningException();
+            throw new AgentExitedException(exited.Result, text);
         }
         return await connect.ConfigureAwait(false);
     }

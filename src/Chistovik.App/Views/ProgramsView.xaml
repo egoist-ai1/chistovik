@@ -26,15 +26,16 @@
 
         <Grid Grid.Row="1" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="340"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="200" MaxWidth="340"/>
+                <ColumnDefinition Width="*" MinWidth="0"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox Style="{StaticResource SearchBox}" Tag="Поиск по названию или издателю"
                      Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
                      AutomationProperties.Name="Поиск программ"/>
             <TextBlock Grid.Column="1" Text="{Binding SelectionText}" Style="{StaticResource Subtle}"
-                       VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,16,0"/>
+                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectionText}"
+                       VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,16,0"/>
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <Button Style="{StaticResource SecondaryButton}" Content="Снять выбор"
                         Command="{Binding ClearSelectionCommand}" Margin="0,0,8,0"
@@ -57,11 +58,11 @@
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="44"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="150"/>
-                            <ColumnDefinition Width="100"/>
-                            <ColumnDefinition Width="100"/>
-                            <ColumnDefinition Width="110"/>
+                            <ColumnDefinition Width="2*" MinWidth="140"/>
+                            <ColumnDefinition Width="*" MinWidth="90"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="96"/>
                         </Grid.ColumnDefinitions>
                         <Button Style="{StaticResource GhostButton}" Content="Все" Command="{Binding SelectAllCommand}"
                                 HorizontalAlignment="Left" AutomationProperties.Name="Выбрать все показанные программы"/>
@@ -87,17 +88,18 @@
 
                 <ListBox Grid.Row="1" Style="{StaticResource PlainList}" ItemsSource="{Binding Items}"
                          ItemContainerStyle="{StaticResource ProgramItem}"
+                         PreviewKeyDown="List_PreviewKeyDown" KeyboardNavigation.TabNavigation="Once"
                          AutomationProperties.Name="Список установленных программ">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Grid MinHeight="52" Margin="0,2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="44"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="150"/>
-                                    <ColumnDefinition Width="100"/>
-                                    <ColumnDefinition Width="100"/>
-                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="2*" MinWidth="140"/>
+                                    <ColumnDefinition Width="*" MinWidth="90"/>
+                                    <ColumnDefinition Width="70"/>
+                                    <ColumnDefinition Width="90"/>
+                                    <ColumnDefinition Width="96"/>
                                 </Grid.ColumnDefinitions>
                                 <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                           AutomationProperties.Name="{Binding AutomationName}"/>
