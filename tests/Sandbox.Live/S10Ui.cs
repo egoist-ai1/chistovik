@@ -40,18 +40,7 @@ static class S10Ui
             new("NSIS", "npp*.exe", "{0}", "/S", "Notepad++", @"Notepad++\notepad++.exe"),
             new("Inno", "Git-*.exe", "{0}", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /NOCANCEL /SP-", "Git", @"Git\bin\git.exe"),
         };
-        var installed = new List<Target>();
-        foreach (var t in targets)
-        {
-            var file = Directory.EnumerateFiles(c.InstallersDir, t.Pattern).FirstOrDefault();
-            if (file is null) { c.Report.Skip(Sc, $"установка {t.Kind}", $"нет {t.Pattern}"); continue; }
-            if (S9Uninstall.FindArp(t.NamePrefix) is not null) { c.Report.Skip(Sc, $"установка {t.Kind}", $"«{t.NamePrefix}» уже есть"); continue; }
-            var exe = t.File.Contains("{0}") ? string.Format(t.File, file) : t.File;
-            var code = S9Uninstall.RunProcess(exe, string.Format(t.Args, file), TimeSpan.FromMinutes(6));
-            var ok = code is 0 or 3010 && S9Uninstall.FindArp(t.NamePrefix) is not null;
-            c.Report.Check(Sc, $"установка {t.Kind} ({t.NamePrefix})", ok, $"код {code}", $"код {code}, записи ARP нет");
-            if (ok) installed.Add(t);
-        }
+        var installed = InstallAll(c, targets, "установка");
 
         // 2. Запуск приложения.
         var psi = new ProcessStartInfo(appExe) { UseShellExecute = false, WorkingDirectory = dir };
@@ -73,11 +62,103 @@ static class S10Ui
             await TweakThroughUi(c, app, main);
             await UninstallThroughUi(c, app, main, installed);
             await ProtectedHasNoButton(c, app, main);
+            await BatchThroughUi(c, app, main, targets);
         }
         finally
         {
             try { if (!app.HasExited) { app.Kill(true); app.WaitForExit(5000); } } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
         }
+    }
+
+    static List<Target> InstallAll(LiveContext c, List<Target> targets, string what)
+    {
+        var installed = new List<Target>();
+        foreach (var t in targets)
+        {
+            var file = Directory.EnumerateFiles(c.InstallersDir!, t.Pattern).FirstOrDefault();
+            if (file is null) { c.Report.Skip(Sc, $"{what} {t.Kind}", $"нет {t.Pattern}"); continue; }
+            if (S9Uninstall.FindArp(t.NamePrefix) is not null) { c.Report.Skip(Sc, $"{what} {t.Kind}", $"«{t.NamePrefix}» уже есть"); continue; }
+            var exe = t.File.Contains("{0}") ? string.Format(t.File, file) : t.File;
+            var code = S9Uninstall.RunProcess(exe, string.Format(t.Args, file), TimeSpan.FromMinutes(6));
+            var ok = code is 0 or 3010 && S9Uninstall.FindArp(t.NamePrefix) is not null;
+            c.Report.Check(Sc, $"{what} {t.Kind} ({t.NamePrefix})", ok, $"код {code}", $"код {code}, записи ARP нет");
+            if (ok) installed.Add(t);
+        }
+        return installed;
+    }
+
+    const string BrokenName = "Aaa Chistovik Broken Test";
+    const string BrokenKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ChistovikTest_Broken";
+
+    /// <summary>
+    /// Пакетное удаление через «Инвентарь»: ставим три программы заново плюс «сломанную» запись (деинсталлятора нет на диске,
+    /// по алфавиту она первая). Отмечаем все четыре, жмём одну кнопку: настоящие программы должны удалиться, сломанная
+    /// не должна остановить пакет и остаться в реестре, а итог должен назвать, что с ней.
+    /// </summary>
+    static async Task BatchThroughUi(LiveContext c, Process app, AutomationElement main, List<Target> targets)
+    {
+        const string tag = "пакет";
+        var again = InstallAll(c, targets, "пакет: повторная установка");
+        if (again.Count < 2) { c.Report.Skip(Sc, tag, "для пакета нужно минимум две установленные программы"); return; }
+        using (var k = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64).CreateSubKey(BrokenKey))
+        {
+            k.SetValue("DisplayName", BrokenName);
+            k.SetValue("Publisher", "Chistovik Test");
+            k.SetValue("DisplayVersion", "1.0");
+            k.SetValue("UninstallString", "\"C:\\ChistovikNoSuch\\unins000.exe\" /S");
+        }
+
+        var names = new List<string> { BrokenName };
+        names.AddRange(again.Select(t => t.NamePrefix));
+        Select(FindListItem(main, "Чистка")!);   // уход с экрана и возврат: «Инвентарь» перечитывает реестр при показе
+        await Task.Delay(1500);
+        Select(FindListItem(main, "Инвентарь")!);
+        await Task.Delay(1500);
+        WaitFor(() => Texts(main).Any(x => x.StartsWith("Показано ", StringComparison.Ordinal)) ? main : null, TimeSpan.FromSeconds(120));
+        var search = FindByName(main, "Поиск программ");
+        if (search is null) { c.Report.Fail(Sc, $"{tag}: поиск", "поля поиска нет"); return; }
+
+        var checkedCount = 0;
+        foreach (var n in names)
+        {
+            SetText(search, n);
+            await Task.Delay(1200);
+            var row = WaitFor(() => ListItems(main, "Список установленных программ").FirstOrDefault(i => i.Current.Name.StartsWith(n, StringComparison.OrdinalIgnoreCase)), TimeSpan.FromSeconds(30));
+            var box = row?.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.CheckBox));
+            if (box is null) { c.Report.Fail(Sc, $"{tag}: отметка «{n}»", row is null ? "строки нет" : "у строки нет флажка"); continue; }
+            Invoke(box);
+            checkedCount++;
+            await Task.Delay(500);
+        }
+        SetText(search, "");
+        await Task.Delay(1200);
+        c.Report.Check(Sc, $"{tag}: отмечено программ", checkedCount == names.Count, $"{checkedCount}", $"отмечено {checkedCount} из {names.Count}");
+        if (checkedCount == 0) return;
+
+        var button = FindByName(main, "Удалить выбранные программы");
+        if (button is not { Current.IsEnabled: true }) { c.Report.Fail(Sc, $"{tag}: кнопка удаления", "нет или выключена"); return; }
+        Invoke(button);
+        var confirm = WaitFor(() => FindDialogOk(app, "Удалить: "), TimeSpan.FromSeconds(20));
+        c.Report.Check(Sc, $"{tag}: диалог подтверждения", confirm is not null, "диалог показан", "диалога нет");
+        if (confirm is null) { DumpWhy(c, app, main, "s10-why-batch-dialog.txt"); return; }
+        DumpDialogs(c, app, "s10-dialog-batch.txt");
+        Invoke(confirm);
+
+        foreach (var t in again)
+        {
+            var gone = WaitFor(() => S9Uninstall.FindArp(t.NamePrefix) is null ? "gone" : null, TimeSpan.FromMinutes(8)) is not null;
+            c.Report.Check(Sc, $"{tag}: {t.Kind} ({t.NamePrefix}) удалена", gone, "запись ARP исчезла", "запись ARP осталась через 8 минут");
+        }
+        await Task.Delay(3000);
+        var texts = Texts(main);
+        Save(c, "s10-after-batch.txt", texts);
+        var summary = texts.FirstOrDefault(x => x.StartsWith("Удалено", StringComparison.Ordinal));
+        c.Report.Check(Sc, $"{tag}: итог на экране", summary is not null, summary ?? "", "строки «Удалено …» нет");
+        var stillThere = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64).OpenSubKey(BrokenKey) is not null;
+        c.Report.Check(Sc, $"{tag}: «сломанная» запись не тронута", stillThere, "ключ на месте", "ключ исчез");
+        c.Report.Check(Sc, $"{tag}: приложение живо", !app.HasExited && app.Responding, "отвечает", "не отвечает или закрылось");
+        try { Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64).DeleteSubKeyTree(BrokenKey, false); }
+        catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException) { }
     }
 
     /// <summary>Обход разделов релиза: пункт меню выбирается, экран должен прогрузиться, выписка пишется в файл.</summary>
