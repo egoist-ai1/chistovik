@@ -14,6 +14,8 @@ param(
   [string]$MsiDir = 'C:\Msi',
   [string]$ResultsDir = 'C:\Results',
   [string]$InstallersDir = 'C:\Installers',
+  [string]$OldMsiDir = 'C:\MsiOld',
+  [string]$OldMsiName = '',
   [string]$Only = '',
   [switch]$SkipIdle,
   [switch]$SkipInstaller,
@@ -40,6 +42,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
   if ($SkipIdle) { $argList += '-SkipIdle' }
   if ($SkipInstaller) { $argList += '-SkipInstaller' }
   if ($Only) { $argList += @('-Only', $Only) }
+  if ($OldMsiName) { $argList += @('-OldMsiName', $OldMsiName) }
   Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Verb RunAs -Wait
   exit 0
 }
@@ -194,7 +197,18 @@ if (-not $SkipInstaller) {
   $msi = Get-ChildItem -LiteralPath $MsiDir -Filter 'Chistovik-*-x64.msi' -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($msi) {
     Log ('проверка установщика: ' + $msi.FullName)
-    & (Join-Path $PSScriptRoot 'installer-check.ps1') -MsiPath $msi.FullName -ReleaseDir $ReleaseDir -ResultsDir $ResultsDir
+    $checkArgs = @{ MsiPath = $msi.FullName; ReleaseDir = $ReleaseDir; ResultsDir = $ResultsDir }
+    # Старый пакет лежит в отдельной папке (C:\MsiOld), с C:\Msi не смешивается.
+    if ($OldMsiName) {
+      $oldMsi = Join-Path $OldMsiDir $OldMsiName
+      if (Test-Path -LiteralPath $oldMsi -PathType Leaf) {
+        $checkArgs['OldMsiPath'] = $oldMsi
+        Log ('старый MSI для проверки обновления: ' + $oldMsi)
+      } else {
+        Log ('старый MSI не найден: ' + $oldMsi + '; проверка обновления пропущена')
+      }
+    }
+    & (Join-Path $PSScriptRoot 'installer-check.ps1') @checkArgs
   } else {
     Log 'MSI не передан (папка C:\Msi пуста): сценарий 8 пропущен'
   }

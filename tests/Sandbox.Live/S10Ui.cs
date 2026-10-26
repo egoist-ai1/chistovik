@@ -411,11 +411,13 @@ static class S10Ui
             var regChip = FindChip(main, "Реестр");
             // Деревья UI Automation у ItemsControl бывают без кнопок внутри элементов (кнопки есть на экране, но не видны клиенту):
             // наличие чипов тогда подтверждаем числом элементов данных (7 областей и 6 советов).
-            var areaCount = ChipCount(main, "Фильтр по области");
-            var verdictCount = ChipCount(main, "Фильтр по совету");
+            // Фильтры области и совета теперь выпадающие списки (так они помещаются на малых экранах): проверяем, что оба есть
+            // и что в каждом достаточно пунктов (7 областей и 6 советов, включая «Все»).
+            var areaCount = ComboItemCount(main, "Фильтр по области");
+            var verdictCount = ComboItemCount(main, "Фильтр по совету");
             var chipsOk = areaCount >= 7 && verdictCount >= 6;
-            c.Report.Check(Sc, $"{tag}: чипы областей и советов есть", chipsOk,
-                $"областей {areaCount}, советов {verdictCount}; кнопки видны клиенту: {(diskChip is not null && regChip is not null ? "да" : "нет")}",
+            c.Report.Check(Sc, $"{tag}: фильтры областей и советов есть", chipsOk,
+                $"областей {areaCount}, советов {verdictCount}",
                 $"областей {areaCount}, советов {verdictCount}");
             if (diskChip is null || regChip is null) DumpWhy(c, app, main, "s10-why-chips.txt");   // остальное идёт через поиск по названию
 
@@ -590,6 +592,34 @@ static class S10Ui
         foreach (AutomationElement b in scope.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)))
             if (b.Current.Name.StartsWith(text, StringComparison.Ordinal)) return b;
         return null;
+    }
+
+    /// <summary>Число пунктов выпадающего списка: раскрывает его, считает ListItem и сворачивает. Нет списка: 0.</summary>
+    static int ComboItemCount(AutomationElement main, string name)
+    {
+        var combo = FindByName(main, name);
+        if (combo is null) return 0;
+        try
+        {
+            if (!combo.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out var p)) return 0;
+            var ec = (ExpandCollapsePattern)p;
+            ec.Expand();
+            Thread.Sleep(400);
+            var n = combo.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)).Count;
+            if (n == 0)
+            {
+                // у WPF список раскрытого ComboBox иногда лежит в отдельном окне-попапе верхнего уровня
+                n = AutomationElement.RootElement.FindAll(TreeScope.Descendants,
+                    new AndCondition(new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
+                        new PropertyCondition(AutomationElement.ProcessIdProperty, combo.Current.ProcessId))).Count;
+            }
+            ec.Collapse();
+            return n;
+        }
+        catch (Exception e) when (e is InvalidOperationException or ElementNotAvailableException)
+        {
+            return 0;
+        }
     }
 
     static int ChipCount(AutomationElement main, string groupName)

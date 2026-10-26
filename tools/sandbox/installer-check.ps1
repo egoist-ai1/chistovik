@@ -114,11 +114,10 @@ try {
   $arp = @(Get-Arp)
   Check 'запись в «Программы и компоненты»' ($arp.Count -ge 1) ($arp[0].DisplayName + ' ' + $arp[0].DisplayVersion) 'записи нет'
 
-  # Обновление поверх (MajorUpgrade): только если дан старый MSI.
-  if ($OldMsiPath -and (Test-Path -LiteralPath $OldMsiPath)) {
-    Add-Result 'обновление поверх' 'ПРОПУСК' 'проверяется отдельным запуском: сначала старый MSI, затем этот (нужны два пакета разных версий)'
-  } else {
-    Add-Result 'обновление поверх (MajorUpgrade)' 'ПРОПУСК' 'нужны два MSI разных версий; в этом прогоне только один пакет'
+  # Обновление поверх (MajorUpgrade) выполняется ниже, после основного удаления (система снова чистая).
+  $doUpgrade = [bool]($OldMsiPath -and (Test-Path -LiteralPath $OldMsiPath -PathType Leaf))
+  if (-not $doUpgrade) {
+    Add-Result 'обновление поверх (MajorUpgrade)' 'ПРОПУСК' 'нужны два MSI разных версий; в этом прогоне только один пакет (ключ -OldMsiPath не задан)'
   }
 
   # Удаление.
@@ -139,6 +138,93 @@ try {
   }
 
   $data = Join-Path $env:ProgramData 'Chistovik'
+
+  # Сценарий обновления поверх: старый MSI, маркер данных пользователя, новый MSI поверх, удаление нового.
+  if ($doUpgrade) {
+    $upMarker = Join-Path $data 'upgrade-marker.txt'
+    $dataCreated = $false
+    $newInstalled = $false
+    try {
+      $preArp = @(Get-Arp)
+      if ((Test-Path -LiteralPath $installDir) -or $preArp.Count -gt 0) {
+        Add-Result 'обновление поверх: чистое состояние' 'FAIL' 'после основного удаления остались файлы или запись ARP, сценарий обновления не выполнялся'
+      } else {
+        # Версия нового пакета из имени файла Chistovik-<версия>-x64.msi.
+        $newVer = ''
+        if ((Split-Path -Leaf $MsiPath) -match '^Chistovik-(.+)-x64\.msi$') { $newVer = $Matches[1] }
+        # Сравнение версий без хвостовых «.0» (MSI может нормализовать 1.2.0 в 1.2.0 или 1.2).
+        function Norm([string]$v) { return (($v.Trim()) -replace '(\.0+)+$', '') }
+
+        # (а) старая версия.
+        $olog = Join-Path $ResultsDir 'msi-old-install.log'
+        $ocode = Invoke-Msi @('/i', "`"$OldMsiPath`"", '/qn', '/l*v', "`"$olog`"")
+        $oldOk = ($ocode -eq 0 -or $ocode -eq 3010)
+        $owhy = if ($oldOk) { '' } else { '; причина: ' + (Get-MsiFailureSummary $olog) }
+        Check 'обновление поверх: установка старой версии' $oldOk "msiexec код $ocode" "msiexec код $ocode, см. msi-old-install.log$owhy"
+
+        if ($oldOk) {
+          $oldArp = @(Get-Arp)
+          $oldVer = if ($oldArp.Count -ge 1) { [string]$oldArp[0].DisplayVersion } else { '' }
+          $oldAgentVer = if (Test-Path -LiteralPath $agent) { [string](Get-Item -LiteralPath $agent).VersionInfo.FileVersion } else { '' }
+          Check 'обновление поверх: версия старого пакета в ARP' ($oldVer -ne '') ("DisplayVersion $oldVer, файл агента $oldAgentVer") 'запись ARP старого пакета не найдена'
+
+          # (б) данные пользователя.
+          if (-not (Test-Path -LiteralPath $data)) { New-Item -ItemType Directory -Force -Path $data | Out-Null; $dataCreated = $true }
+          Set-Content -LiteralPath $upMarker -Value 'upgrade-marker' -Encoding ASCII
+
+          # (в) новый пакет поверх.
+          $nlog = Join-Path $ResultsDir 'msi-upgrade.log'
+          $ncode = Invoke-Msi @('/i', "`"$MsiPath`"", '/qn', '/l*v', "`"$nlog`"")
+          $newOk = ($ncode -eq 0 -or $ncode -eq 3010)
+          $newInstalled = $true
+          $nwhy = if ($newOk) { '' } else { '; причина: ' + (Get-MsiFailureSummary $nlog) }
+          Check 'обновление поверх: установка нового пакета' $newOk "msiexec код $ncode" "msiexec код $ncode, см. msi-upgrade.log$nwhy"
+
+          if ($newOk) {
+            # (г) ровно одна запись ARP, версия новая и не равна старой.
+            $upArp = @(Get-Arp)
+            Check 'обновление поверх: в ARP ровно одна запись' ($upArp.Count -eq 1) ('одна запись: ' + $upArp[0].DisplayName) ('записей: ' + $upArp.Count + ' (старая версия не заменена)')
+            $curVer = if ($upArp.Count -ge 1) { [string]$upArp[0].DisplayVersion } else { '' }
+            if ($newVer) {
+              Check 'обновление поверх: версия в ARP равна версии нового пакета' ((Norm $curVer) -eq (Norm $newVer)) "DisplayVersion $curVer" "DisplayVersion $curVer, ждали $newVer (из имени файла)"
+            } else {
+              Add-Result 'обновление поверх: версия в ARP равна версии нового пакета' 'ПРОПУСК' 'версию нового пакета не удалось взять из имени файла'
+            }
+            Check 'обновление поверх: версия в ARP отличается от старой' ((Norm $curVer) -ne (Norm $oldVer)) "было $oldVer, стало $curVer" "версия не изменилась ($curVer): два пакета с одной версией MajorUpgrade не заменит"
+
+            # (д) файлы и версия агента.
+            Check 'обновление поверх: файлы App и Agent на месте' ((Test-Path -LiteralPath $app) -and (Test-Path -LiteralPath $agent)) $installDir "нет $app или $agent"
+            $curAgentVer = if (Test-Path -LiteralPath $agent) { [string](Get-Item -LiteralPath $agent).VersionInfo.FileVersion } else { '' }
+            Check 'обновление поверх: версия файла агента изменилась' ($curAgentVer -ne '' -and (Norm $curAgentVer) -ne (Norm $oldAgentVer)) "было $oldAgentVer, стало $curAgentVer" "версия файла агента не изменилась: было $oldAgentVer, стало $curAgentVer (агент не заменён или собран с одной версией)"
+
+            # (е) ровно один ярлык.
+            $upLnk = @(Get-ChildItem -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs' -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'Чистовик|Chistovik' })
+            Check 'обновление поверх: ровно один ярлык в меню «Пуск»' ($upLnk.Count -eq 1) $upLnk[0].FullName ('ярлыков: ' + $upLnk.Count)
+
+            # (ж) данные пользователя на месте.
+            Check 'обновление поверх: маркер данных пользователя сохранился' (Test-Path -LiteralPath $upMarker) $upMarker 'маркер в ProgramData пропал'
+          }
+        }
+      }
+    } catch {
+      Add-Result 'обновление поверх: необработанное исключение' 'FAIL' $_.Exception.Message
+    }
+
+    # (з) удаление и уборка: что бы ни случилось выше, оставляем систему чистой.
+    $leftArp = @(Get-Arp)
+    if ($newInstalled -or $leftArp.Count -gt 0) {
+      $xlog = Join-Path $ResultsDir 'msi-upgrade-uninstall.log'
+      $xcode = Invoke-Msi @('/x', "`"$MsiPath`"", '/qn', '/l*v', "`"$xlog`"")
+      $xwhy = if ($xcode -eq 0 -or $xcode -eq 3010) { '' } else { '; причина: ' + (Get-MsiFailureSummary $xlog) }
+      Check 'обновление поверх: удаление нового пакета' ($xcode -eq 0 -or $xcode -eq 3010) "msiexec код $xcode" "msiexec код $xcode, см. msi-upgrade-uninstall.log$xwhy"
+      Check 'обновление поверх: после удаления нет файлов и записи ARP' (-not (Test-Path -LiteralPath $app) -and -not (Test-Path -LiteralPath $agent) -and @(Get-Arp).Count -eq 0) 'файлов и записи нет' 'файлы или запись ARP остались'
+    }
+    if (Test-Path -LiteralPath $upMarker) { Remove-Item -LiteralPath $upMarker -Force -ErrorAction SilentlyContinue }
+    if ($dataCreated -and (Test-Path -LiteralPath $data) -and @(Get-ChildItem -LiteralPath $data -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+      Remove-Item -LiteralPath $data -Force -ErrorAction SilentlyContinue
+    }
+  }
+
   Add-Result 'данные пользователя (%ProgramData%\Chistovik)' 'PASS' ('по проекту установщик их не создаёт и не удаляет; сейчас ' + $(if (Test-Path -LiteralPath $data) { 'каталог есть' } else { 'каталога нет' }))
   Add-Result 'запуск App, UAC, закрытие App при обновлении' 'ПРОПУСК' 'GUI скриптами не запускается; окна UAC в Sandbox нет (см. README, ручной режим)'
 } catch {

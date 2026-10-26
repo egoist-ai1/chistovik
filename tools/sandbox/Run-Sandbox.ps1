@@ -17,6 +17,8 @@
   Папка с Chistovik.Agent.exe и Chistovik.App.exe (publish-x64 релизной сборки).
 .PARAMETER MsiPath
   Необязательно: MSI для сценария 8 (установка/удаление в Sandbox).
+.PARAMETER OldMsiPath
+  Необязательно: СТАРЫЙ MSI для проверки обновления поверх (MajorUpgrade) в сценарии 8; нужен вместе с -MsiPath (новый пакет). Копируется один в <ResultsDir>\msi-old и монтируется на чтение как C:\MsiOld.
 .PARAMETER InstallersDir
   Необязательно: папка с установщиками для сценария 9 (удаление программ: *.msi и *.exe). Копируется в <ResultsDir>\installers и монтируется на чтение как C:\Installers.
 .PARAMETER Only
@@ -28,6 +30,7 @@ param(
   [Parameter(Mandatory = $true)][string]$StandDir,
   [Parameter(Mandatory = $true)][string]$ReleaseDir,
   [string]$MsiPath = '',
+  [string]$OldMsiPath = '',
   [string]$ResultsDir = '',
   [string]$InstallersDir = '',
   [string]$Only = '',
@@ -68,6 +71,19 @@ if ($MsiPath) {
   Copy-Item -LiteralPath (Resolve-Path -LiteralPath $MsiPath).ProviderPath -Destination $msiDir -Force
 }
 
+$oldMsiDir = $null
+$oldMsiName = ''
+if ($OldMsiPath) {
+  if (-not $MsiPath) { throw '-OldMsiPath требует -MsiPath (новый пакет для обновления поверх).' }
+  if (-not (Test-Path -LiteralPath $OldMsiPath -PathType Leaf)) { throw "Старый MSI не найден: $OldMsiPath" }
+  $oldMsiName = Split-Path -Leaf $OldMsiPath
+  if ($oldMsiName -notmatch '^[A-Za-z0-9._-]+$') { throw "Имя старого MSI должно быть ASCII без пробелов: $oldMsiName" }
+  # Только сам старый пакет, отдельная папка: guest-run берёт «первый Chistovik-*-x64.msi» только из C:\Msi.
+  $oldMsiDir = Join-Path $results 'msi-old'
+  New-Item -ItemType Directory -Force -Path $oldMsiDir | Out-Null
+  Copy-Item -LiteralPath (Resolve-Path -LiteralPath $OldMsiPath).ProviderPath -Destination $oldMsiDir -Force
+}
+
 $installersCopy = $null
 if ($InstallersDir) {
   if (-not (Test-Path -LiteralPath $InstallersDir -PathType Container)) { throw "Не найдена папка установщиков: $InstallersDir" }
@@ -97,12 +113,15 @@ if ($msiDir) {
   $folders += (Folder $msiDir 'C:\Msi' $true)
 }
 
+if ($oldMsiDir) { $folders += (Folder $oldMsiDir 'C:\MsiOld' $true) }
+
 if ($installersCopy) { $folders += (Folder $installersCopy 'C:\Installers' $true) }
 
 $guestArgs = "-Token $token"
 if ($Only) { $guestArgs += " -Only $Only" }
 if ($SkipIdle) { $guestArgs += ' -SkipIdle' }
 if (-not $msiDir) { $guestArgs += ' -SkipInstaller' }
+if ($oldMsiDir) { $guestArgs += " -OldMsiName $oldMsiName" }
 $protected = if ($ProtectedClient) { 'Enable' } else { 'Disable' }
 
 $wsb = @"
