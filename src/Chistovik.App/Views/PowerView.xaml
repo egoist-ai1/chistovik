@@ -25,8 +25,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" FontWeight="Medium"/>
+                                        <WrapPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" FontWeight="Medium" VerticalAlignment="Center"/>
                                             <Border Style="{StaticResource PillOk}" Margin="10,0,0,0"
                                                     Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="активна"/>
@@ -45,7 +45,7 @@
                                                     ToolTip="На этом устройстве такой схемы нет (например, на ноутбуках с Modern Standby доступна только «Сбалансированная»)">
                                                 <TextBlock Text="нет на этом устройстве"/>
                                             </Border>
-                                        </StackPanel>
+                                        </WrapPanel>
                                         <TextBlock Text="{Binding Description}" Style="{StaticResource Subtle}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Content="Включить"
