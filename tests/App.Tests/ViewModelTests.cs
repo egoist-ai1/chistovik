@@ -710,6 +710,35 @@ public class JournalAndModesViewModelTests
 
         Assert.Empty(agent.Sent);
     }
+
+    [Fact]
+    public async Task Mode_with_unavailable_scheme_is_marked_and_confirmation_says_it_is_skipped()
+    {
+        var cat = PowerCatalog.Shared;
+        var bal = cat.FindScheme("bal")!;
+        var snap = new PowerSnapshot(bal.Guid, new Dictionary<string, (uint Ac, uint Dc)>(), null,
+            InstalledSchemes: new[] { bal.Guid }, ModernStandby: true);
+        var dialogs = new FakeDialogs();
+        var vm = new ModesViewModel(TweakCatalog.Shared, cat, Make.Changes(new FakeAgentClient()), dialogs, null, new PowerSrc(snap));
+        await vm.Loaded;
+        await vm.PowerChecked;
+
+        var max = vm.Items.First(r => r.Mode.PowerPlan == "ult");
+        var balance = vm.Items.First(r => r.Mode.PowerPlan == "bal");
+        Assert.Equal("Схема питания пропускается на этом устройстве", max.SchemeNote);
+        Assert.Equal("", balance.SchemeNote);
+
+        await vm.ApplyAsync(max.Mode);
+        Assert.Contains("Схема питания будет пропущена", Assert.Single(dialogs.Confirms).Message);
+    }
+
+    [Fact]
+    public async Task Modes_without_power_source_show_no_scheme_note()
+    {
+        var vm = new ModesViewModel(TweakCatalog.Shared, PowerCatalog.Shared, Make.Changes(new FakeAgentClient()), new FakeDialogs());
+        await vm.Loaded;
+        Assert.All(vm.Items, r => Assert.Equal("", r.SchemeNote));
+    }
 }
 
 public class OverviewViewModelTests

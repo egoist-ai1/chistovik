@@ -18,6 +18,17 @@ public static class ResponseText
 
     public static ChangeOutcome ForApply(AgentResponse r) => Map(r, undo: false);
 
+    /// <summary>Режим: как обычное применение, плюс примечание, если агент пропустил недоступную схему питания.</summary>
+    public static ChangeOutcome ForMode(AgentResponse r)
+    {
+        var o = Map(r, undo: false);
+        if (r.Facts?.Any(f => f.Key == "mode:power-scheme-skipped") != true) return o;
+        const string note = "Режим включён, кроме схемы питания: на этом устройстве доступна только «Сбалансированная».";
+        return o.Kind is OutcomeKind.Success or OutcomeKind.NoChange or OutcomeKind.Partial
+            ? o with { Message = (o.Kind == OutcomeKind.Success ? "" : o.Message + " ") + note }
+            : o;
+    }
+
     public static ChangeOutcome ForUndo(AgentResponse r) => Map(r, undo: true);
 
     /// <summary>

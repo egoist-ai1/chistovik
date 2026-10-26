@@ -1,3 +1,4 @@
+using Chistovik.App.Models;
 using Chistovik.App.Mvvm;
 using Chistovik.App.Services;
 using Chistovik.App.Services.Changes;
@@ -8,6 +9,7 @@ namespace Chistovik.App.ViewModels;
 public sealed class ModeRowViewModel : ObservableObject
 {
     private bool _canApply = true;
+    private bool _schemeSkipped;
 
     public ModeRowViewModel(ModeEntry mode, PowerCatalog power, RelayCommand apply)
     {
@@ -34,6 +36,19 @@ public sealed class ModeRowViewModel : ObservableObject
         get => _canApply;
         set => SetProperty(ref _canApply, value);
     }
+
+    /// <summary>Схема питания режима недоступна на этом устройстве и будет пропущена.</summary>
+    public bool SchemeSkipped
+    {
+        get => _schemeSkipped;
+        set
+        {
+            if (!SetProperty(ref _schemeSkipped, value)) return;
+            OnPropertyChanged(nameof(SchemeNote));
+        }
+    }
+
+    public string SchemeNote => _schemeSkipped ? ModesViewModel.SchemeSkippedNote : "";
 }
 
 public sealed class ModesViewModel : StatefulPageViewModel
@@ -42,16 +57,25 @@ public sealed class ModesViewModel : StatefulPageViewModel
     private readonly PowerCatalog _power;
     private readonly IDialogService _dialogs;
     private readonly UndoFlow? _undo;
+    private readonly IPowerSource? _powerSource;
+    private PowerSnapshot? _powerSnap;
+
+    /// <summary>Подпись режима, у которого схема питания недоступна на устройстве.</summary>
+    public const string SchemeSkippedNote = "Схема питания пропускается на этом устройстве";
+
+    /// <summary>Завершается, когда прочитано состояние питания (для подписей и подтверждения); не блокирует показ списка.</summary>
+    public Task PowerChecked { get; private set; } = Task.CompletedTask;
     private IReadOnlyList<ModeRowViewModel> _items = Array.Empty<ModeRowViewModel>();
     private Guid? _lastOperation;
     private string _lastModeName = "";
 
     public ModesViewModel(TweakCatalog catalog, PowerCatalog power, IChangeService? changes, IDialogService dialogs,
-        INavigator? navigator = null)
+        INavigator? navigator = null, IPowerSource? powerSource = null)
         : base("Режимы", "Готовые наборы настроек и схема питания одним нажатием. Весь режим откатывается целиком.", changes, navigator)
     {
         _catalog = catalog;
         _power = power;
+        _powerSource = powerSource;
         _dialogs = dialogs;
         UndoDialogs = dialogs;
         _undo = changes is null ? null : new UndoFlow(changes, dialogs);
@@ -77,8 +101,27 @@ public sealed class ModesViewModel : StatefulPageViewModel
             return row;
         }).ToList();
         SetLoaded(Items.Count, "Список режимов пуст.");
+        PowerChecked = CheckPowerAsync();
         return Task.CompletedTask;
     }
+
+    private async Task CheckPowerAsync()
+    {
+        if (_powerSource is null) return;
+        try
+        {
+            var snap = await _powerSource.ReadAsync();
+            _powerSnap = snap;
+            foreach (var r in Items) r.SchemeSkipped = IsSchemeSkipped(r.Mode);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // Состояние питания только для подсказки; решение о схеме всё равно принимает агент.
+        }
+    }
+
+    private bool IsSchemeSkipped(ModeEntry mode)
+        => _powerSnap is { } snap && _power.FindScheme(mode.PowerPlan) is { } s && !PowerViewModel.IsSchemeAvailable(s, snap);
 
     protected override void OnCanApplyChanged()
     {
@@ -89,6 +132,7 @@ public sealed class ModesViewModel : StatefulPageViewModel
     public async Task ApplyAsync(ModeEntry mode)
     {
         if (Changes is null || !CanApply) return;
+        await Task.WhenAny(PowerChecked, Task.Delay(1000));
         if (!_dialogs.Confirm(new ConfirmContent($"Включить режим «{mode.Name}»?", Describe(mode), "Включить", Danger: mode.RequiresAdmin)))
             return;
 
@@ -136,7 +180,10 @@ public sealed class ModesViewModel : StatefulPageViewModel
     {
         var sb = new System.Text.StringBuilder();
         sb.Append(mode.Description).Append("\n\nЧто изменится:\n");
-        sb.Append("• Схема питания: ").Append(_power.FindScheme(mode.PowerPlan)?.Title ?? mode.PowerPlan).Append('\n');
+        if (IsSchemeSkipped(mode))
+            sb.Append("• Схема питания будет пропущена: на этом устройстве доступна только «Сбалансированная»\n");
+        else
+            sb.Append("• Схема питания: ").Append(_power.FindScheme(mode.PowerPlan)?.Title ?? mode.PowerPlan).Append('\n');
         foreach (var (id, on) in mode.Tweaks)
         {
             var t = _catalog.FindTweak(id);

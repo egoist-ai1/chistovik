@@ -103,7 +103,7 @@ public sealed class ChangeService : IChangeService
             ids: changes.Select(c => c.TweakId).ToList(), ct);
 
     public Task<ChangeOutcome> ApplyModeAsync(string modeId, CancellationToken ct = default)
-        => RunAsync(new ApplyModeRequest { Id = _newId(), ModeId = modeId }, ResponseText.ForApply,
+        => RunAsync(new ApplyModeRequest { Id = _newId(), ModeId = modeId }, ResponseText.ForMode,
             ids: _catalog.FindMode(modeId)?.Tweaks.Keys.ToList(), ct);
 
     public Task<ChangeOutcome> SetStartupAsync(string entryId, bool enabled, CancellationToken ct = default)

@@ -177,6 +177,8 @@ public sealed class OperationHandler : IOperationHandler
         var response = Stored(request.Id, rec.Id, sid);
         if (withFacts)
             response = response with { Facts = CleanupReports.Collect(_env, rec.Id, p) };
+        if (p.Facts is { Count: > 0 } notes)
+            response = response with { Facts = (response.Facts ?? []).Concat(notes).ToList() };
         return response;
     }
 

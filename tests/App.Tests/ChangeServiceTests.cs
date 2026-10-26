@@ -67,6 +67,32 @@ public class ChangeServiceTests
     }
 
     [Fact]
+    public async Task Mode_outcome_tells_that_power_scheme_was_skipped()
+    {
+        var agent = new FakeAgentClient
+        {
+            Handler = r => new AgentResponse(r.Id, true, ResponseCodes.Ok, null, Guid.NewGuid(),
+                [new StepResult(1, 0, StepKind.RegistryValue, StepState.Done, null)],
+                Facts: [new FactEntry("mode:power-scheme-skipped", "{}")]),
+        };
+        var svc = Make.Changes(agent);
+
+        var o = await svc.ApplyModeAsync(TweakCatalog.Shared.Modes.First().Id);
+
+        Assert.Equal(OutcomeKind.Success, o.Kind);
+        Assert.Contains("кроме схемы питания", o.Message);
+        Assert.Contains("«Сбалансированная»", o.Message);
+    }
+
+    [Fact]
+    public async Task Mode_outcome_without_skip_fact_is_unchanged()
+    {
+        var agent = new FakeAgentClient();
+        var o = await Make.Changes(agent).ApplyModeAsync(TweakCatalog.Shared.Modes.First().Id);
+        Assert.DoesNotContain("кроме схемы питания", o.Message);
+    }
+
+    [Fact]
     public async Task View_only_never_sends_a_request()
     {
         var agent = new FakeAgentClient { Access = AgentAccess.ViewOnly };

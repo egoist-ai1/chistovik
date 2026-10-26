@@ -226,7 +226,10 @@ public sealed class FakePowerControl : IPowerControl
 
     public string? GetName(Guid scheme) => GetNameFailure is { } f ? throw f : Names.GetValueOrDefault(scheme);
 
-    public IReadOnlyList<Guid> ListSchemes() => _schemes.ToList();
+    /// <summary>Если задано, ListSchemes бросает это исключение (чтение схем упало).</summary>
+    public Exception? ListFailure { get; set; }
+
+    public IReadOnlyList<Guid> ListSchemes() => ListFailure is { } f ? throw f : _schemes.ToList();
 
     public (uint Ac, uint Dc) Read(Guid scheme, Guid sub, Guid setting)
     {

@@ -68,7 +68,7 @@ internal static class PowerPlanner
         try { modernStandby = env.Power.IsModernStandby(); }
         catch (Exception e) when (e is not OperationCanceledException) { throw new PlanException(ErrorCodes.From(e), ErrorCodes.Text(e)); }
         if (modernStandby)
-            throw new PlanException(StepCodes.NotFound, "Схемы нет на этом устройстве: на ноутбуках с Modern Standby доступна только «Сбалансированная»");
+            throw new SchemeUnavailableException("Схемы нет на этом устройстве: на ноутбуках с Modern Standby доступна только «Сбалансированная»");
 
         var fresh = env.Ids.NewGuid();
         return [new PowerCreateStep(entry, fresh, true), new PowerActiveStep(entry, fresh)];
@@ -100,6 +100,9 @@ internal static class PowerPlanner
 
 internal static class ModePlanner
 {
+    /// <summary>Ключ факта ответа: схема питания режима пропущена, твики применены.</summary>
+    public const string SchemeSkippedFact = "mode:power-scheme-skipped";
+
     /// <summary>Режим это набор твиков каталога и план питания. Одна операция, одним откатом.</summary>
     public static OperationPlan Plan(ExecEnv env, ApplyModeRequest request, string clientSid)
     {
@@ -110,8 +113,17 @@ internal static class ModePlanner
             var tweak = env.Tweaks.FindTweak(id) ?? throw new PlanException(StepCodes.NotFound, "Твик режима не найден в каталоге");
             steps.Add(TweakPlanner.Step(env, tweak, enabled, clientSid));
         }
-        steps.AddRange(PowerPlanner.SchemeSteps(env, mode.PowerPlan));
-        return new OperationPlan(OperationKind.Mode, mode.Id, steps);
+        IReadOnlyList<FactEntry>? facts = null;
+        try
+        {
+            steps.AddRange(PowerPlanner.SchemeSteps(env, mode.PowerPlan));
+        }
+        catch (SchemeUnavailableException) when (steps.Count > 0)
+        {
+            // Схема недоступна на устройстве: твики режима применяются, схема пропускается и сообщается клиенту.
+            facts = [new FactEntry(SchemeSkippedFact, JsonSerializer.Serialize(new { scheme = mode.PowerPlan, reason = "modern-standby" }))];
+        }
+        return new OperationPlan(OperationKind.Mode, mode.Id, steps) { Facts = facts };
     }
 }
 

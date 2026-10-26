@@ -1,4 +1,5 @@
 using Chistovik.Core.Catalog;
+using Chistovik.Core.Ipc;
 using Chistovik.Core.Journal;
 using Chistovik.Core.Ports;
 
@@ -144,13 +145,19 @@ internal sealed class OperationPlan(OperationKind kind, string subject, IReadOnl
 
     /// <summary>true: после отказа шага остальные шаги выполняются (очистка диска); итог Done / Partial / Failed.</summary>
     public bool ContinueOnFailure { get; init; }
+
+    /// <summary>Примечания планировщика для ответа клиенту (например, пропущенная схема питания режима).</summary>
+    public IReadOnlyList<FactEntry>? Facts { get; init; }
 }
 
 /// <summary>Ошибка планирования до записи в журнал (не найдена запись автозагрузки, служба и т. п.).</summary>
-internal sealed class PlanException(string code, string message) : Exception(message)
+internal class PlanException(string code, string message) : Exception(message)
 {
     public string Code { get; } = code;
 }
+
+/// <summary>Схема питания недоступна на этом устройстве (Modern Standby, нет скрытого шаблона). Режим её пропускает, одиночный выбор схемы отклоняется.</summary>
+internal sealed class SchemeUnavailableException(string message) : PlanException(StepCodes.NotFound, message);
 
 /// <summary>Сопоставление исключений портов кодам шага журнала.</summary>
 internal static class ErrorCodes

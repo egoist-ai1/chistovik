@@ -49,6 +49,7 @@
                                                TextWrapping="Wrap" Margin="0,6,0,8"/>
                                     <TextBlock Text="{Binding PowerText}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding TweaksText}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding SchemeNote}" Style="{StaticResource Subtle}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="Применить"
                                         Command="{Binding ApplyCommand}" Margin="20,0,0,0" VerticalAlignment="Center"
