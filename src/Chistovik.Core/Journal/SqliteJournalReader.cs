@@ -34,6 +34,11 @@ public sealed class SqliteJournalReader : IJournalReader, IDisposable
             _conn.Dispose();
             throw new JournalException(JournalException.Corrupt, "Journal file is damaged or is not a journal database.", e);
         }
+        catch (SqliteException e) when (SqliteJournalSchema.IsHotJournal(e))
+        {
+            _conn.Dispose();
+            throw SqliteJournalSchema.HotJournal(e);
+        }
         catch
         {
             _conn.Dispose();
@@ -41,15 +46,25 @@ public sealed class SqliteJournalReader : IJournalReader, IDisposable
         }
     }
 
-    public int SchemaVersion { get { lock (_gate) return SqliteJournalSchema.UserVersion(_conn); } }
+    /// <summary>Читает под замком; «горячий» журнал отката превращается в JournalException(Recovering).</summary>
+    private T Read<T>(Func<SqliteConnection, T> f)
+    {
+        lock (_gate)
+        {
+            try { return f(_conn); }
+            catch (SqliteException e) when (SqliteJournalSchema.IsHotJournal(e)) { throw SqliteJournalSchema.HotJournal(e); }
+        }
+    }
+
+    public int SchemaVersion => Read(SqliteJournalSchema.UserVersion);
 
     public bool IsNewerSchema => SchemaVersion > SqliteJournalSchema.Latest;
 
-    public IReadOnlyList<OperationSummary> List(int skip, int take) { lock (_gate) return SqliteJournalSchema.List(_conn, skip, take); }
+    public IReadOnlyList<OperationSummary> List(int skip, int take) => Read(c => SqliteJournalSchema.List(c, skip, take));
 
-    public OperationView? Get(Guid id) { lock (_gate) return SqliteJournalSchema.Get(_conn, id); }
+    public OperationView? Get(Guid id) => Read(c => SqliteJournalSchema.Get(c, id));
 
-    public StepRecord? LatestEffective(string targetKey) { lock (_gate) return SqliteJournalSchema.LatestEffective(_conn, targetKey); }
+    public StepRecord? LatestEffective(string targetKey) => Read(c => SqliteJournalSchema.LatestEffective(c, targetKey));
 
     public void Dispose() { lock (_gate) _conn.Dispose(); }
 }

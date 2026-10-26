@@ -129,7 +129,7 @@ public class UiPolishTests : IDisposable
         "reg-hive-root", "reg-hkcc", "reg-hkcr", "reg-logon-script", "reg-microsoft", "reg-nonsoftware", "reg-open-failed", "reg-persistence",
         "reg-policies", "reg-policies-microsoft", "reg-policies-microsoft-exception", "reg-program-entry", "reg-protected-node",
         "reg-resolved-mismatch", "reg-run-keys", "reg-smartscreen", "reg-structure", "reg-symlink", "reg-system-allowlist", "reg-system-branch",
-        "reg-system-default-deny", "reg-system-hive", "reg-system-user", "reg-target-not-built-by-planner", "reg-uac",
+        "reg-system-default-deny", "reg-system-hive", "reg-system-user", "reg-target-not-built-by-planner", "reg-type-mismatch", "reg-uac",
         "service-bad-name", "service-bad-start", "service-boot-start", "service-driver", "service-edge", "service-elevate-outside-program-files",
         "service-hardlist", "service-has-dependents", "service-in-windows", "service-microsoft-unowned", "service-modifiable",
         "service-name-mismatch", "service-no-image", "service-not-found", "service-ppl", "service-security-product", "service-shared",

@@ -26,7 +26,11 @@ public sealed record InstalledProgram
     public string? ProductCode { get; init; }
     public required ProgramSource Source { get; init; }
     public bool IsSystemComponent { get; init; }
+    /// <summary>NoRemove=1: производитель запретил удаление.</summary>
+    public bool NoRemove { get; init; }
     public bool IsUpdate { get; init; }
+    /// <summary>Значение ReleaseType (Update, Hotfix, …); пусто, если не задано.</summary>
+    public string ReleaseType { get; init; } = "";
     public string ParentKeyName { get; init; } = "";
     public long? EstimatedSizeKb { get; init; }
     public DateOnly? InstallDate { get; init; }

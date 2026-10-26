@@ -10,6 +10,14 @@ internal sealed class RegistrySession(IRegKeyHandle? handle, ApprovedRegistryWri
 {
     public string ReadStateJson() => toJson(handle is null ? new RegValueState(false, RegType.None, null) : handle.Read(valueName));
 
+    /// <summary>Тип существующего значения; null, если значения (или ключа) нет.</summary>
+    public RegType? ExistingType()
+    {
+        if (handle is null) return null;
+        var st = handle.Read(valueName);
+        return st.Exists ? st.Type : null;
+    }
+
     public void Write()
     {
         if (handle is null || approved is null) throw new InvalidOperationException("Сессия открыта без права записи");
@@ -69,7 +77,19 @@ internal sealed class RegistryValueStep : PlannedStep
     }
 
     protected override OpenOutcome OpenCore(ExecEnv env, SimState? sim, bool forWrite)
-        => RegistryOpen.Open(env, _loc, _desired, _sid, forWrite, StateJson.RegistryJson);
+    {
+        var o = RegistryOpen.Open(env, _loc, _desired, _sid, forWrite, StateJson.RegistryJson);
+        // При применении значение с нетипичным типом (REG_EXPAND_SZ, QWORD и т. п.) не трогаем: запись другим типом
+        // сделала бы откат невозможным (журнал принимает у твика только DWord/String). Откат (IsRevert) проверку не проходит.
+        if (!IsRevert && _desired.Exists && o.Session is { } s && ExistingType(s) is { } t && t != _desired.Type)
+        {
+            s.Dispose();
+            return OpenOutcome.Refuse(StepCodes.PolicyDenied, "reg-type-mismatch");
+        }
+        return o;
+    }
+
+    static RegType? ExistingType(IStepSession s) => s is RegistrySession r ? r.ExistingType() : null;
 }
 
 /// <summary>Флаг включения записи автозагрузки в StartupApproved. Запись должна быть в собственном перечислении агента, команда не изменилась.</summary>

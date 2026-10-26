@@ -20,6 +20,8 @@ public sealed class TweakCatalog
     /// <summary>Что возвращает значение после установки обновления Windows.</summary>
     public static readonly IReadOnlySet<string> RevertedByValues = new HashSet<string> { "feature-update", "cumulative-update", "none" };
     public static readonly IReadOnlySet<string> Scopes = new HashSet<string> { "user", "machine" };
+    /// <summary>Что означает отсутствие значения в реестре: твик включён или выключен.</summary>
+    public static readonly IReadOnlySet<string> AbsentMeansValues = new HashSet<string> { "on", "off" };
 
     static readonly Lazy<TweakCatalog> SharedLazy = new(Load);
 
@@ -110,6 +112,7 @@ public sealed class TweakCatalog
                 if (t.Scope != (t.Hive == "HKCU" ? "user" : "machine"))
                     throw Bad($"{w}: scope «{t.Scope}» не совпадает с hive «{t.Hive}»");
             }
+            if (t.AbsentMeans is not null) OneOf(t.AbsentMeans, AbsentMeansValues, "absentMeans", w);
             if (t.MinBuild is <= 0) throw Bad($"{w}: minBuild должен быть положительным");
             if (t.MaxBuild is <= 0) throw Bad($"{w}: maxBuild должен быть положительным");
             if (t.MinBuild is { } lo && t.MaxBuild is { } hi && lo > hi)

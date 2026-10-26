@@ -52,7 +52,7 @@ public static class ProgramMarkers
 /// </summary>
 public sealed record PackageFacts(
     string DisplayName, string? Publisher, bool SystemComponent, string? ParentKeyName, string? ReleaseType,
-    bool WindowsInstaller, string? UninstallString, string? QuietUninstallString);
+    bool WindowsInstaller, string? UninstallString, string? QuietUninstallString, bool NoRemove = false);
 
 /// <summary>Как именно удалять: msi (по коду продукта) или exe (файл и готовые аргументы, запуск без shell).</summary>
 public sealed record UninstallCommand(string Kind, string? ProductCode, string? ExePath, string? Arguments);
@@ -78,7 +78,8 @@ public sealed class PackagePolicy
     static readonly Regex InnoName = new(@"^unins\d{3}\.exe$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     static readonly string[] ForbiddenNameMarkers =
-        ["Microsoft Edge", "WebView2", ".NET Framework", "Microsoft Store", "Windows Defender", "Windows Security"];
+        ["Microsoft Edge", "WebView2", ".NET Framework", "Microsoft Store", "Windows Defender", "Windows Security",
+         "Microsoft Update Health Tools", "Intune Management Extension", "Configuration Manager Client", "Microsoft GameInput"];
 
     static readonly HashSet<string> Interpreters = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -124,6 +125,8 @@ public sealed class PackagePolicy
 
         if (f.SystemComponent)
             return View("Системный компонент", "system-component");
+        if (f.NoRemove)
+            return View("Производитель запретил удаление этой программы", "no-remove");
         if (!string.IsNullOrWhiteSpace(f.ParentKeyName))
             return View("Часть другой программы", "has-parent");
         if (f.ReleaseType is { } rt && (rt.Equals("Update", StringComparison.OrdinalIgnoreCase) || rt.Equals("Hotfix", StringComparison.OrdinalIgnoreCase)

@@ -14,8 +14,9 @@ public class PackagePolicyTests
 
     static PackageFacts Facts(
         string name = "Foo", string? quiet = null, string? uninstall = null, bool msi = false, bool system = false,
-        string? parent = null, string? release = null, string? publisher = "Foo Ltd")
-        => new(name, publisher, system, parent, release, msi, uninstall, quiet);
+        string? parent = null, string? release = null, string? publisher = "Foo Ltd",
+        bool noRemove = false)
+        => new(name, publisher, system, parent, release, msi, uninstall, quiet, noRemove);
 
     static PackagePolicy Policy(FakeFileSecurity? fs = null) => new(PolicyContext.Fixed, fs ?? new FakeFileSecurity());
 
@@ -95,6 +96,22 @@ public class PackagePolicyTests
     [Fact]
     public void System_component_is_read_only()
         => AssertRefused(Policy().Classify(MachineId(Guid1), Facts(msi: true, system: true)), "system-component");
+
+    [Fact]
+    public void No_remove_flag_makes_msi_read_only()
+    {
+        var c = Policy().Classify(MachineId(Guid1), Facts(msi: true, noRemove: true));
+        AssertRefused(c, "no-remove");
+        Assert.Equal("Производитель запретил удаление этой программы", c.Reason);
+    }
+
+    [Theory]
+    [InlineData("Microsoft Update Health Tools")]
+    [InlineData("Intune Management Extension")]
+    [InlineData("Configuration Manager Client")]
+    [InlineData("Microsoft GameInput")]
+    public void Management_and_update_agents_are_forbidden(string name)
+        => AssertRefused(Policy().Classify(MachineId(Guid1), Facts(name: name, msi: true)), "protected-component", ChangeClass.Forbidden);
 
     [Fact]
     public void Entry_with_parent_is_read_only()

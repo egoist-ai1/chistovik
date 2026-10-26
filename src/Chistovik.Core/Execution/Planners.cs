@@ -56,11 +56,17 @@ internal static class PowerPlanner
     public static List<PlannedStep> SchemeSteps(ExecEnv env, string planId)
     {
         var entry = env.PowerCatalog.FindScheme(planId) ?? throw new PlanException(StepCodes.NotFound, "Схема не найдена в каталоге");
-        if (entry.CreateFromTemplate is not { } template) return [new PowerActiveStep(entry, entry.Guid)];
-
         IReadOnlyList<Guid> installed;
         try { installed = env.Power.ListSchemes(); }
         catch (Exception e) when (e is not OperationCanceledException) { throw new PlanException(ErrorCodes.From(e), ErrorCodes.Text(e)); }
+
+        if (entry.CreateFromTemplate is not { } template)
+        {
+            // Встроенной схемы может не быть (Modern Standby, урезанная сборка): режим пропустит её, одиночный выбор получит отказ.
+            if (!installed.Contains(entry.Guid))
+                throw new SchemeUnavailableException("Схемы нет на этом устройстве: на ноутбуках с Modern Standby доступна не каждая схема");
+            return [new PowerActiveStep(entry, entry.Guid)];
+        }
         if (OwnSchemes.Find(env, template, installed) is { } own) return [new PowerActiveStep(entry, own)];
 
         // Modern Standby (S0): скрытые схемы-шаблоны не дублируются, вместо попытки с неизвестным исходом даём понятный отказ.

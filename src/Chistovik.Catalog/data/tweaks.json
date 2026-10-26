@@ -42,7 +42,7 @@
   {
     "id": "thispc",
     "title": "Открывать «Этот компьютер»",
-    "description": "Проводник стартует с дисков вместо «Быстрого доступа».",
+    "description": "Проводник стартует с «Этот компьютер», а не с «Быстрого доступа» (на Windows 11 22H2 и новее — не с «Главной»).",
     "category": "Проводник",
     "area": "tw",
     "risk": "safe",
@@ -57,7 +57,8 @@
     "requiresAdmin": false,
     "source": "known-setting",
     "verified": false,
-    "scope": "user"
+    "scope": "user",
+    "absentMeans": "off"
   },
   {
     "id": "seconds",
@@ -77,7 +78,8 @@
     "requiresAdmin": false,
     "source": "known-setting",
     "verified": false,
-    "scope": "user"
+    "scope": "user",
+    "absentMeans": "off"
   },
   {
     "id": "searchbox",
@@ -118,7 +120,8 @@
     "source": "known-setting",
     "verified": false,
     "scope": "user",
-    "minBuild": 22000
+    "minBuild": 22000,
+    "absentMeans": "off"
   },
   {
     "id": "killsvc",
@@ -158,7 +161,8 @@
     "requiresAdmin": false,
     "source": "known-setting",
     "verified": false,
-    "scope": "user"
+    "scope": "user",
+    "absentMeans": "off"
   },
   {
     "id": "hags",
@@ -214,7 +218,7 @@
     "valueType": "String",
     "onValue": "0",
     "offValue": "1",
-    "restart": "logoff",
+    "restart": "none",
     "effect": "spi-mouse",
     "requiresAdmin": false,
     "source": "known-setting",
@@ -340,7 +344,8 @@
     "source": "known-setting",
     "verified": false,
     "scope": "user",
-    "revertedBy": "feature-update"
+    "revertedBy": "feature-update",
+    "maxBuild": 19045
   },
   {
     "id": "bing",
@@ -420,7 +425,8 @@
     "requiresAdmin": false,
     "source": "known-setting",
     "verified": false,
-    "scope": "user"
+    "scope": "user",
+    "absentMeans": "off"
   },
   {
     "id": "minanim",
@@ -569,7 +575,7 @@
   {
     "id": "cdmSub388",
     "title": "Без рекомендуемых плиток в «Пуске»",
-    "description": "Убирает рекламные плитки из меню «Пуск». Если вернуть, плитки снова будут показываться. Крупное обновление Windows может вернуть значение.",
+    "description": "Убирает рекламные плитки в меню «Пуск» Windows 10. Если вернуть, плитки снова будут показываться. Крупное обновление Windows может вернуть значение.",
     "category": "Приватность",
     "area": "tw",
     "risk": "safe",
@@ -585,7 +591,8 @@
     "source": "known-setting",
     "verified": false,
     "scope": "user",
-    "revertedBy": "feature-update"
+    "revertedBy": "feature-update",
+    "maxBuild": 19045
   },
   {
     "id": "cdmSub389",
@@ -632,7 +639,7 @@
   {
     "id": "cdmSub3536b",
     "title": "Без рекомендуемого содержимого Windows",
-    "description": "Отключает подбор рекомендуемого содержимого в оболочке. Если вернуть, оно снова будет подбираться. Крупное обновление Windows может вернуть значение.",
+    "description": "Отключает рекомендуемые предложения в «Параметрах» и на «Пуске». Если вернуть, они снова будут показываться. Крупное обновление Windows может вернуть значение.",
     "category": "Приватность",
     "area": "tw",
     "risk": "safe",
@@ -855,7 +862,8 @@
       "Enterprise",
       "Education"
     ],
-    "revertedBy": "none"
+    "revertedBy": "none",
+    "maxBuild": 19045
   },
   {
     "id": "polPublishActivities",
@@ -912,7 +920,7 @@
   {
     "id": "copilotUser",
     "title": "Отключить Windows Copilot (для вас)",
-    "description": "Политика скрывает Copilot для вашей учётной записи. Если вернуть, политика будет удалена.",
+    "description": "Политика скрывает Copilot для вашей учётной записи. Если вернуть, политика будет удалена. На Windows 11 24H2 и новее Copilot — отдельное приложение, политика на него не влияет: удалите его в «Установленных приложениях».",
     "category": "Приватность",
     "area": "tw",
     "risk": "safe",
@@ -929,12 +937,12 @@
     "verified": false,
     "scope": "user",
     "revertedBy": "none",
-    "minBuild": 22621
+    "minBuild": 19045
   },
   {
     "id": "copilotMachine",
     "title": "Отключить Windows Copilot (для всех)",
-    "description": "Политика скрывает Copilot для всех пользователей этого компьютера. Если вернуть, политика будет удалена.",
+    "description": "Политика скрывает Copilot для всех пользователей этого компьютера. Если вернуть, политика будет удалена. На Windows 11 24H2 и новее Copilot — отдельное приложение, политика на него не влияет: удалите его в «Установленных приложениях».",
     "category": "Приватность",
     "area": "tw",
     "risk": "safe",
@@ -951,7 +959,7 @@
     "verified": false,
     "scope": "machine",
     "revertedBy": "none",
-    "minBuild": 22621
+    "minBuild": 19045
   },
   {
     "id": "aiDataUser",

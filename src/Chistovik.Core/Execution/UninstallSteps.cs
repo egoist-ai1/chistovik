@@ -30,6 +30,13 @@ internal static class UninstallProbe
         return v.Exists && v.Type == RegType.DWord && v.Data is uint u && u != 0;
     }
 
+    /// <summary>Флаги запрета (NoRemove, SystemComponent) читаются так же, как в App (RegFlag): строка "1" тоже запрещает. Только сужение.</summary>
+    static bool Forbid(IRegKeyHandle h, string name)
+    {
+        var v = h.Read(name);
+        return v.Exists && RegFlag.IsSet(v.Data);
+    }
+
     /// <summary>
     /// Открывает подраздел на чтение и собирает факты. Ключа нет: not-found; ссылка или чужой ResolvedPath: policy-denied.
     /// Хэндл закрывается до возврата (команда исполняется отдельно, ключ не удерживается).
@@ -45,8 +52,9 @@ internal static class UninstallProbe
         if (string.IsNullOrEmpty(resolved) || !StepGate.SameKey(resolved, StepGate.ExpectedPath(loc)))
             return new Refusal(StepCodes.PolicyDenied, "reg-resolved-mismatch");
         facts = new PackageFacts(
-            Text(h, "DisplayName") ?? string.Empty, Text(h, "Publisher"), Flag(h, "SystemComponent"), Text(h, "ParentKeyName"),
-            Text(h, "ReleaseType"), Flag(h, "WindowsInstaller"), Text(h, "UninstallString"), Text(h, "QuietUninstallString"));
+            Text(h, "DisplayName") ?? string.Empty, Text(h, "Publisher"), Forbid(h, "SystemComponent"), Text(h, "ParentKeyName"),
+            Text(h, "ReleaseType"), Flag(h, "WindowsInstaller"), Text(h, "UninstallString"), Text(h, "QuietUninstallString"),
+            Forbid(h, "NoRemove"));
         return null;
     }
 }

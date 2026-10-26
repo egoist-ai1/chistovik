@@ -43,8 +43,14 @@ public sealed class FakeServiceControl : IServiceControl
 
     public IReadOnlyList<string> ListNames() => _services.Keys.ToList();
 
+    readonly HashSet<string> _denyOpen = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Открытие службы отвечает отказом в доступе (как ERROR_ACCESS_DENIED у OpenService), а не «службы нет».</summary>
+    public void DenyOpen(string name) => _denyOpen.Add(name);
+
     public IServiceHandle? Open(string name, bool write)
     {
+        if (_denyOpen.Contains(name)) throw new UnauthorizedAccessException("Нет доступа к службе");
         if (!_services.ContainsKey(name)) return null;
         OpenHandles++;
         return new Handle(this, _services[name].Name, write);

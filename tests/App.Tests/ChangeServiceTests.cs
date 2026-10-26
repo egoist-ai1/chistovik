@@ -81,7 +81,8 @@ public class ChangeServiceTests
 
         Assert.Equal(OutcomeKind.Success, o.Kind);
         Assert.Contains("кроме схемы питания", o.Message);
-        Assert.Contains("«Сбалансированная»", o.Message);
+        Assert.Contains("схемы нет на этом устройстве", o.Message);
+        Assert.DoesNotContain("Modern Standby", o.Message);
     }
 
     [Fact]

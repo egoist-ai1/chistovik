@@ -271,6 +271,69 @@ public class RecoveryTests
         Assert.Equal(StepCodes.RecoveredDone, undoStep.Code);
         Assert.Equal(orig.Steps.Single().Id, undoStep.RevertsStepId);
         Assert.Equal(OperationState.Interrupted, undoOp.State);
+        Assert.Equal(OperationState.Undone, orig.Summary.State);
+    }
+
+    [Fact]
+    public void Crash_during_undo_of_two_steps_marks_the_original_partially_undone_after_recovery()
+    {
+        var t = new TestEnv();
+        t.SetTweakDword("ext", 1);
+        t.SetTweakDword("hidden", 2);
+        var op = t.Tweaks(("ext", true), ("hidden", true)).OperationId!.Value;
+        Crash(t, "CompleteRevert:before", () => t.Undo(op));
+
+        Recover(t);
+
+        var orig = t.Journal.Get(op)!;
+        Assert.Equal(OperationState.PartiallyUndone, orig.Summary.State);
+        Assert.Single(orig.Steps, s => s.State == StepState.Done);
+    }
+
+    [Fact]
+    public void Crash_between_undo_steps_marks_the_original_partially_undone()
+    {
+        var t = new TestEnv();
+        t.SetTweakDword("ext", 1);
+        t.SetTweakDword("hidden", 2);
+        var op = t.Tweaks(("ext", true), ("hidden", true)).OperationId!.Value;
+        Crash(t, "CompleteRevert:after", () => t.Undo(op));
+        Assert.Empty(t.Journal.GetPending());
+
+        Recover(t);
+
+        var orig = t.Journal.Get(op)!;
+        Assert.Equal(OperationState.PartiallyUndone, orig.Summary.State);
+        Assert.Single(orig.Steps, s => s.State == StepState.Undone);
+        Assert.Single(orig.Steps, s => s.State == StepState.Done);
+    }
+
+    [Fact]
+    public void Crash_after_the_last_revert_before_Finish_marks_the_original_undone()
+    {
+        var t = new TestEnv();
+        t.SetTweakDword("ext", 1);
+        var op = t.Tweaks(("ext", true)).OperationId!.Value;
+        Crash(t, "CompleteRevert:after", () => t.Undo(op));
+
+        Recover(t);
+
+        Assert.Equal(OperationState.Undone, t.Journal.Get(op)!.Summary.State);
+    }
+
+    [Fact]
+    public void Interrupted_undo_without_any_revert_leaves_the_original_done()
+    {
+        var t = new TestEnv();
+        t.SetTweakDword("ext", 1);
+        var op = t.Tweaks(("ext", true)).OperationId!.Value;
+        Crash(t, "AddPending:before", () => t.Undo(op));
+
+        Recover(t);
+
+        var orig = t.Journal.Get(op)!;
+        Assert.Equal(OperationState.Done, orig.Summary.State);
+        Assert.Equal(StepState.Done, orig.Steps.Single().State);
     }
 
     [Fact]

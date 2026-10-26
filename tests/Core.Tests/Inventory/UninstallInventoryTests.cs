@@ -56,6 +56,25 @@ public class UninstallInventoryTests
     }
 
     [Theory]
+    [InlineData("NoRemove", 1u, true)]
+    [InlineData("NoRemove", 2u, true)]
+    [InlineData("NoRemove", "1", true)]
+    [InlineData("NoRemove", "0", false)]
+    [InlineData("NoRemove", null, false)]
+    [InlineData("SystemComponent", 1u, true)]
+    [InlineData("SystemComponent", 2u, true)]
+    [InlineData("SystemComponent", "1", true)]
+    [InlineData("SystemComponent", "0", false)]
+    [InlineData("SystemComponent", null, false)]
+    public void Forbid_flags_use_the_shared_reading(string flag, object? value, bool expected)
+    {
+        var v = App("X");
+        if (value is not null) v[flag] = value;
+        var p = Assert.Single(Run(new FakeRegistryReader().Add(RegistryHiveKind.LocalMachine, false, "f", v)));
+        Assert.Equal(expected, flag == "NoRemove" ? p.NoRemove : p.IsSystemComponent);
+    }
+
+    [Theory]
     [InlineData("Update for Windows (KB5000001)")]
     [InlineData("Security Update for Microsoft Office (KB5002222)")]
     [InlineData("KB1234567")]
@@ -63,6 +82,34 @@ public class UninstallInventoryTests
     {
         var list = Run(new FakeRegistryReader().Add(RegistryHiveKind.LocalMachine, false, "u", App(name)));
         Assert.True(Assert.Single(list).IsUpdate);
+    }
+
+    [Theory]
+    [InlineData("Update")]
+    [InlineData("hotfix")]
+    [InlineData("Security Update")]
+    [InlineData("Service Pack")]
+    public void Marks_updates_by_ReleaseType(string release)
+    {
+        var v = App("Plain name"); v["ReleaseType"] = release;
+        var p = Assert.Single(Run(new FakeRegistryReader().Add(RegistryHiveKind.LocalMachine, false, "r", v)));
+        Assert.True(p.IsUpdate);
+        Assert.Equal(release, p.ReleaseType);
+    }
+
+    [Fact]
+    public void Plain_app_has_empty_ReleaseType_and_NoRemove_is_read()
+    {
+        var v = App("Locked"); v["NoRemove"] = 1;
+        var r = new FakeRegistryReader()
+            .Add(RegistryHiveKind.LocalMachine, false, "l", v)
+            .Add(RegistryHiveKind.LocalMachine, false, "n", App("Free"));
+        var list = Run(r);
+        var locked = list.Single(x => x.DisplayName == "Locked");
+        Assert.True(locked.NoRemove);
+        Assert.False(locked.IsUpdate);
+        Assert.Equal("", locked.ReleaseType);
+        Assert.False(list.Single(x => x.DisplayName == "Free").NoRemove);
     }
 
     [Fact]

@@ -12,6 +12,9 @@ public sealed class JournalException : Exception
     public const string Corrupt = "journal-corrupt";
     public const string NotFound = "journal-not-found";
 
+    /// <summary>После аварии агента остался «горячий» журнал отката: читатель без права записи его не откатит, это сделает агент при запуске.</summary>
+    public const string Recovering = "journal-recovering";
+
     public string Code { get; }
 
     public JournalException(string code, string message, Exception? inner = null) : base(message, inner) => Code = code;
@@ -117,6 +120,12 @@ internal static class SqliteJournalSchema
     }
 
     public static bool IsDamage(SqliteException e) => e.SqliteErrorCode is 11 or 26; // CORRUPT, NOTADB
+
+    /// <summary>SQLITE_READONLY (8) и его вариант SQLITE_READONLY_ROLLBACK (776): читатель наткнулся на журнал отката, который может применить только писатель.</summary>
+    public static bool IsHotJournal(SqliteException e) => e.SqliteErrorCode == 8 || e.SqliteExtendedErrorCode == 776;
+
+    public static JournalException HotJournal(SqliteException e)
+        => new(JournalException.Recovering, "Journal needs recovery by the agent (hot rollback journal).", e);
 
     public static string TruncateError(string s)
     {

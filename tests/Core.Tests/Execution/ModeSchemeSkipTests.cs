@@ -70,6 +70,36 @@ public class ModeSchemeSkipTests
     }
 
     [Fact]
+    public void Missing_builtin_scheme_is_skipped_and_tweaks_are_applied()
+    {
+        var t = new TestEnv();
+        t.Power.RemoveScheme(TestEnv.High);
+
+        var r = t.Mode("game");
+
+        Assert.True(r.Ok, r.Code + r.Message);
+        var steps = Kinds(t, r);
+        Assert.NotEmpty(steps);
+        Assert.DoesNotContain(steps, k => k is StepKind.PowerActiveScheme or StepKind.PowerSchemeCreate);
+        Assert.Equal(TestEnv.Balanced, t.Power.Active);
+        Assert.Contains(r.Facts ?? [], f => f.Key == SkippedFact);
+    }
+
+    [Fact]
+    public void Single_choice_of_missing_builtin_scheme_is_refused()
+    {
+        var t = new TestEnv();
+        t.Power.RemoveScheme(TestEnv.High);
+
+        var r = t.Plan(PowerPlan.High);
+
+        Assert.False(r.Ok);
+        Assert.Equal(ResponseCodes.NotFound, r.Code);
+        Assert.Null(r.Facts);
+        Assert.Equal(TestEnv.Balanced, t.Power.Active);
+    }
+
+    [Fact]
     public void Single_scheme_choice_on_modern_standby_is_still_refused()
     {
         var t = new TestEnv();

@@ -86,11 +86,14 @@ public class LivePortsReadTests(ITestOutputHelper output)
     [Fact]
     public void Services_query_first_readable_core_service()
     {
-        // RpcSs для обычного пользователя закрыт (Open даёт null), поэтому берём первую читаемую из набора базовых служб.
+        // RpcSs для обычного пользователя закрыт (Open бросает отказ в доступе), поэтому берём первую читаемую из набора базовых служб.
         var control = new WindowsServiceControl();
         foreach (var name in new[] { "RpcSs", "Dhcp", "EventLog", "Winmgmt", "LanmanWorkstation", "Dnscache" })
         {
-            using var h = control.Open(name, write: false);
+            IServiceHandle? h;
+            try { h = control.Open(name, write: false); }
+            catch (System.ComponentModel.Win32Exception e) when (e.NativeErrorCode == 5) { h = null; }
+            using var _ = h;
             if (h is null) { output.WriteLine($"{name}: недоступна"); continue; }
             var raw = h.Query();
             output.WriteLine($"{name}: type=0x{raw.TypeFlags:X} start={raw.StartType} delayed={raw.Delayed} protected={raw.LaunchProtected} deps={raw.DependentCount} triggers={raw.TriggerCount} running={raw.Running} image={raw.ImagePath}");
@@ -105,8 +108,11 @@ public class LivePortsReadTests(ITestOutputHelper output)
     [Fact]
     public void Services_query_WinDefend_if_present()
     {
-        using var h = new WindowsServiceControl().Open("WinDefend", write: false);
-        if (h is null) { output.WriteLine("WinDefend отсутствует: пропуск"); return; }
+        IServiceHandle? h;
+        try { h = new WindowsServiceControl().Open("WinDefend", write: false); }
+        catch (System.ComponentModel.Win32Exception e) when (e.NativeErrorCode == 5) { h = null; }
+        using var _ = h;
+        if (h is null) { output.WriteLine("WinDefend отсутствует или недоступна: пропуск"); return; }
         var raw = h.Query();
         output.WriteLine($"WinDefend: start={raw.StartType} protected={raw.LaunchProtected} running={raw.Running}");
         Assert.Equal("WinDefend", raw.Name);

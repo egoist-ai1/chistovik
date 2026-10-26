@@ -23,7 +23,7 @@ public static class ResponseText
     {
         var o = Map(r, undo: false);
         if (r.Facts?.Any(f => f.Key == "mode:power-scheme-skipped") != true) return o;
-        const string note = "Режим включён, кроме схемы питания: на этом устройстве доступна только «Сбалансированная».";
+        const string note = "Режим включён, кроме схемы питания: схемы нет на этом устройстве.";
         return o.Kind is OutcomeKind.Success or OutcomeKind.NoChange or OutcomeKind.Partial
             ? o with { Message = (o.Kind == OutcomeKind.Success ? "" : o.Message + " ") + note }
             : o;

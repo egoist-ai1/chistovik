@@ -56,6 +56,9 @@ public class ErrorTextTests
     {
         Assert.Contains("повреждён", ErrorText.Describe(new JournalException(JournalException.Corrupt, "bad page")).Text);
         Assert.Contains("новой версией", ErrorText.Describe(new JournalException(JournalException.NewerSchema, "v9")).Text);
+        var hot = ErrorText.Describe(new JournalException(JournalException.Recovering, "hot journal")).Text;
+        Assert.Contains("восстановится при следующем запуске службы Чистовика", hot);
+        Assert.DoesNotContain("Повторить", hot);
     }
 
     [Fact]

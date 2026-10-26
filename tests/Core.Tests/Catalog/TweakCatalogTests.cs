@@ -150,10 +150,48 @@ public sealed class TweakCatalogTests
     }
 
     [Theory]
+    [InlineData("\"absentMeans\":\"yes\"")]
+    [InlineData("\"absentMeans\":\"\"")]
+    [InlineData("\"absentMeans\":\"ON\"")]
+    [InlineData("\"absentMeans\":1")]
+    public void Bad_absent_means_is_rejected(string extra)
+        => Fails("[" + Tweak("a", "," + extra) + "]");
+
+    [Theory]
+    [InlineData("on")]
+    [InlineData("off")]
+    public void Valid_absent_means_parses(string value)
+    {
+        var c = TweakCatalog.Parse("[" + Tweak("a", $",\"absentMeans\":\"{value}\"") + "," + Tweak("b") + "]", GoodMode);
+        Assert.Equal(value, c.Tweaks[0].AbsentMeans);
+        Assert.Null(c.Tweaks[1].AbsentMeans);
+    }
+
+    [Theory]
+    [InlineData("seconds", "off")]
+    [InlineData("autoend", "off")]
+    [InlineData("thispc", "off")]
+    [InlineData("taskbarAl", "off")]
+    [InlineData("taskanim", "off")]
+    public void Builtin_catalog_has_absent_means(string id, string expected)
+        => Assert.Equal(expected, TweakCatalog.Shared.FindTweak(id)!.AbsentMeans);
+
+    [Theory]
+    [InlineData("startsug")]
+    [InlineData("cdmSub388")]
+    [InlineData("polActivityFeed")]
+    public void Windows10_only_tweaks_have_max_build(string id)
+        => Assert.Equal(19045, TweakCatalog.Shared.FindTweak(id)!.MaxBuild);
+
+    [Fact]
+    public void Mouse_acceleration_applies_without_logoff()
+        => Assert.Equal("none", TweakCatalog.Shared.FindTweak("mouseacc")!.Restart);
+
+    [Theory]
     [InlineData("taskbarAl", 22000)]
     [InlineData("hags", 19041)]
-    [InlineData("copilotUser", 22621)]
-    [InlineData("copilotMachine", 22621)]
+    [InlineData("copilotUser", 19045)]
+    [InlineData("copilotMachine", 19045)]
     [InlineData("aiDataUser", 26100)]
     [InlineData("aiDataMachine", 26100)]
     public void Builtin_catalog_has_build_limits(string id, int minBuild)

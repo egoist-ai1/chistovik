@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Chistovik.Core.Policy;
 
 namespace Chistovik.Core.Inventory;
 
@@ -20,6 +21,9 @@ public sealed class UninstallInventory
     private static readonly Regex UpdateName = new(
         @"^(Security )?Update for |Security Update|^KB\d{6,}|\(KB\d{6,}\)\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly HashSet<string> UpdateReleaseTypes =
+        new(["Update", "Hotfix", "Security Update", "Service Pack"], StringComparer.OrdinalIgnoreCase);
 
     private static readonly Regex GuidKey = new(
         @"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$",
@@ -50,6 +54,7 @@ public sealed class UninstallInventory
             if (name.Length == 0) continue;
 
             var parent = Str(values, "ParentKeyName");
+            var releaseType = Str(values, "ReleaseType");
             var msi = Num(values, "WindowsInstaller") == 1;
             var fullPath = displayRoot + "\\" + key;
             var size = Num(values, "EstimatedSize");
@@ -66,8 +71,10 @@ public sealed class UninstallInventory
                 IsMsi = msi,
                 ProductCode = msi && GuidKey.IsMatch(key) ? key : null,
                 Source = source,
-                IsSystemComponent = Num(values, "SystemComponent") == 1,
-                IsUpdate = parent.Length > 0 || UpdateName.IsMatch(name),
+                IsSystemComponent = values.TryGetValue("SystemComponent", out var sc) && RegFlag.IsSet(sc),
+                NoRemove = values.TryGetValue("NoRemove", out var nr) && RegFlag.IsSet(nr),
+                IsUpdate = parent.Length > 0 || UpdateName.IsMatch(name) || UpdateReleaseTypes.Contains(releaseType),
+                ReleaseType = releaseType,
                 ParentKeyName = parent,
                 EstimatedSizeKb = size is > 0 ? size : null,
                 InstallDate = Date(Str(values, "InstallDate")),

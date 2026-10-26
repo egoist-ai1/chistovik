@@ -121,6 +121,35 @@ public class UninstallTests
         Assert.Empty(t2.Uninstaller.Calls);
     }
 
+    [Theory]
+    [InlineData("NoRemove", "dword:1", true)]
+    [InlineData("NoRemove", "dword:2", true)]
+    [InlineData("NoRemove", "sz:1", true)]
+    [InlineData("NoRemove", "sz:0", false)]
+    [InlineData("NoRemove", "none", false)]
+    [InlineData("SystemComponent", "dword:1", true)]
+    [InlineData("SystemComponent", "dword:2", true)]
+    [InlineData("SystemComponent", "sz:1", true)]
+    [InlineData("SystemComponent", "sz:0", false)]
+    [InlineData("SystemComponent", "none", false)]
+    public void Forbid_flags_are_read_as_dword_or_numeric_string(string flag, string value, bool denied)
+    {
+        var t = new TestEnv();
+        AddMsi(t);
+        var p = KeyPath(Guid1);
+        if (value.StartsWith("dword:", StringComparison.Ordinal)) t.Registry.SetDword(p, flag, uint.Parse(value[6..]));
+        else if (value.StartsWith("sz:", StringComparison.Ordinal)) t.Registry.SetString(p, flag, value[3..]);
+
+        var r = t.Uninstall(MsiId);
+
+        if (denied)
+        {
+            Assert.Equal(ResponseCodes.PolicyDenied, r.Code);
+            Assert.Empty(t.Uninstaller.Calls);
+        }
+        else Assert.True(r.Ok, r.Code + r.Message);
+    }
+
     [Fact]
     public void Exe_without_silent_mode_is_denied()
     {

@@ -7,8 +7,8 @@ namespace Chistovik.Core.Journal;
 
 /// <summary>
 /// Писатель журнала (DESIGN-0.1 §1). Одно соединение на объект, все вызовы под замком: агент работает строго последовательно.
-/// При создании файла ставит auto_vacuum=INCREMENTAL, при открытии WAL; при Dispose делает wal_checkpoint(TRUNCATE) и
-/// journal_mode=DELETE, чтобы читатель без права записи мог открыть файл (§9).
+/// При создании файла ставит auto_vacuum=INCREMENTAL; при открытии журнал в режиме DELETE (не WAL) и
+/// synchronous=FULL, чтобы читатель без права записи в каталог мог открыть файл, пока писатель жив (§9).
 /// </summary>
 public sealed class SqliteJournal : IJournalWriter, IDisposable
 {
@@ -44,7 +44,10 @@ public sealed class SqliteJournal : IJournalWriter, IDisposable
             // auto_vacuum действует только до создания первой таблицы.
             if (version == 0) Exec(_conn, "PRAGMA auto_vacuum = INCREMENTAL");
             MigrateForward(_conn, NowMs());
-            Exec(_conn, "PRAGMA journal_mode = WAL");
+            // Не WAL: читатель App работает без права записи в каталог и не может открыть -shm живой WAL-базы.
+            // База, оставленная прежней версией в WAL, возвращается в DELETE; если она занята, продолжаем как есть.
+            // Результат PRAGMA читаем: режим мог не смениться (база занята). Повторяем один раз; итог виден в JournalMode.
+            if (!TrySetDelete()) TrySetDelete();
             Exec(_conn, "PRAGMA synchronous = FULL");
         }
         catch (SqliteException e) when (IsDamage(e))
@@ -57,6 +60,25 @@ public sealed class SqliteJournal : IJournalWriter, IDisposable
             _conn.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Режим журнала SQLite после открытия (ожидается "delete"). Другое значение значит, что базу не удалось вернуть из WAL
+    /// (она занята); хост агента может записать предупреждение. Логгера в Core нет, поэтому состояние отдаётся свойством.
+    /// </summary>
+    public string JournalMode { get; private set; } = "unknown";
+
+    private bool TrySetDelete()
+    {
+        try
+        {
+            JournalMode = Convert.ToString(Scalar(_conn, "PRAGMA journal_mode = DELETE"), CultureInfo.InvariantCulture)?.ToLowerInvariant() ?? "unknown";
+        }
+        catch (SqliteException e) when (!IsDamage(e))
+        {
+            JournalMode = "unknown";
+        }
+        return JournalMode == "delete";
     }
 
     private long NowMs() => _clock.UtcNow.ToUnixTimeMilliseconds();
@@ -227,12 +249,8 @@ public sealed class SqliteJournal : IJournalWriter, IDisposable
         {
             if (_disposed) return;
             _disposed = true;
-            try
-            {
-                Exec(_conn, "PRAGMA wal_checkpoint(TRUNCATE)");
-                Exec(_conn, "PRAGMA journal_mode = DELETE");
-            }
-            catch (SqliteException) { /* занято другим читателем: файл останется в WAL, это допустимо */ }
+            // Режим DELETE с открытия: checkpoint не нужен. Если открыть в DELETE не удалось, пробуем ещё раз (как раньше).
+            if (JournalMode != "delete") TrySetDelete();
             _conn.Dispose();
         }
     }

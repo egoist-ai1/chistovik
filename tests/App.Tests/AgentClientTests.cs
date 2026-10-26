@@ -260,9 +260,11 @@ public class AgentClientTests
             UninstallTimeout = TimeSpan.FromSeconds(2),
             CleanupTimeout = TimeSpan.FromSeconds(3),
             FindingsTimeout = TimeSpan.FromSeconds(4),
+            UndoTimeout = TimeSpan.FromSeconds(5),
         };
         var client = new AgentClient(new FakeLauncher(), new FakeAgentHost(), opt);
 
+        Assert.Equal(TimeSpan.FromSeconds(5), client.TimeoutFor(new UndoRequest { Id = Guid.NewGuid(), OperationId = Guid.NewGuid() }));
         Assert.Equal(TimeSpan.FromSeconds(3), client.TimeoutFor(Clean(false)));
         Assert.Equal(TimeSpan.FromSeconds(1), client.TimeoutFor(Clean(true)));   // измерение обычный короткий запрос
         Assert.Equal(TimeSpan.FromSeconds(4), client.TimeoutFor(Findings()));
@@ -276,6 +278,7 @@ public class AgentClientTests
         var opt = new AgentClientOptions();
         Assert.Equal(TimeSpan.FromMinutes(25), opt.CleanupTimeout);
         Assert.Equal(TimeSpan.FromMinutes(5), opt.FindingsTimeout);
+        Assert.Equal(TimeSpan.FromMinutes(10), opt.UndoTimeout);
     }
 
     [Fact]

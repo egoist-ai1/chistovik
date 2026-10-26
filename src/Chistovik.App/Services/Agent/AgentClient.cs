@@ -22,6 +22,13 @@ public sealed class AgentClientOptions
     /// <summary>Чистка реестра: проверка свидетельств, копии ключей и удаление.</summary>
     public TimeSpan FindingsTimeout { get; init; } = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// Откат операции. Число шагов в запросе не указано (его знает только журнал агента), а откат чистки реестра может возвращать
+    /// сотни ключей, поэтому срок фиксированный и увеличенный: короткий срок дал бы «результат неизвестен» при занятом агенте
+    /// и повторный UAC с кодом 3.
+    /// </summary>
+    public TimeSpan UndoTimeout { get; init; } = TimeSpan.FromMinutes(10);
+
     public TimeSpan HeartbeatTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>Ожидание канала после запуска агента (UAC уже пройден).</summary>
@@ -164,6 +171,7 @@ public sealed class AgentClient : IAgentClient, IDisposable
         UninstallRequest => _opt.UninstallTimeout,
         CleanCategoriesRequest { MeasureOnly: false } => _opt.CleanupTimeout,
         ApplyFindingsRequest => _opt.FindingsTimeout,
+        UndoRequest => _opt.UndoTimeout,
         _ => _opt.RequestTimeout,
     };
 

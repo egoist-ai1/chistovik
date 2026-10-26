@@ -41,8 +41,8 @@ public sealed class InventoryProgramsSource(IRegistryReader reader, PackagePolic
         if (policy is null) return (Changeability.ReadOnly, "", null);
         try
         {
-            var facts = new PackageFacts(p.DisplayName, p.Publisher, p.IsSystemComponent, p.ParentKeyName, null, p.IsMsi,
-                p.UninstallString, p.QuietUninstallString);
+            var facts = new PackageFacts(p.DisplayName, p.Publisher, p.IsSystemComponent, p.ParentKeyName,
+                p.ReleaseType.Length > 0 ? p.ReleaseType : null, p.IsMsi, p.UninstallString, p.QuietUninstallString, p.NoRemove);
             var c = policy.Classify(p.Id, facts);
             if (c.IsModifiable) return (Changeability.Modifiable, c.Rule, null);
             var cls = c.Class == Chistovik.Core.Policy.ChangeClass.Forbidden ? Changeability.Forbidden : Changeability.ReadOnly;
@@ -211,7 +211,16 @@ public sealed class RegistryTweakStateSource(IRegistryReader reg) : ITweakStateS
         object? actual = null;
         var exists = values is not null && values.TryGetValue(t.Value, out actual);
         if (!exists)
-            return t.OffValue is null || t.OffValue.Value.ValueKind == JsonValueKind.Null ? TweakState.Off : TweakState.Unknown;
+        {
+            if (t.OffValue is null || t.OffValue.Value.ValueKind == JsonValueKind.Null) return TweakState.Off;
+            // Значения нет, а offValue задан: умолчание Windows известно только если каталог его указал.
+            return t.AbsentMeans switch
+            {
+                "on" => TweakState.On,
+                "off" => TweakState.Off,
+                _ => TweakState.Unknown,
+            };
+        }
         if (Matches(actual, t.OnValue, t.ValueType)) return TweakState.On;
         if (t.OffValue is { } off && off.ValueKind != JsonValueKind.Null && Matches(actual, off, t.ValueType)) return TweakState.Off;
         return TweakState.Unknown;

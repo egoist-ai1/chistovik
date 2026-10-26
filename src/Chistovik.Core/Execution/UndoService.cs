@@ -28,6 +28,24 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
         return !string.Equals(c.TreeSha256, b.TreeSha256, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Пересчитывает состояние откатываемой операции: остались шаги done → PartiallyUndone, иначе Undone.
+    /// onlyActive: трогать только операции в Done/Partial/PartiallyUndone (восстановление после обрыва), остальные не менять.
+    /// </summary>
+    internal static void RecomputeOriginal(ExecEnv env, Guid originalOp, bool onlyActive = false)
+    {
+        var after = env.Journal.Get(originalOp);
+        if (after is null) return;
+        if (onlyActive && after.Summary.State is not (OperationState.Done or OperationState.Partial or OperationState.PartiallyUndone)) return;
+        // Откат этой операции не начинался (нет ни одного возвращённого шага): состояние не трогаем.
+        if (!after.Steps.Any(s => s.State == StepState.Undone)) return;
+        var remaining = after.Steps.Any(s => s.State == StepState.Done);
+        env.Journal.Finish(originalOp, remaining ? OperationState.PartiallyUndone : OperationState.Undone, after.Summary.Code);
+    }
+
+    /// <summary>Отказ в доступе при чтении цели это отказ политики (как у шагов), остальное внутренняя ошибка.</summary>
+    static string ReadFailureCode(Exception e) => ErrorCodes.From(e) == StepCodes.AccessDenied ? ResponseCodes.PolicyDenied : ResponseCodes.Internal;
+
     static AgentResponse Reject(Guid id, string code, string message) => new(id, false, code, message);
 
     public AgentResponse Undo(UndoRequest req, ClientContext client)
@@ -76,7 +94,7 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                return Reject(req.Id, ResponseCodes.Internal, "Не удалось прочитать состояние цели: " + ErrorCodes.From(e));
+                return Reject(req.Id, ReadFailureCode(e), "Не удалось прочитать состояние цели: " + ErrorCodes.From(e));
             }
 
             if (o.Refusal is { } refusal)
@@ -98,7 +116,7 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                return Reject(req.Id, ResponseCodes.Internal, "Не удалось прочитать состояние цели: " + ErrorCodes.From(e));
+                return Reject(req.Id, ReadFailureCode(e), "Не удалось прочитать состояние цели: " + ErrorCodes.From(e));
             }
 
             Plan plan;
@@ -183,12 +201,8 @@ internal sealed class UndoService(ExecEnv env, StepRunner runner)
         if (!failed) env.Journal.Finish(rec.Id, OperationState.Done, done == 0 ? StepCodes.NoChange : null);
         else env.Journal.Finish(rec.Id, done > 0 ? OperationState.Partial : OperationState.Failed, failCode);
 
-        if (done > 0)
-        {
-            var after = env.Journal.Get(view.Summary.Id);
-            var remaining = after is not null && after.Steps.Any(s => s.State == StepState.Done);
-            env.Journal.Finish(view.Summary.Id, remaining ? OperationState.PartiallyUndone : OperationState.Undone, view.Summary.Code);
-        }
+        // Пересчёт и при done == 0: возвращённые шаги могли появиться раньше (прерванный откат), RecomputeOriginal сам выйдет, если их нет.
+        RecomputeOriginal(env, view.Summary.Id);
 
         var result = env.Journal.Get(rec.Id);
         return result is null ? Reject(req.Id, ResponseCodes.Internal, "Запись операции не найдена") : Responses.FromOperation(req.Id, result);

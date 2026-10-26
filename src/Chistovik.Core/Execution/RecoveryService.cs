@@ -20,6 +20,7 @@ public sealed class RecoveryService(ExecEnv env)
     {
         int done = 0, skipped = 0, failed = 0;
         var views = new Dictionary<Guid, OperationView?>();
+        var revertedOps = new HashSet<Guid>();
 
         OperationView? View(Guid id)
         {
@@ -88,6 +89,7 @@ public sealed class RecoveryService(ExecEnv env)
                         {
                             env.Journal.CompleteRevert(p.StepId, orig, StepCodes.RecoveredDone);
                             done++;
+                            if (view?.RevertsOpId is { } revertedOp) revertedOps.Add(revertedOp);
                         }
                         catch (InvalidOperationException)
                         {
@@ -119,11 +121,17 @@ public sealed class RecoveryService(ExecEnv env)
             var page = env.Journal.List(skip, PageSize);
             foreach (var s in page.Where(x => x.State == OperationState.Running))
             {
+                // Прерванный откат: агент мог упасть между шагами или после последнего шага до пересчёта исходной операции.
+                if (s.Kind == OperationKind.Undo && View(s.Id)?.RevertsOpId is { } reverted) revertedOps.Add(reverted);
                 env.Journal.Finish(s.Id, OperationState.Interrupted, null);
                 interrupted++;
             }
             if (page.Count < PageSize) break;
         }
+
+        // Пересчитываем состояние исходных операций как UndoService; без единого возвращённого шага операция остаётся как была.
+        foreach (var origOp in revertedOps)
+            UndoService.RecomputeOriginal(env, origOp, onlyActive: true);
         return new RecoveryReport(done, skipped, failed, interrupted);
     }
 

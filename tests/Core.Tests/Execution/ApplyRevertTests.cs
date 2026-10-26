@@ -47,6 +47,31 @@ public class ApplyRevertTests
         Assert.Equal(r.OperationId, t.Journal.Get(u.OperationId!.Value)!.RevertsOpId);
     }
 
+    [Theory]
+    [InlineData(RegType.ExpandString)]
+    [InlineData(RegType.QWord)]
+    [InlineData(RegType.MultiString)]
+    [InlineData(RegType.Binary)]
+    public void Registry_value_with_foreign_type_is_refused_without_writing(RegType type)
+    {
+        var t = new TestEnv();
+        var foreign = new RegValueState(true, type, type switch
+        {
+            RegType.QWord => 1UL,
+            RegType.MultiString => new[] { "a" },
+            RegType.Binary => new byte[] { 1 },
+            _ => "x",
+        });
+        t.SetTweakValue("ext", foreign);
+
+        var r = t.Tweaks(("ext", true));
+
+        Assert.False(r.Ok);
+        Assert.Equal(type, t.TweakValue("ext").Type);
+        Assert.Equal(0, t.Registry.WriteCount);
+        Assert.DoesNotContain(t.Journal.AllSteps, s => s.State == StepState.Done);
+    }
+
     [Fact]
     public void Registry_absent_value_is_created_and_deleted_by_undo()
     {
@@ -338,6 +363,21 @@ public class ApplyRevertTests
         Assert.Equal(3u, t.Services.Get("FooSvc").StartType);
     }
 
+    [Fact]
+    public void Service_open_access_denied_is_reported_as_access_denied_not_not_found()
+    {
+        var t = new TestEnv();
+        t.AddThirdPartyService("FooSvc", start: 3);
+        t.Services.DenyOpen("FooSvc");
+
+        var r = t.Service("FooSvc", StartMode.Disabled);
+
+        Assert.False(r.Ok);
+        Assert.Equal(0, t.Services.WriteCount);
+        Assert.DoesNotContain(t.Journal.AllSteps, s => s.Code == "service-not-found" || s.Code == StepCodes.NotFound);
+        Assert.Contains(t.Journal.AllSteps, s => s.Code == StepCodes.AccessDenied);
+    }
+
     // ---------- задачи ----------
 
     [Fact]
@@ -388,17 +428,16 @@ public class ApplyRevertTests
     }
 
     [Fact]
-    public void Power_scheme_missing_builtin_is_skipped_not_denied()
+    public void Power_scheme_missing_builtin_is_refused_at_planning()
     {
         var t2 = new TestEnv();
-        // Схемы «Экономия энергии» нет на устройстве (Modern Standby): шаг пропускается.
+        // Схемы «Экономия энергии» нет на устройстве (Modern Standby): одиночный выбор отклоняется до записи.
         t2.Power.RemoveScheme(TestEnv.Saver);
         var r = t2.Plan(PowerPlan.Saver);
-        Assert.True(r.Ok, r.Code + r.Message);
-        var s = Assert.Single(Steps(t2, r));
-        Assert.Equal(StepState.Skipped, s.State);
-        Assert.Equal(StepCodes.NotFound, s.Code);
+        Assert.False(r.Ok);
+        Assert.Equal(ResponseCodes.NotFound, r.Code);
         Assert.Equal(TestEnv.Balanced, t2.Power.Active);
+        Assert.Equal(0, t2.Power.WriteCount);
     }
 
     [Fact]

@@ -66,7 +66,7 @@ public class SqliteJournalTests
         Assert.Equal(2, j.SchemaVersion);
         Assert.Equal(2L, Scalar(t.Db, "PRAGMA user_version"));
         Assert.Equal(2L, Scalar(t.Db, "PRAGMA auto_vacuum")); // INCREMENTAL
-        Assert.Equal("wal", Scalar(t.Db, "PRAGMA journal_mode"));
+        Assert.Equal("delete", Scalar(t.Db, "PRAGMA journal_mode"));
         var tables = new List<string>();
         using (var c = Raw(t.Db))
         using (var cmd = c.CreateCommand())
@@ -450,7 +450,7 @@ public class SqliteJournalTests
             AddStep(j, op.Id, 0, "k", "{\"v\":1}", "{\"v\":2}");
             j.Finish(op.Id, OperationState.Done, null);
         }
-        // После Dispose писатель сделал checkpoint и вернул journal_mode=DELETE: побочных файлов нет (§9).
+        // Журнал в режиме DELETE: после Dispose побочных файлов нет (§9).
         Assert.False(File.Exists(t.Db + "-wal"));
         Assert.False(File.Exists(t.Db + "-shm"));
         File.SetAttributes(t.Db, FileAttributes.ReadOnly);
@@ -601,8 +601,49 @@ public class SqliteJournalTests
         j.Dispose();
         j.Dispose();
         Assert.Equal("delete", Scalar(t.Db, "PRAGMA journal_mode"));
-        // Повторное открытие снова включает WAL.
+        // Повторное открытие тоже остаётся в DELETE.
         using var j2 = new SqliteJournal(t.Db, new JournalFakeClock());
-        Assert.Equal("wal", Scalar(t.Db, "PRAGMA journal_mode"));
+        Assert.Equal("delete", Scalar(t.Db, "PRAGMA journal_mode"));
+    }
+
+    [Fact]
+    public void Opening_a_database_left_in_wal_by_an_older_version_switches_it_to_delete()
+    {
+        using var t = new TempJournalDir();
+        using (new SqliteJournal(t.Db, new JournalFakeClock())) { }
+        using (var c = Raw(t.Db))
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA journal_mode = WAL";
+            Assert.Equal("wal", cmd.ExecuteScalar());
+        }
+
+        using var j = new SqliteJournal(t.Db, new JournalFakeClock());
+
+        Assert.Equal("delete", j.JournalMode);
+        Assert.Equal("delete", Scalar(t.Db, "PRAGMA journal_mode"));
+        Assert.False(File.Exists(t.Db + "-wal"));
+        Assert.False(File.Exists(t.Db + "-shm"));
+    }
+
+    [Fact]
+    public void Reader_opens_the_database_while_the_writer_is_alive_and_sees_committed_data()
+    {
+        using var t = new TempJournalDir();
+        var op = NewOp();
+        using var j = new SqliteJournal(t.Db, new JournalFakeClock());
+        j.BeginOrGet(op);
+        AddStep(j, op.Id, 0, "k", "{\"v\":1}", "{\"v\":2}");
+        j.Finish(op.Id, OperationState.Done, null);
+
+        Assert.Equal("delete", Scalar(t.Db, "PRAGMA journal_mode"));
+        Assert.False(File.Exists(t.Db + "-wal"));
+        Assert.False(File.Exists(t.Db + "-shm"));
+
+        using var r = new SqliteJournalReader(t.Db);
+        var v = r.Get(op.Id);
+        Assert.NotNull(v);
+        Assert.Single(v!.Steps);
+        Assert.Equal(OperationState.Done, v.Summary.State);
     }
 }

@@ -68,8 +68,8 @@ public sealed class WindowsServiceControl : IServiceControl
             {
                 var err = Marshal.GetLastWin32Error();
                 if (err == Win32.ErrorServiceDoesNotExist) return null;
-                // Часть служб (например RpcSs) закрывает чтение конфигурации для обычного пользователя: для чтения это «недоступна».
-                if (err == Win32.ErrorAccessDenied && !write) return null;
+                // Отказ в доступе (например RpcSs закрывает конфигурацию для обычного пользователя) не равен «службы нет»:
+                // пробрасываем ошибку, шаг получит access-denied; читатели списка (ServicesAndTasksSources) ловят исключение сами.
                 throw Win32.Fail(err, $"OpenService '{name}'");
             }
             return new WindowsServiceHandle(svc, name, write);

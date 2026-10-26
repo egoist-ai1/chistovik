@@ -36,6 +36,33 @@ public class SourcesTests
         Assert.NotEqual(TweakState.On, state);
     }
 
+    static TweakEntry Entry(string? absentMeans, bool withOff = true)
+    {
+        using var on = System.Text.Json.JsonDocument.Parse("1");
+        using var off = System.Text.Json.JsonDocument.Parse("0");
+        return new TweakEntry("t", "T", "D", null, "tw", "safe", "HKCU", "Software\\X", "V", "DWord",
+            on.RootElement.Clone(), withOff ? off.RootElement.Clone() : null, "none", "none", false, "known-setting", false,
+            AbsentMeans: absentMeans);
+    }
+
+    [Theory]
+    [InlineData("on", TweakState.On)]
+    [InlineData("off", TweakState.Off)]
+    [InlineData(null, TweakState.Unknown)]
+    public void Tweak_state_missing_value_follows_absent_means(string? absentMeans, TweakState expected)
+        => Assert.Equal(expected, RegistryTweakStateSource.Evaluate(Entry(absentMeans), new Dictionary<string, object?>()));
+
+    [Fact]
+    public void Tweak_state_missing_value_without_off_value_is_off_regardless_of_absent_means()
+        => Assert.Equal(TweakState.Off, RegistryTweakStateSource.Evaluate(Entry("on", withOff: false), null));
+
+    [Fact]
+    public void Tweak_state_present_value_ignores_absent_means()
+    {
+        var values = new Dictionary<string, object?> { ["V"] = 0 };
+        Assert.Equal(TweakState.Off, RegistryTweakStateSource.Evaluate(Entry("on"), values));
+    }
+
     [Fact]
     public void Tweak_state_dword_matches_on_value()
     {
