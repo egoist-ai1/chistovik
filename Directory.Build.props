@@ -8,6 +8,12 @@
     <Deterministic>true</Deterministic>
     <!-- Единственный источник версии: сборки, MSI и tools/build-release.ps1 берут её отсюда. -->
     <Version>0.2.0</Version>
+    <!-- Метаданные файлов: SignPath сверяет product-name/product-version, Проводник показывает издателя. -->
+    <Product>Chistovik</Product>
+    <Company>Egoist</Company>
+    <Authors>Egoist</Authors>
+    <Copyright>Copyright (c) 2026 Egoist. GPL-3.0-or-later</Copyright>
+    <Description>Chistovik: Windows 10/11 uninstaller, cleanup and system settings manager</Description>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 </Project>

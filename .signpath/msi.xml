@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Конфигурация артефакта SignPath, стадия 2: MSI-пакеты (x64 и arm64 в одном архиве).
+  Вставляется в веб-интерфейсе SignPath (Artifact Configuration, slug: msi).
+  Exe и dll внутри MSI уже подписаны на стадии 1, здесь подписывается только сам пакет.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <msi-file path="Chistovik-*.msi" max-matches="unbounded">
+      <authenticode-sign/>
+    </msi-file>
+  </zip-file>
+</artifact-configuration>

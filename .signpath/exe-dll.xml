@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Конфигурация артефакта SignPath, стадия 1: собственные exe и dll Чистовика.
+  Вставляется в веб-интерфейсе SignPath (Artifact Configuration, slug: exe-dll).
+  Архив собирает workflow release.yml: в корне zip папки publish-x64 и publish-arm64.
+  Сторонние файлы (.NET, SQLite) не подписываем: у них подписи вендоров.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file-set product-name="Chistovik">
+      <include path="publish-x64/Chistovik.*.exe"/>
+      <include path="publish-x64/Chistovik.*.dll"/>
+      <include path="publish-arm64/Chistovik.*.exe"/>
+      <include path="publish-arm64/Chistovik.*.dll"/>
+      <for-each>
+        <authenticode-sign/>
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

@@ -8,6 +8,10 @@
   Путь к dotnet. По умолчанию: .dotnet\dotnet.exe проекта, если есть, иначе dotnet из PATH.
 .PARAMETER SkipMsi
   Только publish и контрольные суммы (если WiX недоступен).
+.PARAMETER PublishRoot
+  Папка с уже собранными (и подписанными) publish-папками publish-<arch>. Тогда dotnet publish и подпись
+  exe/dll пропускаются, собираются только MSI; проверки архитектуры остаются. Нужна двухстадийной схеме
+  выпуска: publish -> подпись exe/dll -> MSI -> подпись MSI. Папка не должна лежать в artifacts\release-work\<версия>.
 .PARAMETER SignCommand
   Место для подписи (SignPath или другое). Скриптблок вида { param($Path) ... }, вызывается для каждого
   .exe/.dll (до упаковки в MSI) и для каждого .msi. Пока не задан - артефакты не подписываются.
@@ -17,6 +21,7 @@ param(
   [ValidateSet('x64', 'arm64')][string[]]$Archs = @('x64', 'arm64'),
   [string]$Dotnet,
   [switch]$SkipMsi,
+  [string]$PublishRoot,
   [scriptblock]$SignCommand
 )
 $ErrorActionPreference = 'Stop'
@@ -46,6 +51,13 @@ if ($msiVersion -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { throw "Версия '$ver
 
 $out = Join-Path $root "artifacts\release\$version"
 $work = Join-Path $root "artifacts\release-work\$version"
+if ($PublishRoot) {
+  $PublishRoot = (Resolve-Path -LiteralPath $PublishRoot).Path
+  if ($PublishRoot.StartsWith($work + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "PublishRoot не должен лежать внутри ${work}: эта папка очищается в начале."
+  }
+  if ($SkipMsi) { throw 'PublishRoot нужен только для сборки MSI; с -SkipMsi делать нечего.' }
+}
 if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
 if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $out, $work | Out-Null
@@ -86,9 +98,15 @@ Set-Content -LiteralPath $rtf -Encoding ASCII -Value ('{\rtf1\ansi\deff0{\fonttb
 
 foreach ($arch in $Archs) {
   Write-Host "== $arch =="
-  $pub = Join-Path $work "publish-$arch"
-  Invoke-Native $Dotnet @('publish', 'src\Chistovik.App\Chistovik.App.csproj', '-c', 'Release',
-    '-r', $rid[$arch], '--self-contained', 'true', '-p:DebugType=none', '-p:DebugSymbols=false', '-o', $pub)
+  if ($PublishRoot) {
+    # Вторая стадия: файлы уже опубликованы и подписаны снаружи (SignPath), только проверяем и пакуем.
+    $pub = Join-Path $PublishRoot "publish-$arch"
+    if (-not (Test-Path -LiteralPath $pub)) { throw "В PublishRoot нет publish-$arch." }
+  } else {
+    $pub = Join-Path $work "publish-$arch"
+    Invoke-Native $Dotnet @('publish', 'src\Chistovik.App\Chistovik.App.csproj', '-c', 'Release',
+      '-r', $rid[$arch], '--self-contained', 'true', '-p:DebugType=none', '-p:DebugSymbols=false', '-o', $pub)
+  }
 
   foreach ($f in 'Chistovik.App.exe', 'Chistovik.Agent.exe', 'Chistovik.Agent.dll', 'Chistovik.Core.dll') {
     if (-not (Test-Path -LiteralPath (Join-Path $pub $f))) { throw "В publish-папке нет $f ($arch)." }
@@ -96,7 +114,7 @@ foreach ($arch in $Archs) {
 
   Assert-PeArchitecture $pub $arch
 
-  if ($SignCommand) {
+  if ($SignCommand -and -not $PublishRoot) {
     Get-ChildItem -LiteralPath $pub -Recurse -Include 'Chistovik.*.exe', 'Chistovik.*.dll' | ForEach-Object { & $SignCommand $_.FullName }
   }
 

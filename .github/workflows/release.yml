@@ -1,0 +1,139 @@
+name: release
+
+# Выпуск по тегу vX.Y.Z: сборка -> подпись exe/dll (SignPath) -> MSI из подписанных файлов ->
+# подпись MSI (SignPath) -> черновик релиза на GitHub. Публикует черновик человек.
+# Настройка подписи: docs/SIGNING.md. Версия тега должна совпасть с <Version> в Directory.Build.props.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 240
+    permissions:
+      contents: write      # только чтобы создать черновик релиза в последнем шаге
+      actions: read        # SignPath читает артефакт этого запуска
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Version from Directory.Build.props
+        id: ver
+        shell: pwsh
+        run: |
+          [xml]$p = Get-Content Directory.Build.props -Raw
+          $v = ($p.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1)
+          if (-not $v) { throw 'В Directory.Build.props нет <Version>.' }
+          if ('${{ github.ref_name }}' -ne "v$v") { throw "Тег ${{ github.ref_name }} не совпадает с версией $v." }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Restore and build
+        run: |
+          dotnet restore Chistovik.sln
+          dotnet build Chistovik.sln -c Release --no-restore
+
+      # Тесты политики блокируют выпуск, как и в ci.yml.
+      - name: Tests
+        run: |
+          dotnet test tests/Policy.Negative -c Release --no-build
+          dotnet test tests/Core.Tests -c Release --no-build
+          dotnet test tests/Native.Tests -c Release --no-build
+
+      # Стадия 1: только publish (без MSI) для обеих архитектур.
+      - name: Publish x64 and arm64
+        shell: pwsh
+        run: ./tools/build-release.ps1 -SkipMsi
+
+      - name: Upload unsigned exe/dll
+        id: unsigned-exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-exe
+          path: |
+            artifacts/release-work/${{ steps.ver.outputs.version }}/publish-x64
+            artifacts/release-work/${{ steps.ver.outputs.version }}/publish-arm64
+          retention-days: 7
+
+      - name: Sign exe/dll (SignPath)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: exe-dll
+          github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 86400
+          output-artifact-directory: signed-exe
+
+      # Стадия 2: MSI из подписанных publish-папок. Проверки архитектуры в скрипте остаются.
+      - name: Build MSI from signed files
+        shell: pwsh
+        run: ./tools/build-release.ps1 -PublishRoot signed-exe
+
+      - name: Upload unsigned MSI
+        id: unsigned-msi
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-msi
+          path: artifacts/release/${{ steps.ver.outputs.version }}/*.msi
+          retention-days: 7
+
+      - name: Sign MSI (SignPath)
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: msi
+          github-artifact-id: ${{ steps.unsigned-msi.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 86400
+          output-artifact-directory: signed-msi
+
+      - name: Checksums and signature check
+        shell: pwsh
+        run: |
+          $msis = Get-ChildItem signed-msi -Filter 'Chistovik-*.msi'
+          if ($msis.Count -ne 2) { throw "Ожидалось 2 MSI, найдено $($msis.Count)." }
+          foreach ($m in $msis) {
+            $sig = Get-AuthenticodeSignature $m.FullName
+            if ($sig.Status -ne 'Valid') { throw "$($m.Name): подпись $($sig.Status)." }
+          }
+          $msis | Sort-Object Name | ForEach-Object {
+            '{0} *{1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name
+          } | Set-Content signed-msi/SHA256SUMS.txt -Encoding ASCII
+          Get-Content signed-msi/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.ver.outputs.version }}
+          path: |
+            signed-msi/*.msi
+            signed-msi/SHA256SUMS.txt
+
+      - name: Draft GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'
+          $notes = "docs/GITHUB-RELEASE-$v.md"
+          $ghArgs = @('release', 'create', '${{ github.ref_name }}', '--draft', '--title', "Чистовик $v")
+          if (Test-Path $notes) { $ghArgs += @('--notes-file', $notes) } else { $ghArgs += '--generate-notes' }
+          $ghArgs += (Get-ChildItem signed-msi -Include '*.msi', 'SHA256SUMS.txt' -Recurse | ForEach-Object FullName)
+          gh @args
